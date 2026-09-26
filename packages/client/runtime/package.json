@@ -45,7 +45,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "immer": "^10.1.1",
+    "immer": "^11.1.18",
     "zustand": "~4.4.7"
   },
   "peerDependencies": {

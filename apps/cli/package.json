@@ -88,7 +88,7 @@
     "node-addon-require-builtin": "^0.1.4"
   },
   "optionalDependencies": {
-    "electron": "^43.4.1"
+    "electron": "^44.0.0"
   },
   "devDependencies": {
     "@hydra1902/harness-agent": "workspace:^",

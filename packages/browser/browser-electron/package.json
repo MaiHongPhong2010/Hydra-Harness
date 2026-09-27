@@ -56,7 +56,7 @@
     "@hydra1902/harness-user-approval": "workspace:^",
     "@hydra1902/harness-user-questions": "workspace:^",
     "@hydra1902/schemastery": "workspace:^",
-    "electron": "^43.4.1"
+    "electron": "^44.0.0"
   },
   "peerDependenciesMeta": {
     "electron": {
@@ -75,7 +75,7 @@
     "@hydra1902/schemastery": "workspace:^",
     "@hydra1902/harness-browseragent-core": "workspace:^",
     "@hydra1902/harness-browseragent-page-controller": "workspace:^",
-    "electron": "^43.4.1",
+    "electron": "^44.0.0",
     "vite": "^6.0.0"
   },
   "dependencies": {

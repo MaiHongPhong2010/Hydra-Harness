@@ -30,6 +30,6 @@
     "prettier": "^3.9.5"
   },
   "optionalDependencies": {
-    "electron": "^43.4.1"
+    "electron": "^44.0.0"
   }
 }

@@ -732,6 +732,19 @@
             "type": "string",
             "description": "Full UTF-8 text content to write."
           },
+          "format": {
+            "type": "string",
+            "description": "Default: json for .json paths, otherwise text. JSON parses and serializes; text preserves literal bytes.",
+            "enum": [
+              "text",
+              "json"
+            ]
+          },
+          "json_schema": {
+            "type": "object",
+            "description": "Task JSON Schema (supported tool-schema subset); validates before writing and implies JSON format.",
+            "additionalProperties": true
+          },
           "sandbox_permissions": {
             "type": "string",
             "description": "The wider sandbox mode this file operation needs. Only valid as a one-shot retry of an operation the sandbox just denied; requires justification and user approval.",

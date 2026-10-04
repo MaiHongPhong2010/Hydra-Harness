@@ -45,6 +45,7 @@ beforeAll(async () => {
   tripwire = watchConsole(page)
   await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
   await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+  await page.getByRole('dialog', { name: 'Settings', exact: true }).waitFor({ timeout: 30_000 })
   await mkdir(shots, { recursive: true })
   await mkdir(dirname(golden), { recursive: true })
 }, 120_000)
@@ -62,13 +63,14 @@ afterAll(async () => {
 
 it('separates Google sign-in from API-key creation, loads all model pages, and removes saved API credentials', async () => {
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true })
-  if (!await dialog.isVisible()) await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await dialog.waitFor()
   await dialog.getByRole('button', { name: 'Models', exact: true }).click()
   const accounts = dialog.getByRole('region', { name: 'Account sign-in', exact: true })
   await accounts.getByRole('button', { name: 'Add sign-in provider', exact: true }).click()
   await accounts.getByLabel('Provider', { exact: true }).selectOption('google')
   expect(await accounts.getByRole('combobox').count()).toBe(1)
   expect(await accounts.getByText('Sign in with Google to use Antigravity. No Cloud project ID is needed.', { exact: true }).count()).toBe(1)
+  await expect.poll(() => accounts.getByRole('button', { name: 'Add account', exact: true }).isEnabled()).toBe(true)
   await compareOrRefreshGolden(join(dirname(golden), 'google-login.expected.md'),
     await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), webSnapshotMode())
   expect(await accounts.getByLabel(/Google Cloud project ID/).count()).toBe(0)

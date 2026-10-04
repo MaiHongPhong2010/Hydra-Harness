@@ -664,3 +664,51 @@ describe('workspace browser rows', () => {
     expect(screen.getByRole('treeitem').className).toMatch(/dropAfter/)
   })
 })
+
+it('dispatches all extended session actions through the same context-menu handler', () => {
+  const management = { pinned: false, unread: false, cwd: '/project', projectId: 'project', sectionId: 'section', projects: [{ workspaceId: 'project', title: 'Project' }], sections: [{ id: 'section', title: 'Section' }],
+    onPin: vi.fn(), onUnread: vi.fn(), onWindow: vi.fn(), onNewSection: vi.fn(), onProject: vi.fn(), onSection: vi.fn(), onCopy: vi.fn() }
+  const node: SessionNode = { id: sid('actions'), title: 'Actions', blank: false, running: false, runningSubagentCount: 0, completed: false, updatedAt: 0 }
+  const p = { node, currentId: undefined, now: 0, onOpen: vi.fn(), onRename: vi.fn(), onFork: vi.fn(),
+    onArchive: vi.fn(), onDelete: vi.fn(), management, t }
+  const view = render(<SessionNodeItem {...p} />)
+  const row = screen.getByRole('treeitem')
+  const actions = ['pin','unread','window','section:new','project:project','project:none','section:section','section:none',
+    'copy:link','copy:markdown','copy:directory','unknown']
+  for (const id of actions) {
+    fireEvent.contextMenu(row, { clientX: 10, clientY: 20 })
+    act(() =>{  selectMenu!(id) })
+  }
+  expect(management.onProject.mock.calls).toEqual([['project'], [null]])
+  expect(management.onSection.mock.calls).toEqual([['section'], [null]])
+  expect(management.onCopy.mock.calls).toEqual([['link'], ['markdown'], ['directory']])
+  expect(management.onWindow).toHaveBeenCalledOnce()
+  fireEvent.keyDown(row, { key: 'Enter' })
+  fireEvent.keyDown(row, { key: ' ' })
+  expect(p.onOpen).toHaveBeenCalledTimes(2)
+  fireEvent.keyDown(row.querySelector('button')!, { key: 'Enter' })
+  expect(p.onOpen).toHaveBeenCalledTimes(2)
+  for (const event of [{ key: 'ContextMenu' }, { key: 'F10', shiftKey: true }]) {
+    fireEvent.keyDown(row, event)
+    expect(screen.getByRole('menu')).toBeTruthy()
+    act(() =>{  selectMenu!('unknown') })
+  }
+  for (const key of ['r', 'p', 'l', 'x']) fireEvent.keyDown(row, { key, altKey: true, ctrlKey: true })
+  for (const key of ['u', 'c', 'a', 'x']) fireEvent.keyDown(row, { key, shiftKey: true, ctrlKey: true })
+  fireEvent.keyDown(row, { key: 'x', ctrlKey: true })
+  fireEvent.keyDown(row, { key: 'x', altKey: true, ctrlKey: true, shiftKey: true })
+  expect(p.onRename).toHaveBeenCalledOnce()
+  expect(p.onArchive).toHaveBeenCalledOnce()
+  expect(management.onPin).toHaveBeenCalledTimes(2)
+  view.rerender(<SessionNodeItem {...p} management={{ ...management, cwd: undefined }} />)
+  fireEvent.keyDown(row, { key: 'c', shiftKey: true, ctrlKey: true })
+  expect(management.onCopy).toHaveBeenCalledTimes(5)
+  view.rerender(<SessionNodeItem {...p} management={undefined} />)
+  fireEvent.keyDown(row, { key: 'p', altKey: true, ctrlKey: true })
+  fireEvent.contextMenu(row)
+  act(() =>{  selectMenu!('unknown') })
+  view.rerender(<SessionNodeItem {...p} node={{ ...node, blank: true }} />)
+  fireEvent.contextMenu(row)
+  fireEvent.keyDown(row, { key: 'ContextMenu' })
+  expect(screen.queryByRole('menu')).toBeNull()
+})

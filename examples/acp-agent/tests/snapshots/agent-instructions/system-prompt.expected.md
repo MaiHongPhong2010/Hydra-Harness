@@ -7,7 +7,7 @@ Verify your work by running the code or tests. Keep answers brief and factual.
 
 Use the read tool — not shell commands like cat — to inspect text files. Results include line numbers. Use offset and limit to continue reading large files. For exact line counts, use the returned total. For exact occurrence counts, enumerate every occurrence in complete returned evidence; never infer a count from a partial or skimmed read. For ordered evidence such as logs, determine first or last from the smallest or largest sequence or position across all relevant events; do not skip interaction tools.
 
-Use the write tool to create files or completely replace file contents. Existing files are overwritten, so read an existing file first (the default fs-observation-policy requires it) and prefer edit for targeted changes.
+Create or replace files with write; read existing files first and use edit for targeted changes. For JSON, supply the task's json_schema; use format:text only for intentional literal text. Before delivery, read back and reconcile status, answer, observations, and blocker with the todo list and final answer.
 
 Use the edit tool for targeted changes to existing UTF-8 text files. It replaces literal old_string with new_string; by default old_string must appear exactly once. If old_string appears multiple times, provide a more specific old_string or set replace_all to true. Read the file first (the default fs-observation-policy requires it), unless you just created or edited it in this session.
 

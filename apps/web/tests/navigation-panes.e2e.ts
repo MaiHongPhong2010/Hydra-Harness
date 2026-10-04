@@ -284,7 +284,7 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     }))
     expect(assistantTimingStyle.background).toContain('linear-gradient')
     expect(assistantTimingStyle.ttft).toMatch(/%$/)
-    const snapshot = (await captureStableAria(page, '[class*="viewArea"]', scaffold.workspaceCwd))
+    const snapshot = (await captureStableAria(page, '[class*="viewArea"]', JSON.stringify(scaffold.workspaceCwd).slice(1, -1)))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(TRAJECTORY_EXPECTED, snapshot, MODE)
     await details.getByRole('button', { name: 'Close details' }).click()

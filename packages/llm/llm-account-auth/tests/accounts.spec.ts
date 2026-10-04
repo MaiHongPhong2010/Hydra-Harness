@@ -805,3 +805,21 @@ describe('stored account pool validation', () => {
     expect(parsed.accounts[0]?.credential).not.toBe(valid.credential)
   })
 })
+
+it('refreshes shared Google grants for Antigravity usage while retaining the quota project', async () => {
+  const { ctx, pool } = await fixture('antigravity')
+  try {
+    const account = await pool.add('Google', { type: 'oauth', access: 'old', refresh: 'refresh', expires: 0, projectId: 'assist-project', quotaProjectId: 'fixture-project' })
+    usageMocks.antigravityRefresh.mockResolvedValue({ access: 'fresh', refresh: 'refresh', expires: Date.now() + 60_000, projectId: 'assist-project' })
+    const fetcher = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer fresh')
+      return Response.json({ models: {} })
+    })
+    vi.stubGlobal('fetch', fetcher)
+    expect(await readAccountUsage(pool, account.id, 'antigravity', {}, 1000)).toMatchObject({ limits: [] })
+    expect(usageMocks.antigravityRefresh).toHaveBeenCalledOnce()
+    expect(await pool.withAccount(account.id, () => pool.credentials.read('antigravity'))).toMatchObject({ access: 'fresh', quotaProjectId: 'fixture-project' })
+  } finally {
+    await ctx.fiber.dispose()
+  }
+})

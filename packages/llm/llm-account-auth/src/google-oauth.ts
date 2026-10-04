@@ -57,7 +57,7 @@ export async function refreshGoogle(current: OAuthCredential, signal: AbortSigna
  * @returns the current grant; a missing quota project requires reconnecting Google.
  */
 export async function selectedGoogleCredential(pool: AccountPool, provider: 'antigravity' | 'gemini-api', signal: AbortSignal): Promise<GoogleCredential> {
-  let selected: GoogleCredential | undefined
+  let selected!: GoogleCredential
   await pool.credentials.modify(provider, async (current) => {
     signal.throwIfAborted()
     if (current?.type !== 'oauth') throw new LlmError('Google has no connected account.', 'MISSING_CREDENTIAL')
@@ -67,7 +67,6 @@ export async function selectedGoogleCredential(pool: AccountPool, provider: 'ant
     return selected
   })
   signal.throwIfAborted()
-  if (selected === undefined) throw new LlmError('Google account is no longer connected.', 'MISSING_CREDENTIAL')
   return selected
 }
 

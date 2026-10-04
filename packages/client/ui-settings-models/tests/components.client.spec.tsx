@@ -1600,3 +1600,46 @@ describe('apiKeyFailure', () => {
     expect(apiKeyFailure('"a')).toBeUndefined()
   })
 })
+
+it('reloads the Models page after acknowledging generation settings', async () => {
+  const { controller } = await mountSection()
+  await waitFor(() =>{  expect(screen.getByLabelText<HTMLSelectElement>(en.imageModel).disabled).toBe(false) })
+  const load = vi.spyOn(controller, 'load')
+  fireEvent.change(screen.getByLabelText(en.imageModel), { target: { value: '' } })
+  fireEvent.click(screen.getByRole('button', { name: en.apply }))
+  await waitFor(() =>{  expect(load).toHaveBeenCalledOnce() })
+})
+it('closes the open provider editor when removing that same configuration', async () => {
+  await mountSection()
+  fireEvent.click(screen.getByRole('button', { name: openaiCopy(en.editProvider) }))
+  await screen.findByLabelText(en.baseUrl)
+  fireEvent.click(screen.getByRole('button', { name: openaiCopy(en.removeProvider) }))
+  expect(screen.queryByLabelText(en.baseUrl)).toBeNull()
+  expect(screen.getByRole('dialog', { name: openaiCopy(en.deleteTitle) })).toBeTruthy()
+})
+it.each(['antigravity', 'gemini-api', 'chatgpt'])('describes account cleanup for a removed %s route', async (provider) => {
+  const scripted = scriptedFace()
+  const route = { provider, displayName: provider, settingsNs: 'llm-account-auth', settingsPath: ['providers', provider], active: true }
+  scripted.face.llm.providers.mockResolvedValue(ok({ providers: [route] }))
+  const namespace = {
+    ns: 'llm-account-auth', schema: Schema.object({ providers: Schema.dict(Schema.object({ endpoint: Schema.string() })) }).toJSON(),
+    value: { providers: { [provider]: {} } }, user: { providers: { [provider]: {} } }, revision: 0, applies: 'live', secrets: [],
+  }
+  scripted.face.settings.describe.mockResolvedValue(ok({
+    writable: true, hasDocument: true, namespaces: [...wireNamespaces(), namespace],
+  }) as never)
+  await mountFace(scripted)
+  fireEvent.click(screen.getByRole('button', { name: providerCopy(en.removeProvider, route) }))
+  const dialog = screen.getByRole('dialog')
+  const description = provider === 'chatgpt' ? en.deleteDescriptionWithAccounts : en.deleteDescriptionWithGoogleAccounts
+  expect(dialog.textContent).toContain(providerCopy(description, route))
+})
+it('offers one Google add choice when both service routes are available', async () => {
+  const scripted = scriptedFace()
+  Object.assign(scripted.face.authorization, { list: async () => ok({ entries: [] }) })
+  scripted.face.llm.providers.mockResolvedValue(ok({ providers: ['antigravity','gemini-api'].map(provider => ({ provider, displayName: provider, settingsNs: 'llm-account-auth', settingsPath: ['providers',provider], active: false })) }))
+  scripted.face.settings.describe.mockResolvedValue(ok({ writable: true, hasDocument: true, namespaces: [...wireNamespaces(), { ns: 'llm-account-auth', schema: Schema.object({ providers: Schema.dict(Schema.object({ endpoint: Schema.string() })) }).toJSON(), value: { providers: {} }, revision: 0, applies: 'live', secrets: [] }] }) as never)
+  await mountFace(scripted)
+  fireEvent.click(screen.getByText(en.accountProviderAdd))
+  expect(screen.getAllByRole('option', { name: 'Google' })).toHaveLength(1)
+})

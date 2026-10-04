@@ -268,15 +268,16 @@ type SessionTreeProps = Pick<
 }
 
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
-function SessionTree({
-  useSessions, startSession, open, forkSession, workspaces, workspacesReady, archivedSessionIds,
-  onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive, onSessionDelete,
-  onUngroupedDelete,
-  insertWorkspaceBefore, insertSessionBefore, orderBy,
-  groupExpansion, setGroupExpanded,
-  sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
-  organization, sessionMenuFor, sourceWorkspaces, displayOnlySessionIds,
-}: SessionTreeProps) {
+function SessionTree(props: SessionTreeProps) {
+  const {
+    useSessions, startSession, open, forkSession, workspaces, workspacesReady, archivedSessionIds,
+    onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive, onSessionDelete,
+    onUngroupedDelete,
+    insertWorkspaceBefore, insertSessionBefore, orderBy,
+    groupExpansion, setGroupExpanded,
+    sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
+    organization, sessionMenuFor, sourceWorkspaces, displayOnlySessionIds,
+  } = props
   const list = useSessions(s => s)
   const current = list.current
   const [expandedSessionGroups, setExpandedSessionGroups] = useState<string[]>([])
@@ -427,11 +428,7 @@ function SessionTree({
         role="tree"
         aria-label={t('section.sessions')}
       >
-        {organization !== undefined && <OrganizationGroups
-          list={list} archivedSessionIds={archivedSessionIds} organization={organization}
-          open={open} onSessionRename={onSessionRename} forkSession={forkSession}
-          onSessionArchive={onSessionArchive} onSessionDelete={onSessionDelete} sessionMenuFor={sessionMenuFor} t={t}
-        />}
+        <OrganizationGroups {...props} list={list} />
         {groups.length === 0 && (
           <div className={css.empty}>{t('empty.none')}</div>
         )}
@@ -594,11 +591,7 @@ function SessionTree({
 }
 
 /** The flat "In one list" body: every session is one draggable top-level row. */
-function FlatList({
-  useSessions, open, forkSession, onSessionRename, onSessionArchive, onSessionDelete, archivedSessionIds,
-  orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t,
-  organization, sessionMenuFor,
-}: Pick<
+function FlatList(props: Pick<
   SessionTreeProps,
   | 'useSessions'
   | 'open'
@@ -616,6 +609,11 @@ function FlatList({
   | 'organization'
   | 'sessionMenuFor'
 >) {
+  const {
+    useSessions, open, forkSession, onSessionRename, onSessionArchive, onSessionDelete, archivedSessionIds,
+    orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t,
+    organization, sessionMenuFor,
+  } = props
   const list = useSessions(s => s)
   const baseRows = useMemo(
     () => deriveFlat(list, archivedSessionIds).filter(node => organization === undefined || !isOrganized(node.id, organization)),
@@ -672,11 +670,7 @@ function FlatList({
   return (
     <div className={clsx(css.treeBody, css.wide)}>
       <div className={clsx(css.list, css.flatList)} role="tree" aria-label={t('section.sessions')}>
-        {organization !== undefined && <OrganizationGroups
-          list={list} archivedSessionIds={archivedSessionIds} organization={organization}
-          open={open} onSessionRename={onSessionRename} forkSession={forkSession}
-          onSessionArchive={onSessionArchive} onSessionDelete={onSessionDelete} sessionMenuFor={sessionMenuFor} t={t}
-        />}
+        <OrganizationGroups {...props} list={list} />
         {rows.length === 0 && (organization === undefined || deriveFlat(list, archivedSessionIds).length === 0) && (
           <div className={css.empty}>{t('empty.none')}</div>
         )}

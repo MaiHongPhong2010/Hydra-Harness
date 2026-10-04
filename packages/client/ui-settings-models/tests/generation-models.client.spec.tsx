@@ -105,3 +105,40 @@ it('keeps a reclassified saved model unavailable until cleared instead of silent
   expect(mutate).toHaveBeenCalledWith({ ns: 'llm-pi-ai', expectedRevision: 7,
     ops: [{ op: 'unset', path: ['imageModel'] }, { op: 'unset', path: ['videoModel'] }] })
 })
+
+it.each([null, 'invalid', { provider: 1, model: 'same-model' }, { provider: 'first', model: 1 }])('uses an unset generation selection for invalid durable values %j', async (imageModel) => {
+  render(<GenerationModels {...owner({ imageModel })} />)
+  await waitFor(() =>{  expect(screen.getByLabelText<HTMLSelectElement>(en.imageModel).disabled).toBe(false) })
+  expect(screen.getByLabelText<HTMLSelectElement>(en.imageModel).value).toBe('')
+})
+it.each(['rejected', 'throw'])('retries a failed catalog request: %s', async (kind) => {
+  const models = vi.fn()
+  if (kind === 'throw') models.mockRejectedValueOnce('Catalog offline')
+  else models.mockResolvedValueOnce({ result: { ok: false, error: { message: 'Catalog offline' } } })
+  models.mockResolvedValue(ok({ groups: [{ id: 'id', name: 'Provider', models: [{ id: 'image', name: 'image', endpoints: ['images/generations'] }] }], failures: [] }))
+  render(<GenerationModels {...owner()} api={{ llm: { models } } as never} />)
+  expect((await screen.findByRole('alert')).textContent).toBe('Catalog offline')
+  await waitFor(() =>{  expect(screen.getByRole<HTMLButtonElement>('button', { name: en.refreshModels }).disabled).toBe(false) })
+  fireEvent.click(screen.getByRole('button', { name: en.refreshModels }))
+  await screen.findByRole('option', { name: 'Provider / image' })
+  expect(screen.queryByRole('alert')).toBeNull()
+})
+it('keeps a rejected settings write for correction and retry', async () => {
+  const p = owner()
+  render(<GenerationModels {...p} api={{ llm: { models: async () => ok({ groups, failures: [] }) }, settings: { mutate: async () => ({ result: { ok: false, error: { message: 'Revision conflict' } } }) } } as never} />)
+  await waitFor(() =>{  expect(screen.getByLabelText<HTMLSelectElement>(en.imageModel).disabled).toBe(false) })
+  fireEvent.change(screen.getByLabelText(en.imageModel), { target: { value: '["first","image-only"]' } })
+  fireEvent.click(screen.getByRole('button', { name: en.apply }))
+  expect((await screen.findByRole('alert')).textContent).toBe('Revision conflict')
+  expect(p.onSaved).not.toHaveBeenCalled()
+})
+it.each([false, true])('ignores catalog completion after unmount: rejection %s', async (rejects) => {
+  let finish!: (value: unknown) => void
+  let reject!: (value: unknown) => void
+  const pending = new Promise((yes, no) => { finish = yes; reject = no })
+  const view = render(<GenerationModels {...owner()} api={{ llm: { models: async () => pending } } as never} />)
+  view.unmount()
+  if (rejects) reject('late')
+  else finish(ok({ groups, failures: [] }))
+  await pending.catch(() => undefined)
+})

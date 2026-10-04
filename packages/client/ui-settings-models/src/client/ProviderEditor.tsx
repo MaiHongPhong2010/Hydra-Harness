@@ -290,7 +290,6 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     }
     if (relatedProvider !== undefined) {
       const path = ['providers', relatedProvider]
-      if (schema.getPath(namespace.value, path) === undefined) ops.push({ op: 'set', path, value: {} })
       if (relatedModels !== undefined) ops.push(relatedModels === null
         ? { op: 'unset', path: [...path, 'models'] }
         : { op: 'set', path: [...path, 'models'], value: relatedModels })

@@ -1117,3 +1117,18 @@ describe('HMR disposal', () => {
     expect(agent.session.events.some(event => event.type === 'plan/mode')).toBe(false)
   })
 })
+
+it.each(['session/version', 'session/version-selected'] as const)('clears pending plan mode on %s', async (type) => {
+  const ctx = await setup()
+  try {
+    const agent = await agentWithSession(ctx)
+    agent.session.append('turn/start', { turn: 1 })
+    expect(ctx.planMode.set(agent, true)).toBe('queued')
+    const { ORIGINAL_SESSION_VERSION, SessionVersionId } = await import('@hydraharness/harness-session')
+    const event = type === 'session/version'
+      ? agent.session.append(type, { versionId: SessionVersionId('branch'), parentVersionId: ORIGINAL_SESSION_VERSION, beforeSeq: 0 })
+      : agent.session.append(type, { versionId: ORIGINAL_SESSION_VERSION })
+    ctx.emit('session/event', agent.session, event)
+    expect(ctx.planMode.get(agent)).toEqual({ active: false })
+  } finally { await ctx.fiber.dispose() }
+})

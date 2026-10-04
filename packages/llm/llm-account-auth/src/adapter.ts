@@ -357,7 +357,7 @@ export class AntigravityAccountAdapter extends LlmAdapter {
     return models.map(model => ({
       provider,
       id: model.id,
-      name: model.name ?? model.id,
+      name: model.name,
       ...model.endpoints === undefined ? {} : { endpoints: [...model.endpoints] },
       ...(model.supportsImages === undefined
         ? {}
@@ -375,7 +375,7 @@ export class AntigravityAccountAdapter extends LlmAdapter {
     signal?.throwIfAborted()
     return models.map(model => ({
       id: model.id,
-      name: model.name ?? model.id,
+      name: model.name,
       ...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow }),
       ...(model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens }),
       ...model.endpoints === undefined ? {} : { endpoints: [...model.endpoints] },
@@ -459,7 +459,7 @@ export class AntigravityAccountAdapter extends LlmAdapter {
     if (profile === undefined) throw new LlmError('Antigravity account route has no profile', 'NO_ADAPTER')
     if (useConfigured && profile.models !== undefined) return profile.models.map((model) => {
       const endpoints = model.endpoints ?? inferModelEndpoints(model.id)
-      return { ...model, ...endpoints === undefined ? {} : { endpoints: [...endpoints] } }
+      return { ...model, name: model.name ?? model.id, ...endpoints === undefined ? {} : { endpoints: [...endpoints] } }
     })
     const accounts = await this.config.pool.accounts.list()
     const account = accounts[0]
@@ -554,6 +554,7 @@ export class AntigravityAccountAdapter extends LlmAdapter {
 }
 
 interface AntigravityCatalogModel extends AccountModelProfile {
+  name: string
   supportsImages?: boolean
   supportsThinking?: boolean
 }

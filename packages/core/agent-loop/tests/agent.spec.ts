@@ -165,3 +165,27 @@ describe('Agent', () => {
     )
   })
 })
+
+it('resets the turn counter when selecting an empty session version', async () => {
+  const ctx = await harness(new MockAdapter([textResponse('ok')]))
+  try {
+    const agent = ctx.agentLoop.create(SessionId('empty-version'), { provider: 'mock', model: 'mock' })
+    const { ORIGINAL_SESSION_VERSION } = await import('@hydraharness/harness-session')
+    agent.session.append('session/version-selected', { versionId: ORIGINAL_SESSION_VERSION })
+    send(agent, 'first prompt')
+    await agent.whenIdle()
+    expect(agent.session.activeEvents.find(event => event.type === 'turn/start')?.data.turn).toBe(1)
+  } finally { await ctx.fiber.dispose() }
+})
+
+it('rejects overlapping maintenance while the Agent owns active work', async () => {
+  const ctx = await harness(new MockAdapter([textResponse('ok')]))
+  try {
+    const agent = ctx.agentLoop.create(SessionId('maintenance'), { provider: 'mock', model: 'mock' })
+    const pending = Promise.withResolvers<unknown>()
+    const first = agent.runMaintenance(() => pending.promise)
+    expect(() => agent.runMaintenance(async () => undefined)).toThrow('active work')
+    pending.resolve(undefined)
+    await first
+  } finally { await ctx.fiber.dispose() }
+})

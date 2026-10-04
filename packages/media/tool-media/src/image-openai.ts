@@ -2,9 +2,10 @@
  * @module @hydraharness/harness-tool-media
  */
 import type { Context } from '@hydraharness/cordis'
+import { admitGeneratedImages } from './generated-images.ts'
 import z from '@hydraharness/schemastery'
 import { z as zod } from 'zod'
-import { admitEncodedImages, toolImageReferences, toolMediaLabels } from '@hydraharness/harness-attachment'
+import { toolImageReferences, toolMediaLabels } from '@hydraharness/harness-attachment'
 import { credentialRef } from '@hydraharness/harness-credentials'
 import { defineTool } from '@hydraharness/harness-tools'
 import { isGenerationRejection } from '@hydraharness/harness-llm'
@@ -197,10 +198,7 @@ export function registerOpenAIImages(ctx: Context, config: OpenAIImageConfig): v
         : value.candidates.flatMap(candidate => candidate.content.parts.flatMap(part =>
           ('thought' in part && part.thought) || part.inlineData === undefined ? [] : [part.inlineData]))
       if (output.length !== request.n) throw new Error('Image provider returned an unexpected image count.')
-      const images = await admitEncodedImages(ctx.attachments, output.map((image, index) => ({
-        data: image.data, mediaType: image.mimeType,
-        name: `generated-${index + 1}.${image.mimeType.slice('image/'.length)}`,
-      })))
+      const images = await admitGeneratedImages(ctx.attachments, output)
       signal.throwIfAborted()
       return { model: request.model, images: [...images], ...generated === undefined ? {} : { provider: generated.provider } }
     },

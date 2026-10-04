@@ -181,3 +181,62 @@ it('closes a steering prefix and clears inherited pending input before admission
   expect(JSON.stringify(h.session.deriveMessages())).toContain('initial')
   expect(JSON.stringify(h.session.deriveMessages())).not.toContain('"text":"steering"')
 })
+
+it('does not restart an admitted turn whose user event has not yet been observed', async () => {
+  const h = await harness()
+  h.followup.mockImplementation(() => { h.session.append('turn/start', { turn: 1 }) })
+  await h.revise(request())
+  await h.revise(request())
+  expect(h.followup).toHaveBeenCalledOnce()
+})
+it('rejects recovery of an unconsumed admission from another selected version', async () => {
+  const h = await harness()
+  h.flush.mockRejectedValueOnce(new Error('offline'))
+  await expect(h.revise(request())).rejects.toThrow('offline')
+  h.session.append('session/version-selected', { versionId: ORIGINAL_SESSION_VERSION })
+  await expect(h.revise(request())).rejects.toThrow('another version')
+})
+it('admits workspace-free sessions only with a null workspace address', async () => {
+  const h = await harness()
+  vi.spyOn(h.ctx.workspaceRegistry, 'list').mockReturnValue([])
+  await expect(h.revise({ ...request(), workspaceId: null })).resolves.toHaveProperty('sessionId', sourceId)
+})
+it('rejects editing non-preservable user content', async () => {
+  const h = await harness([seed[0]!, user([{ type: 'tool-call', id: 'tool' as never, name: 'tool', arguments: '{}' }], 1), seed[2]!])
+  await expect(h.revise(request())).rejects.toThrow('cannot preserve')
+})
+it('rejects retries before an admission and after a later user continuation', async () => {
+  const h = await harness()
+  await expect(h.revise({ sessionId: sourceId, workspaceId, idempotencyKey: 'retry' })).rejects.toThrow('no admitted')
+  h.state.reason = 'error'
+  await h.revise(request())
+  h.session.append('user/message', createUserMessage({ content: text('continued'), source: { kind: 'user' } }), { surfaceOp: 'append' })
+  await expect(h.revise({ sessionId: sourceId, workspaceId, idempotencyKey: 'retry' })).rejects.toThrow('later user prompt')
+})
+it('rejects a version changed during model admission', async () => {
+  const h = await harness()
+  h.deps.validateModel.mockImplementation(async () => { h.session.append('session/version', { versionId: 'changed' as never, parentVersionId: ORIGINAL_SESSION_VERSION, beforeSeq: 0 }) })
+  await expect(h.revise(request())).rejects.toThrow('changed before admission')
+})
+it('closes both the interrupted step and turn for an edited steering prefix', async () => {
+  const h = await harness([seed[0]!, user(text('initial'), 1), { type: 'step/start', seq: 2, time: 2, data: { turn: 1, step: 1 } }, user(text('steer'), 3)])
+  await h.revise(request({ messageSeq: 3, text: 'replacement' }))
+  expect(h.session.activeEvents.map(event => event.type)).toContain('step/end')
+})
+it('retries a durable admission lacking an optional attempt count', async () => {
+  const h = await harness()
+  h.state.reason = 'error'
+  const first = await h.revise(request())
+  const { attempt: _attempt, ...revision } = first.revision
+  h.session.append('session/revision', revision)
+  const next = await h.revise({ sessionId: sourceId, workspaceId, idempotencyKey: 'retry' })
+  expect(next.revision.attempt).toBe(2)
+})
+
+it('retries an image-bearing admitted prompt with its retained attachment', async () => {
+  const h = await harness([seed[0]!, user([imageBlock], 1), seed[2]!])
+  h.state.reason = 'error'
+  await h.revise(request())
+  await h.revise({ sessionId: sourceId, workspaceId, idempotencyKey: 'retry-image' })
+  expect(h.readImage).toHaveBeenCalledTimes(2)
+})

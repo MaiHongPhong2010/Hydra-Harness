@@ -28,6 +28,7 @@ vi.mock('../src/kiro.ts', () => ({ KiroAccountAdapter: runtime.kiro }))
 
 const finish: StreamChunk = { type: 'finish', reason: { kind: 'stop' } }
 const delegate = {
+  requestGeneration: vi.fn(async () => Response.json({ result: 'generated' })),
   listModels: vi.fn(async () => [{ id: 'model', provider: 'chatgpt', name: 'Model' }]),
   resolveModel: vi.fn(async () => ({ provider: 'chatgpt', id: 'model', contextWindow: 1000 })),
   discoverModels: vi.fn(async () => [{ id: 'discovered' }]),
@@ -93,6 +94,24 @@ it('offers all native account flows while keeping Cursor out of callable chat pr
   expect(runtime.cursorLogin).toHaveBeenCalledWith(login, expect.objectContaining({ key: 'llm-account-auth/cursor' }), expect.any(Object))
   expect(runtime.kiroLogin).toHaveBeenCalledWith(login, expect.objectContaining({ key: 'llm-account-auth/kiro' }), expect.any(Object))
   await expect(ctx.llm.discoverModels('llm-account-auth', { provider: 'cursor' })).rejects.toMatchObject({ code: 'NO_ADAPTER' })
+})
+
+it.each(['gemini-api', 'kiro', 'claude', 'xai-account', 'kimi'])('loads the configured %s adapter and forwards media generation', async (provider) => {
+  const { adapter } = await fixture({ providers: { [provider]: {} } })
+  const route = adapter(provider)
+  expect(await route.listModels(provider)).toEqual([{ id: 'model', provider: 'chatgpt', name: 'Model' }])
+  const options = { provider, model: 'image', endpoint: 'images/generations' as const, body: { prompt: 'a cat' }, maxResponseBytes: 1024, signal: new AbortController().signal }
+  expect(await (await route.requestGeneration(options)).json()).toEqual({ result: 'generated' })
+  expect(delegate.requestGeneration).toHaveBeenLastCalledWith(options)
+})
+
+it('offers Google and native login flows before their routes are configured', async () => {
+  const { flows } = await fixture({ providers: {} })
+  const session: AuthorizationSession = { method: 'oauth', signal: new AbortController().signal, notify: vi.fn(), prompt: vi.fn(async () => '') }
+  for (const [flow] of flows.mock.calls) await flow.run(session)
+  expect(runtime.loginGoogle).toHaveBeenCalledWith(session, expect.any(Object), {}, {})
+  expect(runtime.cursorLogin).toHaveBeenCalledWith(session, expect.any(Object), {})
+  expect(runtime.kiroLogin).toHaveBeenCalledWith(session, expect.any(Object), {})
 })
 
 it('reuses lazy delegates and invalidates only the changed account route', async () => {

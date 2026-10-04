@@ -4,7 +4,7 @@ import type { AttachmentStore } from '@hydraharness/harness-attachment'
 import { LlmAdapter, LlmError, imageAspectRatio, inferModelEndpoints, isGenerationRejection, resolveRetryPolicy,
   type GenerateOptions, type LlmDiscoveredModel, type LlmModelInfo, type LlmProviderInfo,
   type LlmResolvedModelInfo, type MediaGenerationOptions, type StreamChunk } from '@hydraharness/harness-llm'
-import { PiAiAdapter, resolveProfiles } from '@hydraharness/harness-llm-pi-ai'
+import { PiAiAdapter, resolveProfiles, type ResolvedPiAiProviderProfile } from '@hydraharness/harness-llm-pi-ai'
 import { emptyAuthContext, type AccountPool } from './accounts.ts'
 import { streamAccounts } from './adapter.ts'
 import { ACCOUNT_PROVIDER_LABELS, type AccountProviderProfile } from './config.ts'
@@ -118,8 +118,7 @@ export class GeminiApiAccountAdapter extends LlmAdapter {
       ...this.profile.websocketConnectTimeoutMs === undefined ? {} : { websocketConnectTimeoutMs: this.profile.websocketConnectTimeoutMs },
       ...this.profile.maxRequestImageBytes === undefined ? {} : { maxRequestImageBytes: this.profile.maxRequestImageBytes },
       compat: { supportsDeveloperRole: false, supportsStore: false, supportsStrictMode: false, maxTokensField: 'max_tokens' },
-    } }).get(PROVIDER)
-    if (resolved === undefined) throw new LlmError('Gemini API profile is unavailable.', 'NO_ADAPTER')
+    } }).get(PROVIDER) as ResolvedPiAiProviderProfile
     const piProvider: Provider = { ...resolved.piProvider, auth: { oauth: {
       name: ACCOUNT_PROVIDER_LABELS[PROVIDER],
       login: () => Promise.reject(new LlmError('Use the Host Google sign-in flow.', 'INVALID_AUTH_CONFIG')),

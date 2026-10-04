@@ -450,3 +450,19 @@ it('checks turn relations on each selected version while keeping raw sequences g
     session.append('turn/end', { turn: 3, reason: { kind: 'completed' } })
   } finally { await ctx.fiber.dispose() }
 })
+
+it('seeds invariant traces from existing version branches and accepts an empty-prefix selection', async () => {
+  const ctx = new Context()
+  await ctx.plugin(SessionStore)
+  await ctx.plugin(InvariantRegistry)
+  const session = ctx.sessions.create()
+  session.append('turn/start', { turn: 1 })
+  session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+  session.append('session/version', { versionId: SessionVersionId('empty'), parentVersionId: ORIGINAL_SESSION_VERSION, beforeSeq: 0 })
+  session.append('session/version-selected', { versionId: ORIGINAL_SESSION_VERSION })
+  await ctx.plugin(SessionInvariant)
+  expect(() => session.append('session/version-selected', { versionId: SessionVersionId('empty') })).not.toThrow()
+  const empty = ctx.sessions.create()
+  expect(() => empty.append('session/version-selected', { versionId: ORIGINAL_SESSION_VERSION })).not.toThrow()
+  await ctx.fiber.dispose()
+})

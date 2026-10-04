@@ -240,12 +240,17 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
     }
   }, [api, flowKey, onBusy, t])
 
+  const nextUsageSequence = useCallback((accountId: string): number => {
+    const sequence = (usageSequence.current.get(accountId) ?? 0) + 1
+    usageSequence.current.set(accountId, sequence)
+    return sequence
+  }, [])
+
   const requestUsage = useCallback((accountId: string): void => {
     const token = lifetime.current
     /* v8 ignore if -- account effects and refresh buttons request usage only while mounted. */
     if (token === undefined) return
-    const sequence = (usageSequence.current.get(accountId) ?? 0) + 1
-    usageSequence.current.set(accountId, sequence)
+    const sequence = nextUsageSequence(accountId)
     usageControllers.current.get(accountId)?.abort()
     const controller = new AbortController()
     usageControllers.current.set(accountId, controller)
@@ -268,10 +273,11 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
     }).finally(() => {
       if (usageControllers.current.get(accountId) === controller) usageControllers.current.delete(accountId)
     })
-  }, [api, flowKey])
+  }, [api, flowKey, nextUsageSequence])
 
   const running = attempt?.status === 'running'
   const visibleAccounts = mode === 'manage' && !running && entry?.key === flowKey ? entry.accounts : undefined
+  const showSelection = (visibleAccounts?.length ?? 0) > 1 || selected.length > 0
   const search = query.trim().toLocaleLowerCase()
   const filtered = useMemo(() => (visibleAccounts ?? []).filter(account =>
     account.label.toLocaleLowerCase().includes(search) || account.id.toLocaleLowerCase().includes(search)), [visibleAccounts, search])
@@ -290,11 +296,11 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
       if (controller !== undefined) {
         controller.abort()
         usageControllers.current.delete(visibleUsageId)
-        usageSequence.current.set(visibleUsageId, (usageSequence.current.get(visibleUsageId) ?? 0) + 1)
+        nextUsageSequence(visibleUsageId)
         requestedUsage.current.delete(visibleUsageId)
       }
     }
-  }, [visibleUsageId, requestUsage])
+  }, [visibleUsageId, requestUsage, nextUsageSequence])
 
   useEffect(() => {
     if (pageSelection.current !== null) pageSelection.current.indeterminate = selectedOnPage > 0 && selectedOnPage < pageAccounts.length
@@ -429,6 +435,7 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
 
   const prompt = running ? attempt.prompt : undefined
   const notice = attempt?.notice
+  const snippet = notice?.snippet
   const safeUrl = notice?.url !== undefined && /^https?:\/\//i.test(notice.url) ? notice.url : undefined
   const openExternal = desktop?.openExternal
   const unavailable = entry === undefined || entry.methods.length === 0
@@ -474,7 +481,7 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
         {(visibleAccounts?.length ?? 0) > 1 || query.length > 0 ? <input data-hydra-control="field" type="search"
           className={styles['input']} aria-label={t('accountsSearch')} placeholder={t('accountsSearch')}
           value={query} disabled={busy} onChange={(event) => { setQuery(event.target.value); setPage(0) }} /> : null}
-        {(visibleAccounts?.length ?? 0) > 1 || selected.length > 0 ? <div className={styles['accountToolbar']}>
+        {showSelection ? <div className={styles['accountToolbar']}>
           <label className={styles['accountSelect']}>
             <input ref={pageSelection} type="checkbox" disabled={disabled || busy || pageAccounts.length === 0}
               checked={pageAccounts.length > 0 && selectedOnPage === pageAccounts.length}
@@ -500,7 +507,7 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
             return (
               <li key={account.id} className={styles['accountRow']}>
                 <div className={styles['accountHeader']}>
-                  {(visibleAccounts?.length ?? 0) > 1 || selected.length > 0 ? <input type="checkbox"
+                  {showSelection ? <input type="checkbox"
                     aria-label={t('accountSelectLabel').replace('{account}', account.label)} disabled={disabled || busy}
                     checked={selected.includes(account.id)} onChange={(event) => {
                       const checked = event.target.checked
@@ -557,17 +564,17 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
         {attempt?.status === 'authorized' ? <p>{t('accountAdded')}</p> : null}
         {attempt?.status === 'cancelled' ? <p>{t('accountCancelled')}</p> : null}
       </div>
-      {notice?.snippet === undefined ? null : <div className={styles['authSnippet']}>
+      {snippet === undefined ? null : <div className={styles['authSnippet']}>
         <Button size="sm" variant="outline" onClick={() => {
           const token = lifetime.current
-          void Promise.resolve().then(() => navigator.clipboard.writeText(notice.snippet ?? '')).then(() => {
+          void Promise.resolve().then(() => navigator.clipboard.writeText(snippet)).then(() => {
             if (lifetime.current === token) setCopyStatus('copied')
           }, () => {
             if (lifetime.current === token) setCopyStatus('failed')
           })
         }}>{t('accountCopyConsole')}</Button>
         {copyStatus === undefined ? null : <p role="status">{t(copyStatus === 'copied' ? 'accountConsoleCopied' : 'accountConsoleCopyFailed')}</p>}
-        <details><summary>{t('accountShowConsole')}</summary><pre><code>{notice.snippet}</code></pre></details>
+        <details><summary>{t('accountShowConsole')}</summary><pre><code>{snippet}</code></pre></details>
       </div>}
       {prompt === undefined || attempt === undefined ? null : <form key={prompt.id} className={styles['field']} onSubmit={(event) => {
         event.preventDefault()
@@ -592,12 +599,12 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
       {failure === undefined && attempt?.error === undefined ? null
         : <p className={styles['error']} role="alert">{failure ?? attempt?.error}</p>}
       <Modal open={removal !== undefined} title={t('accountsRemoveTitle').replace('{count}', String(removal?.length ?? 0))}
-        closeLabel={t('close')} className={styles['deleteDialog'] ?? ''}
+        closeLabel={t('close')} className={styles['deleteDialog'] as string}
         onClose={() => { if (!busy) setRemoval(undefined) }} description={t('accountsRemoveDescription')}
-        footer={<>
+        footer={removal === undefined ? undefined : <>
           <Button variant="outline" disabled={busy} onClick={() => { setRemoval(undefined) }}>{t('cancel')}</Button>
           <Button variant="outline" className={styles['deleteConfirm']} disabled={busy}
-            onClick={() => { if (removal !== undefined) void removeAccounts(removal) }}>{t('accountsRemoveConfirm')}</Button>
+            onClick={() => { void removeAccounts(removal) }}>{t('accountsRemoveConfirm')}</Button>
         </>}>
         <p>{t('accountsRemoveSelected').replace('{count}', String(removal?.length ?? 0))}</p>
         <ul className={styles['accountRemovalList']}>{removal?.map(account => <li key={account.id}>{account.label}</li>)}</ul>

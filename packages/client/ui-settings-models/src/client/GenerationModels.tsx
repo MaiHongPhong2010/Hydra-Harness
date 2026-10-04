@@ -64,17 +64,15 @@ export function GenerationModels({ namespace, catalogRevision, schema, api, read
   })) as Record<Field, string>
   const values = draft?.choices ?? saved
   const unavailable = fields.some(field => values[field] !== '' && !choices[field].has(values[field]))
-  const apply = async (): Promise<void> => {
-    if (draft === undefined) return
+  const apply = async (pending: NonNullable<typeof draft>): Promise<void> => {
     setBusy(true)
     setFailure(undefined)
     try {
       const response = await api.settings.mutate({
-        ns: namespace.ns, expectedRevision: draft.revision,
+        ns: namespace.ns, expectedRevision: pending.revision,
         ops: fields.map((field) => {
-          if (draft.choices[field] === '') return { op: 'unset', path: [field] }
-          const value = choices[field].get(draft.choices[field])
-          if (value === undefined) throw new Error(t('generationModelUnavailable'))
+          if (pending.choices[field] === '') return { op: 'unset', path: [field] }
+          const value = choices[field].get(pending.choices[field]) as Selection
           return { op: 'set', path: [field], value }
         }),
       })
@@ -117,7 +115,7 @@ export function GenerationModels({ namespace, catalogRevision, schema, api, read
       {failure !== undefined && <p className={styles['error']} role="alert">{failure}</p>}
       {draft !== undefined && <EditorFooter t={t} busy={busy} submitDisabled={readOnly || busy || loading || unavailable}
         submitLabel="apply" submitBusyLabel="applying" cancelLabel="discard"
-        onCancel={() => { setDraft(undefined); setFailure(undefined) }} onSubmit={() => { void apply() }} />}
+        onCancel={() => { setDraft(undefined); setFailure(undefined) }} onSubmit={() => { void apply(draft) }} />}
     </section>
   )
 }

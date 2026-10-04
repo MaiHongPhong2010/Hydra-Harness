@@ -427,15 +427,17 @@ export function SessionNodeItem({
     else if (id === 'fork') onFork(node.id)
     else if (id === 'archive') onArchive(node.id)
     else if (id === 'delete') onDelete(node.id, row.title)
-    else if (id === 'pin') management?.onPin()
-    else if (id === 'unread') management?.onUnread()
-    else if (id === 'window') management?.onWindow()
-    else if (id === 'section:new') management?.onNewSection()
-    else if (id.startsWith('project:')) management?.onProject(id === 'project:none' ? null : id.slice(8))
-    else if (id.startsWith('section:')) management?.onSection(id === 'section:none' ? null : id.slice(8))
-    else if (id === 'copy:link') management?.onCopy('link')
-    else if (id === 'copy:markdown') management?.onCopy('markdown')
-    else if (id === 'copy:directory' && management?.cwd !== undefined) management.onCopy('directory')
+    else if (management !== undefined) {
+      if (id === 'pin') management.onPin()
+      else if (id === 'unread') management.onUnread()
+      else if (id === 'window') management.onWindow()
+      else if (id === 'section:new') management.onNewSection()
+      else if (id.startsWith('project:')) management.onProject(id === 'project:none' ? null : id.slice(8))
+      else if (id.startsWith('section:')) management.onSection(id === 'section:none' ? null : id.slice(8))
+      else if (id === 'copy:link') management.onCopy('link')
+      else if (id === 'copy:markdown') management.onCopy('markdown')
+      else if (id === 'copy:directory' && management.cwd !== undefined) management.onCopy('directory')
+    }
   }
   // Figma session cell: pad 8, status slot 16, then a 4px title gap.
   const ownRow = (

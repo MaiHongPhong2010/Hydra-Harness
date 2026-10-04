@@ -196,3 +196,11 @@ describe('pi-ai login flows', () => {
     expect(seen?.aborted).toBe(true)
   })
 })
+
+it.each(['text', 'secret'] as const)('preserves the requested visibility of pasted login codes: %s', async (kind) => {
+  const { createPiAiAuthInteraction } = await import('../src/login.ts')
+  const prompt = vi.fn(async () => 'code')
+  const interaction = createPiAiAuthInteraction({ method: 'oauth', signal: new AbortController().signal, notify: vi.fn(), prompt }, kind)
+  await expect(interaction.prompt({ type: 'manual_code', message: 'Paste code' })).resolves.toBe('code')
+  expect(prompt).toHaveBeenCalledWith({ kind, message: 'Paste code' })
+})

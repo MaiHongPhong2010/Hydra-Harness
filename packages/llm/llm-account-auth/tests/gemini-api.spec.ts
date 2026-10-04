@@ -225,3 +225,75 @@ it('uses the selected OAuth account for native Gemini image requests', async () 
   expect((await adapter.requestGeneration(request)).ok).toBe(true)
   await expect(adapter.requestGeneration({ ...request, endpoint: 'videos' })).rejects.toMatchObject({ code: 'UNSUPPORTED_GENERATION' })
 })
+
+it.each([
+  null, {}, { models: [null] }, { models: [{ name: 'bad' }] },
+  { models: [{ name: 'models/unknown', supportedGenerationMethods: 1 }] },
+  { models: [{ name: 'models/unknown', supportedGenerationMethods: [1] }] },
+  { models: [{ name: 'models/unknown', supportedGenerationMethods: ['bad method'] }] },
+  { models: [], nextPageToken: 1 }, { models: [], nextPageToken: 'repeated' },
+])('rejects malformed model catalogs and repeated page tokens: %j', async (payload) => {
+  const accounts = await pool()
+  await accounts.add('person', grant)
+  vi.stubGlobal('fetch', async () => Response.json(payload))
+  const adapter = new GeminiApiAccountAdapter(accounts, {})
+  await expect(adapter.discoverModels()).rejects.toMatchObject({ code: payload === null ? 'MALFORMED_RESPONSE' : 'DISCOVERY_FAILED' })
+})
+
+it('preserves unknown generation methods and models without endpoint metadata', async () => {
+  const accounts = await pool()
+  await accounts.add('person', grant)
+  vi.stubGlobal('fetch', async () => Response.json({ models: [
+    { name: 'models/custom', supportedGenerationMethods: ['generateContent', 'predictLongRunning', 'predict', 'embedContent'] },
+    { name: 'models/no-methods' }, { name: 'models/empty-methods', supportedGenerationMethods: [] },
+  ], nextPageToken: '' }))
+  expect(await new GeminiApiAccountAdapter(accounts, {}).discoverModels()).toEqual([
+    { id: 'custom', endpoints: ['chat/completions', 'videos', 'images/generations', 'embedContent'] },
+    { id: 'no-methods' }, { id: 'empty-methods' },
+  ])
+})
+
+it.each([true, false])('rejects failed discovery with and without a response body: %s', async (body) => {
+  const accounts = await pool()
+  await accounts.add('person', grant)
+  vi.stubGlobal('fetch', async () => new Response(body ? 'denied' : null, { status: 403 }))
+  await expect(new GeminiApiAccountAdapter(accounts, {}).discoverModels()).rejects.toMatchObject({ code: 'DISCOVERY_FAILED', message: 'Gemini API model discovery failed (HTTP 403).' })
+})
+
+it('rejects discovery and generation without an account', async () => {
+  const accounts = await pool()
+  const adapter = new GeminiApiAccountAdapter(accounts, { models: [{ id: 'gemini-3.1-flash-image' }] })
+  await expect(adapter.discoverModels()).rejects.toMatchObject({ code: 'MISSING_CREDENTIAL' })
+  await expect(adapter.requestGeneration({ provider: 'gemini-api', model: 'gemini-3.1-flash-image', endpoint: 'images/generations',
+    body: { prompt: 'a cat' }, maxResponseBytes: 4096, signal: new AbortController().signal })).rejects.toMatchObject({ code: 'MISSING_CREDENTIAL' })
+})
+
+it.each([true, false])('tries the next account only after an explicit generation rejection and keeps the final response: %s', async (body) => {
+  const accounts = await pool()
+  await accounts.add('first', { ...grant, access: 'first', accountId: 'first' })
+  await accounts.add('second', { ...grant, access: 'second', accountId: 'second' })
+  const fetcher = vi.fn(async () => new Response(body ? 'denied' : null, { status: 429 }))
+  vi.stubGlobal('fetch', fetcher)
+  const adapter = new GeminiApiAccountAdapter(accounts, { models: [{ id: 'gemini-3.1-flash-image' }] })
+  const request = { provider: 'gemini-api', model: 'gemini-3.1-flash-image', endpoint: 'images/generations' as const,
+    body: { prompt: 'a cat' }, maxResponseBytes: 4096, signal: new AbortController().signal }
+  const response = await adapter.requestGeneration(request)
+  expect(response.status).toBe(429)
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  expect(await response.text()).toBe(body ? 'denied' : '')
+  await expect(adapter.requestGeneration({ ...request, body: { ...request.body, n: 2 } })).rejects.toMatchObject({ code: 'UNSUPPORTED_GENERATION' })
+})
+
+it.each(['', '\n', undefined, 1])('rejects stored Google grants without a Code Assist project: %j', async (projectId) => {
+  const accounts = await pool()
+  const account = await accounts.add('Broken', { ...grant, projectId })
+  await expect(accounts.withAccount(account.id, () => selectedGoogleCredential(accounts, 'gemini-api', new AbortController().signal)))
+    .rejects.toMatchObject({ code: 'INVALID_CREDENTIAL' })
+})
+
+it('rejects a selected non-OAuth Google credential', async () => {
+  const accounts = await pool()
+  const account = await accounts.add('API key', { type: 'api_key', key: 'fixture' })
+  await expect(accounts.withAccount(account.id, () => selectedGoogleCredential(accounts, 'gemini-api', new AbortController().signal)))
+    .rejects.toMatchObject({ code: 'MISSING_CREDENTIAL' })
+})

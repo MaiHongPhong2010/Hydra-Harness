@@ -8,7 +8,10 @@ import { accountRecordKey, createAccountPool } from '../src/accounts.ts'
 import { PiAiAccountAdapter } from '../src/adapter.ts'
 import { buildChatGptProfile } from '../src/chatgpt.ts'
 
-const sdk = vi.hoisted(() => ({ create: vi.fn(), discover: vi.fn() }))
+const sdk = vi.hoisted(() => ({ create: vi.fn(), discover: vi.fn(), nativeDiscover: vi.fn() }))
+vi.mock('../src/sdk-accounts.ts', async load => ({
+  ...await load<typeof import('../src/sdk-accounts.ts')>(), discoverSdkAccountModels: sdk.nativeDiscover,
+}))
 vi.mock('@hydraharness/harness-llm-pi-ai', async load => ({
   ...await load<typeof import('@hydraharness/harness-llm-pi-ai')>(),
   PiAiAdapter: sdk.create,
@@ -31,6 +34,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   sdk.create.mockImplementation(function() { return delegate })
   sdk.discover.mockResolvedValue([{ id: 'discovered' }])
+  sdk.nativeDiscover.mockResolvedValue([{ id: 'native' }])
 })
 afterEach(async () => {
   for (const ctx of contexts.splice(0)) await ctx.fiber.dispose()
@@ -116,4 +120,32 @@ it('discovers with account-scoped credentials and forwards cancellation', async 
     return accounts
   })
   await expect(adapter.discoverModels(controller.signal)).rejects.toThrow('after accounts')
+})
+
+it('uses the native account catalog for SDK account routes', async () => {
+  const pool = await poolFixture(grant)
+  const profile = { ...await buildChatGptProfile({}), provider: 'claude' }
+  const adapter = new PiAiAccountAdapter({ provider: 'claude', pool, profile: () => profile })
+  const signal = new AbortController().signal
+  expect(await adapter.discoverModels(signal)).toEqual([{ id: 'native' }])
+  expect(sdk.nativeDiscover).toHaveBeenCalledWith('claude', pool, profile, signal)
+})
+
+it('lets ChatGPT discovery use its default endpoint when the profile omits one', async () => {
+  const pool = await poolFixture(grant)
+  const { baseURL: _endpoint, ...profile } = await buildChatGptProfile({})
+  const adapter = new PiAiAccountAdapter({ provider: 'chatgpt', pool, profile: () => profile })
+  await adapter.discoverModels()
+  expect(sdk.discover).toHaveBeenCalledWith({ accessToken: 'access', accountId: 'fixture-account' })
+})
+
+it('reports missing generation accounts and preserves an account credential failure', async () => {
+  const profile = await buildChatGptProfile({})
+  const pool = await poolFixture()
+  const adapter = new PiAiAccountAdapter({ provider: 'chatgpt', pool, profile: () => profile })
+  const options = { provider: 'chatgpt', model: 'image', endpoint: 'images/generations' as const,
+    body: { prompt: 'a cat' }, maxResponseBytes: 1024, signal: new AbortController().signal }
+  await expect(adapter.requestGeneration(options)).rejects.toMatchObject({ code: 'MISSING_CREDENTIAL' })
+  await pool.add('API key', { type: 'api_key', key: 'fixture' })
+  await expect(adapter.requestGeneration(options)).rejects.toThrow('account has no OAuth grant')
 })

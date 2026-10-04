@@ -28,6 +28,8 @@ async function openModels(page: Page): Promise<Locator> {
   await dialog.getByRole('button', { name: 'Models', exact: true }).click()
   await dialog.getByText('Sign in with your accounts or enter API keys to use models from these providers.', { exact: true })
     .waitFor({ timeout: 10_000 })
+  await expect.poll(() => dialog.getByRole('region', { name: 'Image and video generation', exact: true })
+    .getByRole('button', { name: 'Refresh models', exact: true }).isEnabled()).toBe(true)
   return dialog
 }
 

@@ -3,6 +3,37 @@ import { MAX_TIMER_DELAY_MS } from '@hydraharness/harness-timeout'
 import { resolveProfiles, type AccountProviderProfile } from '../src/config.ts'
 
 describe('account provider settings', () => {
+  it.each(['bad', 'us_east_1'])('rejects an invalid Kiro region %s', (region) => {
+    expect(() => resolveProfiles({ kiro: { region } })).toThrow('invalid AWS region')
+  })
+
+  it('retains valid Kiro controls and rejects unsupported generation controls', () => {
+    const profile: AccountProviderProfile = { region: 'us-east-1', timeoutMs: 1000, retryPolicy: JSON.parse('{}') as NonNullable<AccountProviderProfile['retryPolicy']>, startURL: 'https://fixture.test/start', issuerURL: 'https://fixture.test/issuer' }
+    expect(resolveProfiles({ kiro: profile }).get('kiro')).toEqual(profile)
+    expect(() => resolveProfiles({ kiro: { transport: 'sse' } })).toThrow('Kiro does not support transport')
+  })
+
+  it.each(['startURL', 'issuerURL'] as const)('rejects unsafe %s values', (field) => {
+    for (const value of ['http://fixture.test', 'https://user@fixture.test', 'https://:password@fixture.test', 'https://fixture.test/#fragment']) {
+      expect(() => resolveProfiles({ kiro: { [field]: value } })).toThrow('must use HTTPS')
+    }
+  })
+
+  it.each(['loginTimeoutMs', 'loginPollIntervalMs', 'timeoutMs'] as const)('rejects invalid Kiro %s values', (field) => {
+    for (const value of [0.5, 0, MAX_TIMER_DELAY_MS + 1]) {
+      expect(() => resolveProfiles({ kiro: { [field]: value } })).toThrow('positive timer interval')
+    }
+  })
+
+  it.each(['https://user@fixture.test', 'https://:password@fixture.test', 'https://fixture.test/?query',
+    'https://fixture.test/#fragment', 'http://fixture.test', 'ftp://localhost'])('rejects unsafe API endpoint %s', (endpoint) => {
+    expect(() => resolveProfiles({ chatgpt: { endpoint } })).toThrow('must use HTTPS or loopback HTTP')
+  })
+
+  it.each(['https://fixture.test', 'http://127.0.0.1', 'http://localhost', 'http://[::1]'])('accepts secure or loopback API endpoint %s', (endpoint) => {
+    expect(resolveProfiles({ chatgpt: { endpoint } }).get('chatgpt')?.endpoint).toBe(endpoint)
+  })
+
   it('keeps absent providers dormant and treats empty model lists as discovery', () => {
     expect(resolveProfiles(undefined).size).toBe(0)
     expect(resolveProfiles({ chatgpt: {}, antigravity: { models: [] } }))

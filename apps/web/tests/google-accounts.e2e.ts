@@ -88,6 +88,7 @@ beforeAll(async () => {
   tripwire = watchConsole(page)
   await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
   await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+  await page.getByRole('dialog', { name: 'Settings' }).waitFor({ timeout: 30_000 })
   await mkdir(shots, { recursive: true })
   await mkdir(dirname(golden), { recursive: true })
 }, 120_000)
@@ -103,7 +104,7 @@ afterAll(async () => {
 
 it.each(['antigravity', 'gemini-api'])('opens %s OAuth first and requests a quota project only for the API service', async (provider) => {
   const dialog = page.getByRole('dialog', { name: 'Settings' })
-  if (!await dialog.isVisible()) await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await dialog.waitFor()
   await dialog.getByRole('button', { name: 'Models', exact: true }).click()
   const section = dialog
   if (provider === 'gemini-api') {

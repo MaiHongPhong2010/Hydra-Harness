@@ -930,3 +930,10 @@ describe('resolveBase', () => {
     }
   })
 })
+
+it('forwards session version selection through the Fetch carrier', async () => {
+  const handler = toFetchHandler(fakeApi())
+  const client = new InProcessApiClient(handler)
+  expect(await client.sessions.selectVersion({ sessionId: 's1' as never, versionId: 'original' as never, mode: 'view' }))
+    .toMatchObject({ result: { ok: true, value: { versionId: 'original' } } })
+})

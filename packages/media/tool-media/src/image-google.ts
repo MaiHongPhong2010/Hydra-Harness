@@ -2,9 +2,10 @@
  * @module @hydraharness/harness-tool-media
  */
 import type { Context } from '@hydraharness/cordis'
+import { admitGeneratedImages } from './generated-images.ts'
 import z from '@hydraharness/schemastery'
 import { z as zod } from 'zod'
-import { admitEncodedImages, toolImageReferences, toolMediaLabels } from '@hydraharness/harness-attachment'
+import { toolImageReferences, toolMediaLabels } from '@hydraharness/harness-attachment'
 import { credentialRef } from '@hydraharness/harness-credentials'
 import { defineTool } from '@hydraharness/harness-tools'
 
@@ -182,10 +183,7 @@ export function registerGoogleImages(ctx: Context, config: GoogleImageConfig): v
         return candidate.content.parts.flatMap(part => ('thought' in part && part.thought) || part.inlineData === undefined ? [] : [part.inlineData])
       })()
       if (output.length === 0 || output.length > maxImages) throw new Error(`Google must return 1–${maxImages} final images.`)
-      const images = await admitEncodedImages(ctx.attachments, output.map((image, index) => ({
-        data: image.data, mediaType: image.mimeType,
-        name: `generated-${index + 1}.${image.mimeType.slice('image/'.length)}`,
-      })))
+      const images = await admitGeneratedImages(ctx.attachments, output)
       signal.throwIfAborted()
       return {
         model: generated?.model ?? resolved.model, images: [...images],

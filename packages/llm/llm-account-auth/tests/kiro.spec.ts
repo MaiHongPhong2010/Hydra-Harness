@@ -269,3 +269,9 @@ it('aborts a stalled response when native cancellation rejects', async () => {
   await expect(collect(h.adapter.stream(options()))).rejects.toMatchObject({ code: 'TIMEOUT' })
   expect(canceled).toHaveBeenCalled()
 })
+
+it('treats an empty endpoint selection as an unrestricted Kiro conversation model', async () => {
+  const h = await adapter({ models: [{ id: options().model, endpoints: [] }] })
+  vi.stubGlobal('fetch', vi.fn(async () => reply(frame('assistantResponseEvent', { content: 'Hello' }))))
+  expect((await collect(h.adapter.stream(options()))).at(-1)).toEqual({ type: 'finish', reason: { kind: 'stop' } })
+})

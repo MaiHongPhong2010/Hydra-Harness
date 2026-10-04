@@ -29,6 +29,16 @@
     - text: Close
   - heading "Models" [level=2]
   - paragraph: Sign in with your accounts or enter API keys to use models from these providers.
+  - region "Image and video generation":
+    - heading "Image and video generation" [level=3]
+    - button "Refresh models"
+    - paragraph: Choose models marked Image or Video, grouped by provider. Fetch and save a provider's models to add them here. Generation requires a connected provider that supports the selected task.
+    - text: Image model
+    - combobox "Image model":
+      - option "Automatic fallback" [selected]
+    - text: Video model
+    - combobox "Video model":
+      - option "Automatic fallback" [selected]
   - region "API keys":
     - heading "API keys" [level=3]
     - paragraph: Configure provider API keys and optional fallback keys.
@@ -45,7 +55,7 @@
       - text: Add a custom provider
   - region "Account sign-in":
     - heading "Account sign-in" [level=3]
-    - paragraph: Connect ChatGPT or Google Antigravity accounts independently of your API keys.
+    - paragraph: Connect provider accounts independently of your API keys.
     - list
     - button "Add sign-in provider":
       - img

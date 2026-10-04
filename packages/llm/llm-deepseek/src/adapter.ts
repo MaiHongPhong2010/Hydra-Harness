@@ -307,7 +307,7 @@ export class DeepSeekAdapter extends LlmAdapter {
     // sent to it can never come from different configuration generations.
     const connection = this.config.options()
     const endpoints = connection.models.find(model => model.id === options.model)?.endpoints
-    if (!supportsConversation(endpoints?.length === 0 ? undefined : endpoints)) {
+    if (!supportsConversation(endpoints)) {
       throw new LlmError(`DeepSeek model "${options.model}" does not support conversation.`, 'UNSUPPORTED_MODEL_ENDPOINT')
     }
     const refs = [connection.apiKeyEnv, ...connection.apiKeyFallbackEnvs]

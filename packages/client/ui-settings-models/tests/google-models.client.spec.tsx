@@ -167,3 +167,14 @@ it('keeps unsupported Cursor discovery disabled while exposing its saved model e
   expect(screen.getByText(en.accountTransportUnavailable)).toBeDefined()
   expect(discoverModels).not.toHaveBeenCalled()
 })
+
+it('saves the addressed Google catalog when its counterpart is unconfigured', async () => {
+  const { mutate, onClose } = setup('antigravity', undefined, false)
+  fireEvent.click(screen.getByRole('button', { name: en.fetchGoogleModels }))
+  const picker = await screen.findByRole('dialog', { name: en.fetchTitle })
+  fireEvent.click(within(picker).getByRole('button', { name: en.fetchAdopt }))
+  fireEvent.click(screen.getByRole('button', { name: en.apply }))
+  await waitFor(() =>{  expect(onClose).toHaveBeenCalledWith(true) })
+  expect(mutate.mock.calls[0]![0].ops).toHaveLength(1)
+  expect(mutate.mock.calls[0]![0].ops[0]?.path).toEqual(['providers', 'antigravity', 'models'])
+})

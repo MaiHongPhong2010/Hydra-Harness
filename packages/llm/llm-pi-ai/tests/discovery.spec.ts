@@ -553,3 +553,38 @@ it('classifies cancellation while waiting for discovery headers', async () => {
   await expect(discoverModels({ baseURL: 'https://listing.test', signal: controller.signal }))
     .rejects.toMatchObject({ code: 'ABORTED' })
 })
+
+it('discovers a configured keyless route without inventing a credential reference', async () => {
+  const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
+  const ctx = new Context()
+  try {
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, { providers: { 'keyless': { api: 'openai-completions', baseURL: server.url, models: [{ id: 'm' }] } } })
+    expect(await ctx.llm.discoverModels('llm-pi-ai', { provider: 'keyless' })).toEqual([{ id: 'm' }])
+    expect(server.headers[0]?.authorization).toBeUndefined()
+  } finally { await ctx.fiber.dispose() }
+})
+
+it('inherits the saved HTTP proxy for provider discovery', async () => {
+  const tunnels: string[] = []
+  const proxy = createServer()
+  servers.push(proxy)
+  proxy.on('connect', (request, socket) => {
+    tunnels.push(request.url!)
+    socket.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n')
+  })
+  await new Promise<void>(resolve => proxy.listen(0, '127.0.0.1', resolve))
+  const address = proxy.address()
+  if (address === null || typeof address === 'string') throw new Error('missing proxy address')
+  const ctx = new Context()
+  try {
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, { providers: { fixture: {
+      api: 'openai-completions', baseURL: 'https://listing.test/v1',
+      proxy: `http://127.0.0.1:${address.port}`, models: [{ id: 'm' }],
+    } } })
+    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'fixture' }))
+      .rejects.toMatchObject({ code: 'DISCOVERY_FAILED' })
+    expect(tunnels).toEqual(['listing.test:443'])
+  } finally { await ctx.fiber.dispose() }
+})

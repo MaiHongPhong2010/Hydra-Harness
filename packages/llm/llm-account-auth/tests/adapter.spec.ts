@@ -550,3 +550,38 @@ describe('account-backed Antigravity adapter', () => {
     expect(orderCalls.count).toBe(1)
   })
 })
+
+it('uses a catalog id when discovered Antigravity models have no display name', async () => {
+  const pool = accountPool({ accounts: [{ id: 'first', credential: credentials('first') }] })
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ models: { 'remote-model': {} } }))
+  const adapter = new AntigravityAccountAdapter({ pool, profile: () => ({}) })
+  expect(await adapter.discoverModels()).toContainEqual({ id: 'remote-model', name: 'remote-model' })
+})
+
+it('rejects unconfigured generation and preserves a credential lost during selection', async () => {
+  const pool = accountPool({ accounts: [{ id: 'first', credential: credentials('first') }] })
+  await expect(new AntigravityAccountAdapter({ pool, profile: () => undefined }).requestGeneration(imageRequest()))
+    .rejects.toMatchObject({ code: 'NO_ADAPTER' })
+  const adapter = new AntigravityAccountAdapter({ pool, profile: () => ({}) })
+  vi.spyOn(AntigravityAdapter.prototype, 'requestGeneration').mockRejectedValue(new LlmError('Account disconnected', 'MISSING_CREDENTIAL'))
+  await expect(adapter.requestGeneration(imageRequest())).rejects.toThrow('Account disconnected')
+})
+
+it.each([false, true])('shares fresh and expired Google credentials between streaming and generation: explicit controls %s', async (explicit) => {
+  for (const expired of [false, true]) {
+    const account = { id: 'shared', credential: { ...credentials('shared', expired ? 0 : Date.now() + 60_000), quotaProjectId: 'fixture-project', email: 'user@example.test' } }
+    const pool = accountPool({ accounts: [account] })
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (requestUrl(input) === ANTIGRAVITY_TOKEN_ENDPOINT) return Response.json({ access_token: 'fresh', expires_in: 3600, token_type: 'Bearer' })
+      return new Response(`data: ${JSON.stringify({ response: { candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'Hello' }] } }] } })}\n\n`)
+    })
+    const adapter = new AntigravityAccountAdapter({ pool, profile: () => explicit ? { timeoutMs: 1000 } : {} })
+    const chunks: StreamChunk[] = []
+    for await (const chunk of adapter.stream(request(explicit ? { signal: new AbortController().signal } : {}))) chunks.push(chunk)
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
+    if (expired) account.credential.expires = 0
+    expect((await adapter.requestGeneration(imageRequest())).ok).toBe(true)
+    expect(fetcher.mock.calls.filter(([input]) => requestUrl(input) === ANTIGRAVITY_TOKEN_ENDPOINT)).toHaveLength(expired ? 2 : 0)
+    expect(account.credential).toMatchObject({ quotaProjectId: 'fixture-project', projectId: 'project-fixture', email: 'user@example.test' })
+  }
+})

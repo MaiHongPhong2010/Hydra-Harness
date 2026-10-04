@@ -686,6 +686,24 @@ export function ChatView({
     loadOlder()
   }
 
+  const renderNode = (nodeKey: string) => (
+    <ChatNodeSeat
+      key={nodeKey}
+      nodeKey={nodeKey}
+      useSession={useSession}
+      selectedCallId={selectedCallId}
+      cwd={cwd}
+      openFile={requestOpenFile}
+      inspectCall={inspectCall}
+      forkAt={forkAt}
+      renderMessageImages={renderMessageImages}
+      loadMedia={loadMedia}
+      fileMentions={fileMentions}
+      renderSlot={renderSlot}
+      t={t}
+    />
+  )
+
   return (
     <div className={css.root}>
       <div ref={listRef} className={css.scroll}>
@@ -703,45 +721,13 @@ export function ChatView({
               </button>
             </div>
           )}
-          {flow.map(entry => entry.kind === 'node' ? (
-            <ChatNodeSeat
-              key={entry.nodeKey}
-              nodeKey={entry.nodeKey}
-              useSession={useSession}
-              selectedCallId={selectedCallId}
-              cwd={cwd}
-              openFile={requestOpenFile}
-              inspectCall={inspectCall}
-              forkAt={forkAt}
-              renderMessageImages={renderMessageImages}
-              loadMedia={loadMedia}
-              fileMentions={fileMentions}
-              renderSlot={renderSlot}
-              t={t}
-            />
-          ) : (
+          {flow.map(entry => entry.kind === 'node' ? renderNode(entry.nodeKey) : (
             <ActivityGroup
               key={`activity:${entry.nodeKeys[0] ?? 'empty'}`}
               kind={entry.activityKind}
               t={t}
             >
-              {entry.nodeKeys.map(nodeKey => (
-                <ChatNodeSeat
-                  key={nodeKey}
-                  nodeKey={nodeKey}
-                  useSession={useSession}
-                  selectedCallId={selectedCallId}
-                  cwd={cwd}
-                  openFile={requestOpenFile}
-                  inspectCall={inspectCall}
-                  forkAt={forkAt}
-                  renderMessageImages={renderMessageImages}
-                  loadMedia={loadMedia}
-                  fileMentions={fileMentions}
-                  renderSlot={renderSlot}
-                  t={t}
-                />
-              ))}
+              {entry.nodeKeys.map(renderNode)}
             </ActivityGroup>
           ))}
           {/* No pending placeholders: questions (ui-user-questions) and approvals

@@ -38,3 +38,11 @@ describe('session sidebar organization', () => {
     expect(store.getSnapshot()).toMatchObject({ pinnedSessionIds: [], unreadSessionIds: [], sectionBySession: {} })
   })
 })
+
+it('moves an existing session into another custom section', () => {
+  const store = createWorkspaceViewStore().create()
+  store.actions.addSection('one', 'One', 'session')
+  store.actions.addSection('two', 'Two', 'other')
+  store.actions.setSection('session', 'two')
+  expect(store.getSnapshot().sectionBySession).toEqual({ session: 'two', other: 'two' })
+})

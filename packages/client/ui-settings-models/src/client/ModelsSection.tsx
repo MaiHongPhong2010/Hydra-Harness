@@ -365,8 +365,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
         const addTarget = adding && rows.some(row => row.entry.provider === editing?.provider) ? editing : undefined
         const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.settingsNs)
         const showAdd = addTarget !== undefined || (!accountGroup && adding && editing === undefined)
-        const googleRows = accountGroup ? selectable.filter(row => row.entry.provider === 'antigravity') : []
-        const googleSelected = googleRows.some(row => row.entry.provider === addTarget?.provider)
+        const googleRow = accountGroup ? selectable.find(row => row.entry.provider === 'antigravity') : undefined
+        const googleSelected = googleRow !== undefined && googleRow.entry.provider === addTarget?.provider
         return (
           <section key={group} className={styles['providerGroup']} aria-label={t(group)}>
             <h3 className={styles['title']}>{t(group)}</h3>
@@ -506,7 +506,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                             return
                           }
                           const row = event.target.value === 'google'
-                            ? googleRows[0]
+                            ? googleRow
                             : selectable.find(candidate => candidate.entry.provider === event.target.value)
                           /* v8 ignore next -- the select only lists addable rows */
                           if (row === undefined) return
@@ -514,8 +514,8 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                           setEditing(targetOf(row))
                         }}
                       >
-                        {selectable.map(row => googleRows.includes(row)
-                          ? row === googleRows[0] ? <option key="google" value="google">Google</option> : null
+                        {selectable.map(row => row === googleRow
+                          ? <option key="google" value="google">Google</option>
                           : <option key={row.entry.provider} value={row.entry.provider}>{row.entry.displayName}</option>)}
                         {addTarget === undefined && addingOption === undefined ? <option value="" disabled>{t('provider')}</option> : null}
                         {accountGroup ? null : renderSlot('settings.models.provider-option', { mode: 'option' })}

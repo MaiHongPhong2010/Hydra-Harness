@@ -885,3 +885,36 @@ describe('Antigravity SSE parser', () => {
     }).rejects.toMatchObject({ code: 'MALFORMED_RESPONSE' })
   })
 })
+
+it('keeps declared native model endpoints in both list and resolved metadata', async () => {
+  const adapter = new AntigravityAdapter({ resolveCredentials: async () => credentials, models: [{ id: 'image', endpoints: ['images/generations'] }] })
+  expect((await adapter.listModels('antigravity'))[0]?.endpoints).toEqual(['images/generations'])
+  expect((await adapter.resolveModel('antigravity', 'image')).endpoints).toEqual(['images/generations'])
+})
+
+it('requires a connected account for native image generation', async () => {
+  const adapter = new AntigravityAdapter({ resolveCredentials: async () => undefined })
+  await expect(adapter.requestGeneration({ provider: 'antigravity', model: 'image', endpoint: 'images/generations', body: { prompt: 'tree' }, maxResponseBytes: 4096, signal: new AbortController().signal }))
+    .rejects.toMatchObject({ code: 'MISSING_CREDENTIAL' })
+})
+
+it.each(['https://user@example.test', 'https://:pass@example.test', 'https://example.test?query=1', 'https://example.test#fragment', 'http://example.test', 'ftp://example.test'])('rejects unsafe native generation endpoint %s', async (endpoint) => {
+  const fetch = vi.fn()
+  const adapter = new AntigravityAdapter({ resolveCredentials: async () => credentials, endpoint, fetch })
+  await expect(adapter.requestGeneration({ provider: 'antigravity', model: 'image', endpoint: 'images/generations', body: { prompt: 'tree' }, maxResponseBytes: 4096, signal: new AbortController().signal }))
+    .rejects.toMatchObject({ code: 'INVALID_GENERATION_ENDPOINT' })
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it.each([null, sseBody([JSON.stringify({ response: { error: { message: 'denied' } } })])])('rejects missing bodies and nested image-stream errors', async (body) => {
+  const adapter = new AntigravityAdapter({ resolveCredentials: async () => credentials, fetch: vi.fn(async () => new Response(body)) })
+  await expect(adapter.requestGeneration({ provider: 'antigravity', model: 'image', endpoint: 'images/generations', body: { prompt: 'tree' }, maxResponseBytes: 4096, signal: new AbortController().signal }))
+    .rejects.toMatchObject({ code: 'MALFORMED_RESPONSE' })
+})
+
+it('ignores heartbeat events and stops at the image stream completion marker', async () => {
+  const body = sseBody(['{}', JSON.stringify({ response: { candidates: [{ finishReason: 'STOP' }] } }), '[DONE]', 'invalid-json'])
+  const adapter = new AntigravityAdapter({ resolveCredentials: async () => credentials, fetch: vi.fn(async () => new Response(body)) })
+  const response = await adapter.requestGeneration({ provider: 'antigravity', model: 'image', endpoint: 'images/generations', body: { prompt: 'tree' }, maxResponseBytes: 4096, signal: new AbortController().signal })
+  expect(await response.json()).toEqual({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] })
+})

@@ -59,4 +59,6 @@
     - tab "Result" [selected]
     - tab "Schema"
     - tab "Timing"
-  - tabpanel "Result": NAVIGATION_OK
+  - tabpanel "Result":
+    - button "Copy result": Copy
+    - text: NAVIGATION_OK

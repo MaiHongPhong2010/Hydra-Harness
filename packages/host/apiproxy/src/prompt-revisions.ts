@@ -33,9 +33,7 @@ function digest(value: unknown): string {
 export function createPromptReviser(ctx: Context, deps: PromptRevisionDependencies): (input: PromptRevisionRequest) => Promise<Receipt> {
   const pending = new Map<SessionId, { key: string; fingerprint: string; promise: Promise<Receipt> }>()
 
-  async function start(agent: Agent, revision: ConversationRevision): Promise<void> {
-    const admission = revision.admission
-    if (admission === undefined) throw new Error('This version has no durable prompt admission.')
+  async function start(agent: Agent, revision: ConversationRevision, admission: NonNullable<ConversationRevision['admission']>): Promise<void> {
     const message = admission.message
     const path = agent.session.versions.events(revision.versionId)
     const receipt = path.findLast(event => event.type === 'session/revision' && event.data.versionId === revision.versionId)
@@ -63,7 +61,7 @@ export function createPromptReviser(ctx: Context, deps: PromptRevisionDependenci
     if (existing !== undefined) {
       const revision = conversationRevisionSchema.parse(existing.data)
       if (revision.admission?.fingerprint !== fingerprint) throw new Error('This idempotency key has already been used for a different edit.')
-      await start(agent, revision)
+      await start(agent, revision, revision.admission)
       return { sessionId: source.id, revision }
     }
     const versions = sessionVersions(source.events)
@@ -109,13 +107,14 @@ export function createPromptReviser(ctx: Context, deps: PromptRevisionDependenci
     if (agent.session.versions.current !== versions.current) throw new Error('The selected version changed before admission.')
     const header = agent.session.requestHeader()
     const retry = input.edit === undefined ? previous : undefined
+    const admission = { fingerprint, messageId: message.id, message }
     const revision: ConversationRevision = {
       sessionId: source.id, conversationId: source.id, previousSessionId: source.id,
       versionId, previousVersionId: versions.current, beforeSeq,
       turn, createdAt: retry?.createdAt ?? Date.now(),
       revisionId: retry?.revisionId ?? source.id,
       attempt: retry === undefined ? 1 : (retry.attempt ?? 1) + 1,
-      admission: { fingerprint, messageId: message.id, message },
+      admission,
     }
     agent.session.append('session/version', { versionId, parentVersionId: versions.current, beforeSeq })
     agent.inbox.clear()
@@ -125,7 +124,7 @@ export function createPromptReviser(ctx: Context, deps: PromptRevisionDependenci
     }
     if (header !== undefined) agent.session.append('request/header', { header, reason: 'initial' })
     agent.session.append('session/revision', revision)
-    await start(agent, revision)
+    await start(agent, revision, admission)
     return { sessionId: source.id, revision }
   }
 

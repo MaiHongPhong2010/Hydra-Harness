@@ -1332,3 +1332,10 @@ describe('plugin registration and config', () => {
     expect(ctx.llm.listProviders()).toEqual([])
   })
 })
+
+it('treats an empty configured endpoint list as a conversation model', async () => {
+  const server = await mockServer([{ kind: 'sse', events: textEvents }])
+  const adapter = adapterOf({ baseURL: server.url, models: [{ id: 'deepseek-chat', endpoints: [] }] })
+  await expect(drain(adapter.stream({ provider: 'deepseek-official', model: 'deepseek-chat', messages: [] }))).resolves.toBeUndefined()
+  expect(server.requests).toHaveLength(1)
+})

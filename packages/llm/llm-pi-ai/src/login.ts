@@ -8,7 +8,7 @@
  */
 
 import { createModels } from '@earendil-works/pi-ai'
-import type { AuthEvent, AuthPrompt, AuthType, Provider } from '@earendil-works/pi-ai'
+import type { AuthEvent, AuthPrompt, AuthType, AuthInteraction, Provider } from '@earendil-works/pi-ai'
 import type { Context } from '@hydraharness/cordis'
 import type { AuthorizationMethod, AuthorizationPrompt, AuthorizationSession } from '@hydraharness/harness-authorization'
 import { isCredentialKeySegment } from '@hydraharness/harness-credentials'
@@ -78,15 +78,13 @@ function relay(event: AuthEvent, session: AuthorizationSession): void {
 /**
  * Restate one pi-ai prompt in the seam's vocabulary.
  *
- * `manual_code` becomes a plain text question because the difference pi-ai
- * draws — a code the human copies from a browser rather than a value they know
- * — changes nothing a surface renders. Its own `signal` is carried through, and
- * that is the part which matters: it is how a flow racing a typed code against
- * a browser callback withdraws the losing question.
+ * Manual-code prompts use the visibility chosen by the login owner. Prompt
+ * cancellation withdraws a question when its competing browser callback wins.
  * @param prompt - what pi-ai asked.
+ * @param manualCodeKind - visibility of a pasted browser callback code.
  * @returns the neutral prompt to put to the human.
  */
-function restate(prompt: AuthPrompt): AuthorizationPrompt {
+function restate(prompt: AuthPrompt, manualCodeKind: 'text' | 'secret'): AuthorizationPrompt {
   const signal = prompt.signal === undefined ? {} : { signal: prompt.signal }
   switch (prompt.type) {
     case 'select':
@@ -101,10 +99,23 @@ function restate(prompt: AuthPrompt): AuthorizationPrompt {
     default:
       return {
         ...signal,
-        kind: 'text',
+        kind: prompt.type === 'manual_code' ? manualCodeKind : 'text',
         message: prompt.message,
         ...prompt.placeholder === undefined ? {} : { placeholder: prompt.placeholder },
       }
+  }
+}
+
+/** Translate SDK login notices and prompts into the authorization service.
+ * @param session - authorization interaction and cancellation.
+ * @param manualCodeKind - visibility of a pasted browser callback code.
+ * @returns the SDK interaction for this login attempt.
+ */
+export function createPiAiAuthInteraction(session: AuthorizationSession, manualCodeKind: 'text' | 'secret'): AuthInteraction {
+  return {
+    signal: session.signal,
+    notify: (event) => { relay(event, session) },
+    prompt: prompt => session.prompt(restate(prompt, manualCodeKind)),
   }
 }
 
@@ -150,11 +161,7 @@ export function registerPiAiFlows(ctx: Context, auth: PiAiAuthInjection): void {
         const type: AuthType = session.method === 'oauth' ? 'oauth' : 'api_key'
         // pi-ai persists what the login returns through that same store, which
         // is what makes it the single writer of this record.
-        await models.login(providerId, type, {
-          signal: session.signal,
-          notify: (event) => { relay(event, session) },
-          prompt: prompt => session.prompt(restate(prompt)),
-        })
+        await models.login(providerId, type, createPiAiAuthInteraction(session, 'text'))
       },
     })
   }

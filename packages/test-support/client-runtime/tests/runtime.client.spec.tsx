@@ -699,3 +699,16 @@ describe('stubbed settings scope', () => {
     expect(host.listenerCount()).toBe(0)
   })
 })
+
+it('records version selections with default and explicit display modes', async () => {
+  const runtime = await SlotTestRuntime.create()
+  try {
+    const version = 'original' as never
+    await runtime.sessions.selectVersion('s1' as SessionId, version)
+    await runtime.sessions.selectVersion('s1' as SessionId, version, 'reference')
+    expect(runtime.sessions.calls.slice(-2)).toEqual([
+      { method: 'selectVersion', args: ['s1', 'original', 'view'] },
+      { method: 'selectVersion', args: ['s1', 'original', 'reference'] },
+    ])
+  } finally { await runtime.dispose() }
+})

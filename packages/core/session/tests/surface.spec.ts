@@ -964,3 +964,10 @@ describe('SurfaceManager.replaceGeneration', () => {
     expect(s.surface.replaceGeneration).toBe(1)
   })
 })
+
+it('rejects discontinuous replay candidates and validates offset windows without a root version index', () => {
+  const events: SessionEvent[] = [{ type: 'turn/start', seq: 5, time: 0, data: { turn: 1 } }]
+  const surface = new SurfaceManager(events, 5)
+  expect(() =>{  surface.validateNext({ type: 'turn/end', seq: 6, time: 1, data: { turn: 1, reason: { kind: 'completed' } } }) }).not.toThrow()
+  expect(() =>{  surface.validateNext({ type: 'turn/end', seq: 7, time: 1, data: { turn: 1, reason: { kind: 'completed' } } }) }).toThrow('not contiguous')
+})

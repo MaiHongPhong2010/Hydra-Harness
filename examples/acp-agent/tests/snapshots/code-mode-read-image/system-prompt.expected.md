@@ -9,7 +9,7 @@ Verify your work by running the code or tests. Keep answers brief and factual.
 
 Use the read tool — not shell commands like cat — to inspect text files. Results include line numbers. Use offset and limit to continue reading large files. For exact line counts, use the returned total. For exact occurrence counts, enumerate every occurrence in complete returned evidence; never infer a count from a partial or skimmed read. For ordered evidence such as logs, determine first or last from the smallest or largest sequence or position across all relevant events; do not skip interaction tools.
 
-Use the write tool to create files or completely replace file contents. Existing files are overwritten, so read an existing file first (the default fs-observation-policy requires it) and prefer edit for targeted changes.
+Create or replace files with write; read existing files first and use edit for targeted changes. For JSON, supply the task's json_schema; use format:text only for intentional literal text. Before delivery, read back and reconcile status, answer, observations, and blocker with the todo list and final answer.
 
 Use the edit tool for targeted changes to existing UTF-8 text files. It replaces literal old_string with new_string; by default old_string must appear exactly once. If old_string appears multiple times, provide a more specific old_string or set replace_all to true. Read the file first (the default fs-observation-policy requires it), unless you just created or edited it in this session.
 
@@ -165,14 +165,14 @@ interface ToolArgsMap {
     /** The task for the subagent. It already sees this conversation's completed turns, so build on them freely and state only what is new. */
     prompt: string;
   } & Record<string, JsonValue>;
-  /** Record and update a structured task list for the current work. Send the ENTIRE list every call — it REPLACES the previous list (there are no partial updates, no per-item edits). Use it to plan multi-step work and show progress: add one todo per concrete step before you start. Mark every todo being actively worked on `in_progress` — several at once when work genuinely runs in parallel (e.g. concurrent subagents or background commands), one for sequential work; while work remains, at least one task should be `in_progress`. Mark a todo `completed` the moment it is done (do not batch completions), and allow no `in_progress` item only once all work is complete. Skip the list for trivial single-step tasks. Statuses: `pending` (not started), `in_progress` (being worked on now), `completed` (finished). */
+  /** Replace the current task list with the ENTIRE todos array on each call. Plan concrete steps before multi-step work; skip trivial tasks. While work can proceed, mark active tasks `in_progress`; several only for concurrent work. Mark `completed` only after verifying the outcome. Use `blocked` for missing prerequisites, `failed` for unsuccessful attempts, `cancelled` for abandoned work; put the reason in content. Keep statuses consistent with deliverables and the final answer. */
   todo_write: {
     /** The COMPLETE task list, replacing any previous list. */
     todos: ({
       /** What the task is — a short imperative line. */
       content: string;
-      /** pending (not started) | in_progress (now) | completed (done). */
-      status: "pending" | "in_progress" | "completed";
+      /** pending (not started) | in_progress (now) | completed (verified done) | blocked (missing prerequisite) | failed (unsuccessful) | cancelled (abandoned). */
+      status: "pending" | "in_progress" | "completed" | "blocked" | "failed" | "cancelled";
     })[];
   } & Record<string, JsonValue>;
   /** Update the exact current goal revision. edit, pause, and resume require a direct top-level human request. During an automatic continuation of the current goal, complete and blocked are also allowed. blocked is rejected before the configured minimum round count; the model remains responsible for judging that the same condition persisted across those rounds and must explain it in blocked_reason. */
@@ -223,6 +223,10 @@ interface ToolArgsMap {
     file_path: string;
     /** Full UTF-8 text content to write. */
     content: string;
+    /** Default: json for .json paths, otherwise text. JSON parses and serializes; text preserves literal bytes. */
+    format?: "text" | "json";
+    /** Task JSON Schema (supported tool-schema subset); validates before writing and implies JSON format. */
+    json_schema?: Record<string, JsonValue>;
     /** The wider sandbox mode this file operation needs. Only valid as a one-shot retry of an operation the sandbox just denied; requires justification and user approval. */
     sandbox_permissions?: "workspace-write" | "danger-full-access";
     /** Required with sandbox_permissions: one sentence for the user explaining why this exact file operation needs the wider access. */
@@ -424,12 +428,15 @@ interface ToolOutputMap {
   todo_write: {
     todos: ({
       content: string;
-      status: "pending" | "in_progress" | "completed";
+      status: "pending" | "in_progress" | "completed" | "blocked" | "failed" | "cancelled";
     })[];
     counts: {
       pending: number;
       inProgress: number;
       completed: number;
+      blocked: number;
+      failed: number;
+      cancelled: number;
     };
   };
   update_goal: {

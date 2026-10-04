@@ -24,3 +24,11 @@ describe('session Markdown copy', () => {
     await expect(sessionMarkdown({ sessions: { history } } as never, 'id' as never, 'Title')).rejects.toThrow('did not advance')
   })
 })
+
+it('omits image payloads and rejects repeated history cursors', async () => {
+  const history = vi.fn().mockResolvedValue({ result: { ok: true, value: { hasMore: true, events: [
+    { event: { seq: 4, type: 'user/message', surfaceOp: 'append', data: { source: { kind: 'user' }, content: [{ type: 'image', attachment: {} }] } } },
+  ] } } })
+  await expect(sessionMarkdown({ sessions: { history } } as never, 'id' as never, 'Title')).rejects.toThrow('did not advance')
+  expect(history).toHaveBeenCalledTimes(2)
+})

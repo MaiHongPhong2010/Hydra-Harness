@@ -13,8 +13,10 @@
  */
 
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { releaseFamily } from './families.ts'
@@ -62,8 +64,55 @@ function packedDependencies(directories: readonly string[]): Map<string, { url: 
   return dependencies
 }
 
+/**
+ * Boot the installed Web profile and verify its renderer and entry asset over HTTP.
+ * @param bin - Installed CLI entry.
+ * @param consumerRoot - Isolated consumer directory.
+ * @param environment - Environment with an isolated Harness home.
+ * @returns Completion after the HTTP checks and child-process cleanup.
+ */
+export async function verifyWebBoot(bin: string, consumerRoot: string, environment: NodeJS.ProcessEnv): Promise<void> {
+  const child = spawn(process.execPath, [bin, 'web', '--no-open', '--port', '0'], {
+    cwd: consumerRoot, env: environment, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+  })
+  let output = ''
+  const exited = new Promise<void>((done) => {
+    child.once('close', () => { done() })
+  })
+  child.once('error', (error) => { output += error.message })
+  child.stdout.on('data', (chunk: Buffer) => { output = (output + chunk.toString()).slice(-65_536) })
+  child.stderr.on('data', (chunk: Buffer) => { output = (output + chunk.toString()).slice(-65_536) })
+  try {
+    const deadline = Date.now() + 60_000
+    while (child.exitCode === null && child.signalCode === null && Date.now() < deadline) {
+      const address = /http:\/\/127\.0\.0\.1:\d+/.exec(output)?.[0]
+      if (address !== undefined) {
+        const response = await fetch(address, { signal: AbortSignal.timeout(5_000) })
+        const html = await response.text()
+        const asset = /<script[^>]+src="([^"]+)"/.exec(html)?.[1]
+        if (!response.ok || !html.includes('__HYDRA_BOOT__') || asset === undefined) {
+          throw new Error(`installed Web profile returned an incomplete renderer: HTTP ${String(response.status)}`)
+        }
+        const script = await fetch(new URL(asset, address), { signal: AbortSignal.timeout(5_000) })
+        if (!script.ok || !(script.headers.get('content-type') ?? '').includes('javascript')) {
+          throw new Error(`installed Web renderer entry failed: HTTP ${String(script.status)}`)
+        }
+        await script.arrayBuffer()
+        console.log('release verify-packed-install: installed Web profile serves its renderer and entry asset')
+        return
+      }
+      await delay(100)
+    }
+    throw new Error(`installed Web profile did not become ready:\n${output}`)
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
+    const force = setTimeout(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL') }, 5_000)
+    try { await exited } finally { clearTimeout(force) }
+  }
+}
+
 /** Install every tarball under `--from` and drive the `--family` entry. */
-function main(): void {
+async function main(): Promise<void> {
   const { values } = parseArgs({
     options: { family: { type: 'string' }, from: { type: 'string', multiple: true } },
     allowPositionals: false,
@@ -120,9 +169,10 @@ function main(): void {
       throw new Error(`installed ${entry.packageName} bare launcher did not report the non-interactive guidance:\n${bare.stdout}\n${bare.stderr}`)
     }
     console.log('release verify-packed-install: bare launcher rejected non-interactive input as expected')
+    await verifyWebBoot(bin, consumerRoot, environment)
   } finally {
     rmSync(consumerRoot, { recursive: true, force: true })
   }
 }
 
-if (isEntry(import.meta.url)) main()
+if (isEntry(import.meta.url)) await main()

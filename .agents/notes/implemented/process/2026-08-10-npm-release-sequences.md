@@ -111,7 +111,7 @@ The `pack` job walks the whole release set once, packing each member into one di
 
 A hydra verification installs the vendored family's pack output too. The harness packages declare the vendored framework as a peer, those packages live in another sequence, and the credential-free job cannot fetch them from a private registry — so the hydra `pack` job packs the vendored family for verification while publishing only the hydra set. The publish workflow (`release-publish.yml`) repacks the current tree and publishes only the hydra set.
 
-The hydra CLI tarball also bundles the internal dependency and peer closure reached by its CLI manifest and the vendored framework. The consumer probe installs only that one tarball, leaving external packages as ordinary dependencies so npm can select platform-specific builds; this is the supported bare-install path.
+The hydra CLI tarball bundles the internal dependency and peer closure reached by its CLI manifest and the vendored framework, plus [installed pnpm patches](2026-10-05-patched-dependencies-in-npm-cli.md). The consumer probe installs only that one tarball; other external packages remain ordinary dependencies so npm can select platform-specific builds.
 
 The hydra publish workflow promotes that self-contained CLI prerelease to `latest` after publishing the family, so `npm install @hydraharness/harness` resolves the verified entry package without requiring an explicit `@next` tag. The other family members remain under `next`.
 
@@ -164,7 +164,7 @@ This Agent Note replaces the version scheme and the release-set boundary in [art
 
 The release scripts are importable modules behind a guarded entry point, and their judgements carry unit tests: tag naming, publish order and cycle reporting, version-baseline arithmetic, the payload change judgement, and each family's payload policy. Two defects the first draft carried — a publish command that ran the pack command on import, and a change judgement blind to `vendor/cordis` source edits — are exactly what a test at that seam catches.
 
-A pull request runs the full pack for both sequences without credentials and installs the hydra entry tarball into a throwaway consumer, where plain Node drives `hydra --version`. That probe proves the bundled internal closure, the package payload, and the external ranges resolve, and says nothing about interactive behavior.
+A pull request runs the full pack for both sequences without credentials and installs the hydra entry tarball into a throwaway consumer, where plain Node checks the CLI and boots Web to retrieve its renderer and entry asset. This proves profile imports and those HTTP resources, while browser interaction and provider behavior require separate checks.
 
 What this costs:
 

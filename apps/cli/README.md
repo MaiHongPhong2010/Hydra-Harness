@@ -46,3 +46,5 @@ The [CLI behavior reference](reference/README.md) owns exact layer precedence, f
 ## Development
 
 Production runs require built package and frontend artifacts. From the repository root, run `pnpm run build` separately, then use `pnpm hydra <args...>` to run the TypeScript entry and forward every argument; the [source-execution reference](reference/README.md#source-execution) owns the module-resolution contract.
+
+The npm CLI includes its workspace runtime and installed pnpm dependency patches. Release verification installs that tarball alone and starts Web to check its renderer and entry asset; [the packaging note](../../.agents/notes/implemented/process/2026-10-05-patched-dependencies-in-npm-cli.md) records the SDK requirements.

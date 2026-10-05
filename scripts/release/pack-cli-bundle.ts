@@ -1,4 +1,4 @@
-/** Pack the CLI with its internal runtime packages for a bare npm install. */
+/** Pack the CLI with its internal and patched runtime packages for a bare npm install. */
 
 import {
   cpSync,
@@ -12,7 +12,10 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { findPackageJSON } from 'node:module'
+import { basename, dirname, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { load } from 'js-yaml'
 import { validateTarballPayload } from '../publication-payload.ts'
 import { tarballFiles } from './tarball.ts'
 import { tarballName, type ReleaseMember } from './families.ts'
@@ -126,10 +129,50 @@ function addExternal(
   Reflect.deleteProperty(optionalDependencies, name)
 }
 
+/** Pack installed pnpm patches that the release packages depend on. */
+function packPatchedDependencies(packages: readonly PackedPackage[], temporary: string): PackedPackage[] {
+  const workspace: unknown = load(readFileSync(resolve('pnpm-workspace.yaml'), 'utf8'))
+  if (workspace === null || typeof workspace !== 'object' || Array.isArray(workspace)) {
+    throw new Error('pnpm-workspace.yaml must declare an object')
+  }
+  const patches = dependencyMap((workspace as Record<string, unknown>).patchedDependencies)
+  const patched = new Map<string, PackedPackage>()
+  for (const owner of packages) {
+    for (const section of DEPENDENCY_SECTIONS) {
+      for (const name of Object.keys(dependencyMap(owner.manifest[section]))) {
+        // The node-pty patch serves embedded executables; plain Node installs need npm's platform prebuilds.
+        if (name === 'node-pty') continue
+        if (patched.has(name) || !Object.keys(patches).some(key => key === name || key.startsWith(`${name}@`))) continue
+        const repository = owner.manifest.repository
+        if (repository === null || typeof repository !== 'object' || Array.isArray(repository)
+          || typeof (repository as Record<string, unknown>).directory !== 'string') {
+          throw new Error(`${owner.name} must declare repository.directory to resolve its patched dependency ${name}`)
+        }
+        const directory = (repository as { directory: string }).directory
+        const manifestPath = findPackageJSON(name, pathToFileURL(resolve(directory, 'package.json')))
+        if (manifestPath === undefined) throw new Error(`${owner.name} cannot resolve patched dependency ${name}`)
+        const manifest = readManifest(manifestPath)
+        if (manifest.name !== name || typeof manifest.version !== 'string'
+          || (patches[name] === undefined && patches[`${name}@${manifest.version}`] === undefined)) {
+          throw new Error(`${name} is not installed at a version selected by patchedDependencies`)
+        }
+        const member: ReleaseMember = { directory: dirname(manifestPath), name, version: manifest.version, manifest }
+        const stage = join(temporary, 'patched-' + name.replaceAll('/', '-'))
+        cpSync(member.directory, stage, {
+          recursive: true, dereference: true, filter: source => basename(source) !== 'node_modules',
+        })
+        run('npm', ['pack', '--ignore-scripts', '--pack-destination', temporary], { cwd: stage })
+        patched.set(name, packedPackage(join(temporary, tarballName(member))))
+      }
+    }
+  }
+  return [...patched.values()]
+}
+
 /**
- * Pack the CLI with the internal dependency and peer closure it needs at runtime.
- * Bundled packages are opaque to npm's peer resolver; external packages stay
- * ordinary dependencies so npm selects their platform-specific implementations.
+ * Pack the CLI with its internal dependency and peer closure and installed pnpm patches.
+ * Bundled packages are opaque to npm's peer resolver; other external packages
+ * stay ordinary dependencies so npm selects their platform-specific implementations.
  *
  * @param destination - directory holding hydra tarballs and receiving the replacement.
  * @param member - the CLI release member.
@@ -156,6 +199,7 @@ export function packCliBundle(
     if (vendorTarballs.length === 0) throw new Error(vendorDirectory + ' holds no vendor tarballs')
 
     const packages = [...hydraTarballs, ...vendorTarballs].map(packedPackage)
+    packages.push(...packPatchedDependencies(packages, temporary))
     const byName = new Map(packages.map(packageInfo => [packageInfo.name, packageInfo]))
     const cliTarball = packedPackage(output)
     byName.set(cliTarball.name, cliTarball)

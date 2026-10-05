@@ -1073,6 +1073,43 @@ async function smokeZoomShortcuts() {
     await delay(100)
     actual.push(`${shortcut}: ${Math.round(contents.getZoomFactor() * 100)}%`)
   }
+  await selectControl('Toggle right panel')
+  await waitForRenderer('Review option', 'document.querySelector(\'[aria-label="Open panel"] [aria-label="Review"]\')')
+  await selectControl('Review', '[aria-label="Open panel"]')
+  for (const [width, height] of [[1000, 700], [1366, 768], [1440, 900], [1920, 1080]]) {
+    mainWindow.setSize(width, height)
+    for (const zoom of [0.67, 0.8, 1, 1.25, 1.5, 2]) {
+      contents.setZoomFactor(zoom)
+      for (const expanded of [false, true]) {
+        if (expanded) await selectControl('Expand right panel')
+        await waitForRenderer(`titlebar layout at ${width}x${height}, zoom ${zoom}, expanded ${expanded}`, `(() => {
+          const bar = document.querySelector('[data-desktop-titlebar]')
+          const panel = document.querySelector('[aria-label="Right panel"]')
+          const review = panel?.querySelector('[aria-label="Open panel"] [aria-label="Review"]')
+          if (!bar || !panel || !review || panel.hidden) return false
+          const bounds = bar.getBoundingClientRect()
+          const native = navigator.windowControlsOverlay?.getTitlebarAreaRect()
+          const left = native?.width > 0 ? native.left : 0
+          const right = native?.width > 0 ? native.right : bounds.right
+          const bottom = native?.width > 0 ? native.bottom : 0
+          if (bounds.bottom + 0.5 < bottom) return false
+          const buttons = [...bar.querySelectorAll('button')]
+          if (!buttons.every(button => {
+            const rect = button.getBoundingClientRect()
+            return rect.left >= left && rect.right <= right
+              && rect.top >= bounds.top && rect.bottom <= bounds.bottom
+          })) return false
+          const option = review.getBoundingClientRect()
+          const pane = panel.getBoundingClientRect()
+          return option.width >= 24 && option.top >= bounds.bottom
+            && option.left >= pane.left && option.right <= pane.right
+        })()`)
+        if (expanded) await selectControl('Expand right panel')
+      }
+    }
+  }
+  contents.setZoomLevel(0)
+  actual.push('Titlebar and Review: 4 window sizes, 6 zoom levels, normal and expanded panels')
   const transcript = `${actual.join('\n')}\n`
   const expected = await readFile(join(__dirname, 'tests', 'snapshots', 'zoom-shortcuts.expected.md'), 'utf8')
   if (transcript !== expected.replaceAll('\r\n', '\n')) {

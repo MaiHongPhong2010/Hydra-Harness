@@ -2,10 +2,11 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  height: 36px;
+  height: max(36px, var(--hydra-titlebar-area-height));
   box-sizing: border-box;
   padding: 0 8px;
-  padding-right: max(144px, calc(100vw - env(titlebar-area-width, 100vw)));
+  padding-left: calc(8px + var(--hydra-titlebar-area-x));
+  padding-right: calc(8px + 100vw - var(--hydra-titlebar-area-x) - var(--hydra-titlebar-area-width));
   gap: 4px;
   color: var(--dsw-alias-fg-primary);
   background: var(--dsw-specific-sidebar-fill);
@@ -76,7 +77,6 @@
 }
 
 @media (max-width: 720px) {
-  .bar { padding-left: 4px; }
   .menuTrigger { padding: 0 7px; }
   .menus { gap: 0; }
 }

@@ -206,7 +206,10 @@ it('configures Google services explicitly, shares account removal, and sends bot
     await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), webSnapshotMode())
   await page.screenshot({ path: join(shots, 'shared-google-fetch-light.png') })
   await picker.getByRole('button', { name: 'Add selected', exact: true }).click()
+  const acknowledged = page.waitForResponse(response => response.url().endsWith('/api/settings.mutate')
+    && response.request().postData()?.includes('Shared AG image') === true)
   await section.getByRole('button', { name: 'Apply', exact: true }).click()
+  expect((await (await acknowledged).json() as { result: { ok: boolean } }).result.ok).toBe(true)
   await section.getByRole('button', { name: 'Edit Google Gemini API OAuth (gemini-api)', exact: true }).waitFor()
   const saved = scaffold.ctx.settings.describe().find(section => section.ns === ns)?.value as {
     providers: Record<string, { endpoint: string; models: { id: string; name?: string }[] }>

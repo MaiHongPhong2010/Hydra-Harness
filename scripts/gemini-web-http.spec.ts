@@ -31,6 +31,10 @@ function videoCandidate(rcid = 'rc_fixture'): unknown[] {
 
 interface Reply { status?: number; headers?: Record<string, string>; body: string | Uint8Array; split?: number }
 
+function acceptedGeneration(): Reply {
+  return { body: frames([['wrb.fr', null, JSON.stringify([null, ['c_fixture', 'r_fixture'], null, null, []])]]) }
+}
+
 async function fixture(reply: (path: string, headers: IncomingHttpHeaders, body: string, bytes: Buffer) => Reply,
   run: (fetcher: typeof fetch) => Promise<void>): Promise<void> {
   const server = createServer((request, response) => {
@@ -74,7 +78,7 @@ describe('Gemini web HTTP feasibility', () => {
       if (path === '/app') return { body: bootstrap }
       if (path.includes('/StreamGenerate?')) {
         submissions++
-        return { body: frames([['wrb.fr', null, JSON.stringify([null, ['c_fixture', 'r_fixture'], null, null, []])]]) }
+        return acceptedGeneration()
       }
       if (path.includes('rpcids=hNvQHb')) {
         polls++
@@ -259,7 +263,7 @@ describe('Gemini web HTTP feasibility', () => {
       if (path === '/app') return { body: bootstrap }
       if (path.includes('/StreamGenerate?')) {
         submissions++
-        return { body: frames([['wrb.fr', null, JSON.stringify([null, ['c_fixture', 'r_fixture'], null, null, []])]]) }
+        return acceptedGeneration()
       }
       if (path.includes('rpcids=hNvQHb')) return { body: frames([['wrb.fr', 'hNvQHb', JSON.stringify([
         [[[null, 'r_other'], null, null, [[videoCandidate('rc_other')]]],

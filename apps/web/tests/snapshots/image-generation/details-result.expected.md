@@ -1,3 +1,3 @@
 - tabpanel "Result":
   - button "Copy result": Copy
-  - text: Generated 1 image(s) with OpenAI (gpt-image-1.5).
+  - text: "Generated 1 image(s) with OpenAI (gpt-image-1.5). Image attachments: [{\"attachmentId\":\"sha256:3cad21178902e4467ce48f5e3b84b6cd3c72eb08dc5b79274c70b7b597aafeb9\",\"mediaType\":\"image/png\",\"width\":256,\"height\":1024}]"

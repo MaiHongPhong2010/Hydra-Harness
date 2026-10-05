@@ -1,5 +1,6 @@
 /** Image API output through the shipped Web loop, durable replay, and gallery. */
 import { createServer, type Server } from 'node:http'
+import { createHash } from 'node:crypto'
 import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -357,9 +358,13 @@ describe.skipIf(webSnapshotMode() === 'record').each(['OpenAI', 'Google', 'OpenA
     expect(JSON.stringify(event)).not.toContain('b64_json')
     expect(JSON.stringify(event)).not.toContain('inlineData')
     expect(JSON.stringify(event)).not.toContain('fixture-only-key')
+    const imageSummary = JSON.stringify([{
+      attachmentId: `sha256:${createHash('sha256').update(imageBytes).digest('hex')}`, mediaType: 'image/png',
+      width: google ? 1024 : 256, height: google ? 128 : 1024,
+    }])
     expect((event.data as { message: { content: unknown[] } }).message.content).toEqual([{
       type: 'tool-result', toolCallId: callId, isError: false,
-      content: [{ type: 'text', text: `Generated 1 image(s) with ${providerLabel} (${model}).` }],
+      content: [{ type: 'text', text: `Generated 1 image(s) with ${providerLabel} (${model}).\nImage attachments: ${imageSummary}` }],
     }])
     expect((await scaffold.ctx.attachments.readImage(refs[0]!)).data).toEqual(new Uint8Array(imageBytes))
     expect(requests).toHaveLength(fallback ? 2 : 1)

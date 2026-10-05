@@ -62,6 +62,7 @@
       - option "Kimi Code"
       - option "Cursor"
       - option "Kiro"
+      - option "Gemini Web"
     - paragraph: Sign in with Google to use Antigravity. No Cloud project ID is needed.
     - button "Add account"
     - status

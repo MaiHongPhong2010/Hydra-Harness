@@ -80,7 +80,7 @@
         },
         "seconds": {
           "type": "integer",
-          "description": "Duration in seconds; the selected model must support it.",
+          "description": "Duration in seconds; omit unless the user requests it. Gemini Web uses its fixed default duration.",
           "minimum": 1,
           "maximum": 15
         },
@@ -91,6 +91,13 @@
             "1280x720",
             "720x1280"
           ]
+        },
+        "reference_image_ids": {
+          "type": "array",
+          "description": "Image attachmentIds from earlier user uploads or image-generation results in this conversation. Required when animating an existing image. Use \"latest\" for the last image when an older result did not include its id. Currently supported by Gemini Web.",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

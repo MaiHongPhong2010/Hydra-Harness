@@ -2,7 +2,8 @@
  * @module @hydraharness/harness-tool-media
  */
 import type { Context } from '@hydraharness/cordis'
-import { admitGeneratedImages } from './generated-images.ts'
+import { admitGeneratedImages, generatedImageSummary } from './generated-images.ts'
+import { mediaJobId } from './media-job.ts'
 import z from '@hydraharness/schemastery'
 import { z as zod } from 'zod'
 import { toolImageReferences, toolMediaLabels } from '@hydraharness/harness-attachment'
@@ -111,6 +112,7 @@ export function registerGoogleImages(ctx: Context, config: GoogleImageConfig): v
         properties: {
           model: { type: 'string', required: true },
           provider: { type: 'string' },
+          jobId: { type: 'string' },
           images: { type: 'array', required: true, items: {
             type: 'object', additionalProperties: false,
             properties: {
@@ -124,8 +126,9 @@ export function registerGoogleImages(ctx: Context, config: GoogleImageConfig): v
           } },
         },
       },
-      render: (_args, value) => [{ type: 'text', text: `Generated ${value.images.length} image(s) with ${value.provider ?? 'Google'} (${value.model}).` }],
-      presentationMeta: (_args, value) => ({ kind: 'tool-images', images: value.images, model: value.model, ...value.provider === undefined ? {} : { provider: value.provider } }),
+      render: (_args, value) => [{ type: 'text', text:
+        `Generated ${value.images.length} image(s) with ${value.provider ?? 'Google'} (${value.model}).\n${generatedImageSummary(value.images)}` }],
+      presentationMeta: (_args, value) => ({ kind: 'tool-images', ...value }),
     },
     presentCall: args => ({ card: 'media', kind: 'image', title: 'Generate image with Google', prompt: args.prompt }),
     presentResult: (_args, result) => result.isError ? undefined : ({
@@ -183,11 +186,13 @@ export function registerGoogleImages(ctx: Context, config: GoogleImageConfig): v
         return candidate.content.parts.flatMap(part => ('thought' in part && part.thought) || part.inlineData === undefined ? [] : [part.inlineData])
       })()
       if (output.length === 0 || output.length > maxImages) throw new Error(`Google must return 1–${maxImages} final images.`)
-      const images = await admitGeneratedImages(ctx.attachments, output)
+      const images = await admitGeneratedImages(ctx.attachments, output, response.headers.get('x-hydra-job-id'))
       signal.throwIfAborted()
+      const jobId = mediaJobId(response)
       return {
         model: generated?.model ?? resolved.model, images: [...images],
         ...generated === undefined ? {} : { provider: generated.provider },
+        ...jobId === undefined ? {} : { jobId },
       }
     },
   }))

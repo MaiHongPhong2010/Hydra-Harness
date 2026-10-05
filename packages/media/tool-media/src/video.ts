@@ -1,9 +1,11 @@
 /** Configured video generation with bounded durable file storage. */
 import type { Context } from '@hydraharness/cordis'
 import z from '@hydraharness/schemastery'
-import { toolVideoReferences, toolMediaLabels } from '@hydraharness/harness-attachment'
-import type { VideoAttachmentRef } from '@hydraharness/harness-attachment'
+import { toolVideoReferences, toolMediaLabels, toolImageReferences } from '@hydraharness/harness-attachment'
+import type { VideoAttachmentRef, ImageAttachmentRef } from '@hydraharness/harness-attachment'
 import { defineTool } from '@hydraharness/harness-tools'
+import { admitGeneratedVideo } from './generated-video.ts'
+import { mediaJobId } from './media-job.ts'
 
 /** Video routing and storage limits; credentials belong to the selected provider. */
 export interface VideoConfig {
@@ -51,14 +53,17 @@ export function registerVideos(ctx: Context, config: VideoConfig): void {
     timeoutMs: resolved.timeoutMs,
     parameters: {
       prompt: { type: 'string', required: true, description: 'Refine the user request into a video prompt using your current conversation context before calling this tool. Use precise terminology for shot framing, camera movement, subject motion, timing, lighting, and style where the request supports it. Preserve the subject, intent, exact quoted text and its language, counts, duration, aspect ratio, and all constraints or exclusions. Keep the prompt consistent with seconds and size when supplied. Do not invent requirements or add conflicting details. If the user requests an exact prompt or no rewriting, pass that prompt verbatim. Send the final generation prompt only, without commentary.' },
-      seconds: { type: 'integer', minimum: 1, maximum: 15, description: 'Duration in seconds; the selected model must support it.' },
+      seconds: { type: 'integer', minimum: 1, maximum: 15, description: 'Duration in seconds; omit unless the user requests it. Gemini Web uses its fixed default duration.' },
       size: { type: 'string', enum: ['1280x720', '720x1280'], description: 'Landscape or portrait video; omitted uses the provider default.' },
+      reference_image_ids: { type: 'array', items: { type: 'string' },
+        description: 'Image attachmentIds from earlier user uploads or image-generation results in this conversation. Required when animating an existing image. Use "latest" for the last image when an older result did not include its id. Currently supported by Gemini Web.' },
     },
     output: {
       schema: {
         type: 'object', additionalProperties: false,
         properties: {
           provider: { type: 'string', required: true }, model: { type: 'string', required: true },
+          jobId: { type: 'string' },
           videos: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: {
             attachmentId: { type: 'string', required: true }, name: { type: 'string', required: true },
             bytes: { type: 'integer', required: true, minimum: 1 }, mediaType: { type: 'string', required: true, enum: ['video/mp4', 'video/webm'] },
@@ -79,39 +84,43 @@ export function registerVideos(ctx: Context, config: VideoConfig): void {
       if (execution.parent !== undefined) throw new Error('video_generate requires Native tool mode for chat presentation.')
       if (args.prompt.trim() === '' || args.prompt.length > resolved.maxPromptChars) throw new TypeError(`Video prompt must contain 1–${resolved.maxPromptChars} characters.`)
       const signal = AbortSignal.any([execution.signal, AbortSignal.timeout(resolved.timeoutMs)])
+      const referenceImages = []
+      if (args.reference_image_ids !== undefined) {
+        if (args.reference_image_ids.length < 1 || args.reference_image_ids.length > 5
+          || new Set(args.reference_image_ids).size !== args.reference_image_ids.length) {
+          throw new TypeError('Supply one to five distinct reference image ids.')
+        }
+        const session = execution.agent?.session
+        if (session === undefined) throw new Error('Reference images require the calling conversation.')
+        const refs: ImageAttachmentRef[] = []
+        for (const event of session.activeEvents) {
+          if (event.type === 'user/message') {
+            for (const block of event.data.content) if (block.type === 'image') refs.push(block.attachment)
+          } else if (event.type === 'tool/result') {
+            refs.push(...toolImageReferences(event.data.meta))
+            for (const content of event.data.message.content[0].content) {
+              if (content.type === 'image') refs.push(content.attachment)
+            }
+          }
+        }
+        for (const id of args.reference_image_ids) {
+          const ref = id === 'latest' ? refs.at(-1) : refs.find(ref => ref.attachmentId === id)
+          if (ref === undefined) throw new Error('Reference image is absent from this conversation. Upload it or use an image attachmentId from an earlier result.')
+          const stored = await ctx.attachments.readImage(ref, signal)
+          referenceImages.push({ data: stored.data, mimeType: ref.mediaType })
+        }
+      }
       const generated = await ctx.get('llm')?.generateMedia({
-        endpoint: 'videos', body: { prompt: args.prompt, ...args.seconds === undefined ? {} : { seconds: args.seconds }, ...args.size === undefined ? {} : { size: args.size } },
+        endpoint: 'videos', body: { prompt: args.prompt, ...args.seconds === undefined ? {} : { seconds: args.seconds },
+          ...args.size === undefined ? {} : { size: args.size },
+          ...args.reference_image_ids === undefined ? {} : { referenceImages } },
         ...config.provider === undefined ? {} : { provider: config.provider }, ...config.model === undefined ? {} : { model: config.model },
         signal, maxResponseBytes: resolved.maxResponseBytes, pollIntervalMs: resolved.pollIntervalMs,
       })
       if (generated === undefined) throw new Error('Configure a video model and its credentials on the Models page before generating videos.')
-      const response = generated.response
-      const mediaType = response.headers.get('content-type')?.split(';')[0]?.trim()
-      if (mediaType !== 'video/mp4' && mediaType !== 'video/webm') {
-        await response.body?.cancel()
-        throw new Error('Video provider did not return a completed MP4 or WebM video.')
-      }
-      if (response.body === null) throw new Error('Video provider returned no video bytes.')
-      const stream = response.body
-      async function* data(): AsyncIterable<Uint8Array> {
-        let bytes = 0
-        const reader = stream.getReader()
-        try {
-          while (true) {
-            signal.throwIfAborted()
-            const chunk = await reader.read()
-            if (chunk.done) break
-            bytes += chunk.value.byteLength
-            if (bytes > resolved.maxVideoBytes) throw new Error('Video response exceeds maxVideoBytes.')
-            yield chunk.value
-          }
-          if (bytes === 0) throw new Error('Video provider returned an empty video.')
-        } finally { try { await reader.cancel() } finally { reader.releaseLock() } }
-      }
-      const video = await ctx.attachments.saveFileStream({ data: data(), name: `generated-video.${mediaType === 'video/mp4' ? 'mp4' : 'webm'}`, signal })
-      signal.throwIfAborted()
-      const videos: VideoAttachmentRef[] = [{ ...video, mediaType }]
-      return { provider: generated.provider, model: generated.model, videos }
+      const videos: VideoAttachmentRef[] = [await admitGeneratedVideo(ctx.attachments, generated.response, resolved.maxVideoBytes, signal)]
+      const jobId = mediaJobId(generated.response)
+      return { provider: generated.provider, model: generated.model, videos, ...jobId === undefined ? {} : { jobId } }
     },
   }))
 }

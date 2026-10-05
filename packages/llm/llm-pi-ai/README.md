@@ -241,6 +241,8 @@ Recorded response content appends to the next request and does not invalidate it
 
 ## Known Limitations and Deferred Work
 
+- **Video image references are unsupported here** — requests with `referenceImages` fail before credentials or HTTP. The [Gemini Web provider](../llm-account-auth/README.md#gemini-web) owns the verified consumer upload mapping.
+
 - **`maxRequestImageBytes` counts base64 image payload only** — text, tools, and JSON structure ride outside the bound, so it must sit below the gateway's request-body cap with headroom. Offload is decided at request conversion as a pure function of history and configuration and is not recorded as a session event; per-route capability metadata (image count, per-image size, total request size) driving admission and assembly together is deferred design work.
 - **A sign-in lives only in the process that started it** — an authorization attempt is not durable, so reloading the page mid-login abandons it and the human starts over. Signing out is `deleteRecord` on the stored record, which forgets it locally without telling the issuer.
 - **Provider-native discovery answers through this plugin's ambient context** — a route naming no credential defers to the catalog provider's own resolution, which asks for environment values (`AZURE_OPENAI_API_KEY`, `AWS_PROFILE`, and each provider's own set) and for local credential files. Both questions are answered here: the credential seam is consulted before the process environment, and file existence is checked against the host process's filesystem with `~` expanded. What it cannot do is *read* a credential file's contents — a provider that parses `~/.aws/credentials` itself does so directly, outside the seam.

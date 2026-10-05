@@ -5,6 +5,7 @@ import { MAX_TIMER_DELAY_MS } from '@hydraharness/harness-timeout'
 import type { CacheRetention, ModelThinkingLevel, ThinkingBudgets, Transport } from '@earendil-works/pi-ai'
 import type { RetryPolicyConfig } from '@hydraharness/harness-llm'
 import { RetryPolicySchema, inferModelEndpoints } from '@hydraharness/harness-llm'
+import { GeminiWebConfig } from './gemini-web.ts'
 
 /** One optional model override for an account-backed route. */
 export interface AccountModelProfile {
@@ -78,6 +79,8 @@ export interface AccountProviderProfile {
 
 /** Plugin settings keyed by account provider route. */
 export interface Config {
+  /** Managed-browser and HTTP deadlines for the independent Gemini Web route. */
+  geminiWeb?: GeminiWebConfig
   /** Maximum time for one account usage request, including credential refresh. */
   usageTimeoutMs?: number
   /** Enabled account-backed routes. An empty map leaves routes dormant. */
@@ -120,12 +123,13 @@ const providerProfile: z<AccountProviderProfile> = z.object({
 
 /** Schema used by the settings section and composition loader. */
 export const Config: z<Config> = z.object({
+  geminiWeb: GeminiWebConfig.default({}),
   usageTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(15_000),
   providers: z.dict(providerProfile).default({}),
 })
 
 /** The routes owned by this package, in UI and registration order. */
-export const ACCOUNT_PROVIDERS = ['chatgpt', 'antigravity', 'gemini-api', 'claude', 'xai-account', 'kimi', 'cursor', 'kiro'] as const
+export const ACCOUNT_PROVIDERS = ['chatgpt', 'antigravity', 'gemini-api', 'claude', 'xai-account', 'kimi', 'cursor', 'kiro', 'gemini-web'] as const
 
 /** Provider route type owned by this package. */
 export type AccountProvider = (typeof ACCOUNT_PROVIDERS)[number]
@@ -135,6 +139,7 @@ export const ACCOUNT_PROVIDER_LABELS: Readonly<Record<AccountProvider, string>> 
   chatgpt: 'ChatGPT',
   antigravity: 'Google Antigravity',
   'gemini-api': 'Google Gemini API OAuth',
+  'gemini-web': 'Gemini Web',
   claude: 'Claude',
   'xai-account': 'xAI',
   kimi: 'Kimi Code',
@@ -155,6 +160,18 @@ export function resolveProfiles(
   for (const [provider, profile] of Object.entries(providers ?? {})) {
     if (!(ACCOUNT_PROVIDERS as readonly string[]).includes(provider)) {
       throw new Error(`llm-account-auth: unknown provider "${provider}"`)
+    }
+    if (provider === 'gemini-web') {
+      for (const field of Object.keys(profile)) {
+        const value = profile[field as keyof AccountProviderProfile]
+        if (value === undefined || (typeof value === 'object' && Object.values(value).every(entry => entry === undefined))) continue
+        if (field !== 'models') throw new Error(`llm-account-auth: Gemini Web does not support ${field}`)
+      }
+      for (const model of profile.models ?? []) {
+        const endpoint = model.id === 'gemini-web-image' ? 'images/generations' : model.id === 'gemini-web-video' ? 'videos' : undefined
+        if (endpoint === undefined || model.endpoints?.some(value => value !== endpoint)
+          || model.contextWindow !== undefined || model.maxTokens !== undefined) throw new Error('llm-account-auth: Gemini Web supports only its verified image and video aliases')
+      }
     }
     if (profile.region !== undefined && !/^[a-z]{2}(?:-[a-z]+)+-\d$/.test(profile.region)) throw new Error(`llm-account-auth: provider "${provider}" has an invalid AWS region`)
     for (const field of ['startURL', 'issuerURL'] as const) {

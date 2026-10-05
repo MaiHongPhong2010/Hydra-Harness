@@ -86,6 +86,12 @@ async function harness(status: (model: string, authorization: string | undefined
 }
 
 describe('configured generation models', () => {
+  it('refuses unsupported reference images before submitting a video', async () => {
+    const h = await harness(undefined, { videoModel: 'sora-2' })
+    await expect(h.generate({ endpoint: 'videos', body: { prompt: 'Animate', referenceImages: [] } }))
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_GENERATION' })
+    expect(h.calls.filter(call => call.method === 'POST')).toHaveLength(0)
+  })
   it.each(['veo-3.1-generate-preview', 'grok-imagine-video', 'gateway-video'] as const)('downloads completed %s video on the accepted route', async (id) => {
     const google = id.startsWith('veo-')
     vi.stubEnv('GENERATION_VIDEO_KEY', 'video-fixture-key')

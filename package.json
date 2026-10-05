@@ -145,7 +145,8 @@
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "dev:web": "tsx scripts/dev-web.ts --poll",
     "postinstall": "node scripts/install-lefthook.mjs",
-    "research:report": "tsx scripts/research-report.ts"
+    "research:report": "tsx scripts/research-report.ts",
+    "gemini-web:probe": "tsx scripts/gemini-web-probe.ts"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "0.25.1",
@@ -179,6 +180,7 @@
     "publint": "^0.3.24",
     "smol-toml": "^1.7.1",
     "spdx-expression-parse": "^5.0.0",
+    "tough-cookie": "6.0.1",
     "tsdown": "^0.22.2",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",

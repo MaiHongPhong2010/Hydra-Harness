@@ -365,6 +365,9 @@ export class PiAiAdapter extends LlmAdapter {
   }
 
   override async requestGeneration(options: MediaGenerationOptions & { provider: string; model: string }): Promise<Response> {
+    if (options.body['referenceImages'] !== undefined) {
+      throw new LlmError('Reference-image video generation is currently supported by Gemini Web only.', 'UNSUPPORTED_GENERATION')
+    }
     const snapshot = this.current()
     const profile = this.profileOf(snapshot, options.provider)
     const model = this.modelOf(snapshot, options.provider, options.model)

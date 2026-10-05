@@ -173,6 +173,7 @@ interface ProviderAccountsProps {
  * @returns the account controls and status.
  */
 export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, disabled, onBusy }: ProviderAccountsProps): ReactNode {
+  const geminiWeb = flowKey === 'llm-account-auth/gemini-web'
   const desktop = (globalThis as typeof globalThis & {
     hydraDesktop?: {
       openExternal?: (url: string) => Promise<void>
@@ -442,6 +443,7 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
   const provider = usageProvider(flowKey)
   return (
     <div className={styles['field']}>
+      {geminiWeb && mode === 'add' ? <p className={styles['advancedHint']}>{t('geminiWebHint')}</p> : null}
       {method === undefined && entry !== undefined && entry.methods.length > 1 ? <div className={styles['field']}>
         <label className={styles['fieldLabel']} htmlFor={`${usageId}-method`}>{t('accountSignInMethod')}</label>
         <select data-hydra-control="field" className={styles['input']} disabled={disabled || busy || running}
@@ -454,7 +456,7 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
       <div className={styles['accountActions']}>
         <button type="button" className={styles[mode === 'manage' ? 'primaryButton' : 'secondaryButton']}
           disabled={disabled || busy || running || unavailable}
-          onClick={() => { void begin() }}>{t('accountAdd')}</button>
+          onClick={() => { void begin() }}>{t(geminiWeb ? (entry?.accounts.length ? 'geminiWebReconnect' : 'geminiWebConnect') : 'accountAdd')}</button>
         {safeUrl === undefined ? null : <a className={styles['primaryButton']} href={safeUrl} target="_blank" rel="noopener noreferrer"
           onClick={openExternal === undefined ? undefined : (event) => {
             event.preventDefault()
@@ -477,7 +479,7 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
             : <span className={styles['usageStatus']}>{visibleAccounts?.length === 1 ? t('accountsCountOne')
               : t('accountsCount').replace('{count}', String(visibleAccounts?.length ?? 0))}</span>}
         </div>
-        <p className={styles['advancedHint']}>{t('accountsHint')}</p>
+        <p className={styles['advancedHint']}>{t(geminiWeb ? 'geminiWebHint' : 'accountsHint')}</p>
         {(visibleAccounts?.length ?? 0) > 1 || query.length > 0 ? <input data-hydra-control="field" type="search"
           className={styles['input']} aria-label={t('accountsSearch')} placeholder={t('accountsSearch')}
           value={query} disabled={busy} onChange={(event) => { setQuery(event.target.value); setPage(0) }} /> : null}
@@ -528,9 +530,9 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
                       aria-label={t('accountUsageRefresh').replace('{account}', account.label)}
                       onClick={() => { requestUsage(account.id) }}>↻</Button> : null}
                     <Button size="sm" variant="outline" className={styles['deleteConfirm']} disabled={disabled || busy || running}
-                      aria-label={t('accountSignOutLabel').replace('{account}', account.label)}
+                      aria-label={t(geminiWeb ? 'geminiWebRemoveLabel' : 'accountSignOutLabel').replace('{account}', account.label)}
                       onClick={() => { void removeAccounts([account]) }}>
-                      {t('accountSignOut')}
+                      {t(geminiWeb ? 'geminiWebRemove' : 'accountSignOut')}
                     </Button>
                   </div>
                 </div>

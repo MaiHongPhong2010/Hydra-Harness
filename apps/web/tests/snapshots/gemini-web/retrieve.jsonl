@@ -1,0 +1,10 @@
+{"type":"session","version":0,"id":"01a11c10-0000-4000-8000-000000000003","createdAt":1790870400000,"cwd":"{{cwd}}","delegationDepth":0}
+{"type":"user/message","data":{"content":[{"type":"text","text":"Retrieve the saved Gemini Web video."}],"source":{"kind":"user"},"role":"user","id":"01a11c10-0000-4000-8000-000000000004"},"surfaceOp":"append"}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-start","index":0,"blockType":"tool-call"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"tool-call-delta","index":0,"id":"video-fixture","name":"gemini_web_retrieve","argumentsDelta":"{\"jobId\":\"00000000-0000-4000-8000-000000000001\",\"kind\":\"video\"}"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-end","index":0,"block":{"type":"tool-call","id":"video-fixture","name":"gemini_web_retrieve","arguments":"{\"jobId\":\"00000000-0000-4000-8000-000000000001\",\"kind\":\"video\"}"}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"finish","reason":{"kind":"tool-calls"}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"block-start","index":0,"blockType":"text"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"text-delta","index":0,"text":"The media is displayed in chat."}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"block-end","index":0,"block":{"type":"text","text":"The media is displayed in chat."}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"finish","reason":{"kind":"stop"}}}}

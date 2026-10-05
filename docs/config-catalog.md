@@ -1050,10 +1050,26 @@ Requires: `llm`
 ```ts config-catalog
 /** Plugin settings keyed by account provider route. */
 export interface Config {
+  /** Managed-browser and HTTP deadlines for the independent Gemini Web route. */
+  geminiWeb?: GeminiWebConfig
   /** Maximum time for one account usage request, including credential refresh. */
   usageTimeoutMs?: number
   /** Enabled account-backed routes. An empty map leaves routes dormant. */
   providers?: Record<string, AccountProviderProfile>
+}
+
+/** Deployment settings for the managed browser and bounded HTTP operations. */
+export interface GeminiWebConfig {
+  /** Installed browser used only for authentication. */
+  browser?: 'msedge' | 'chrome'
+  /** Harness home override; omitted uses the common Host resolver. */
+  hydraHome?: string
+  /** Maximum interactive sign-in duration. */
+  loginTimeoutMs?: number
+  /** Maximum HTTP generation or retrieval duration. */
+  requestTimeoutMs?: number
+  /** Delay between saved-task status reads. */
+  pollIntervalMs?: number
 }
 
 /** One account-backed provider's settings. */
@@ -1129,7 +1145,7 @@ export interface AccountModelProfile {
 
 Depends on: `CacheRetention` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-account-auth/src/config.ts:80`](../packages/llm/llm-account-auth/src/config.ts)
+Source: [`packages/llm/llm-account-auth/src/config.ts:81`](../packages/llm/llm-account-auth/src/config.ts)
 
 <a id="hydraharness-llm-deepseek"></a>
 
@@ -3116,7 +3132,7 @@ export interface VideoConfig {
 }
 ```
 
-Source: [`packages/media/tool-media/src/index.ts:16`](../packages/media/tool-media/src/index.ts)
+Source: [`packages/media/tool-media/src/index.ts:17`](../packages/media/tool-media/src/index.ts)
 
 <a id="hydraharness-tool-pwsh"></a>
 

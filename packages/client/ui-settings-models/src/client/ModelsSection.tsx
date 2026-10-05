@@ -615,8 +615,9 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
           ? ''
           : providerCopy(
             providerAccountKey(deleteTarget.settingsNs, deleteTarget.provider) !== undefined
-              ? t(deleteTarget.provider === 'antigravity' || deleteTarget.provider === 'gemini-api'
-                ? 'deleteDescriptionWithGoogleAccounts' : 'deleteDescriptionWithAccounts')
+              ? t(deleteTarget.provider === 'gemini-web' ? 'deleteDescriptionWithGeminiWeb'
+                : deleteTarget.provider === 'antigravity' || deleteTarget.provider === 'gemini-api'
+                  ? 'deleteDescriptionWithGoogleAccounts' : 'deleteDescriptionWithAccounts')
               : deleteTarget.credentialRef === undefined && deleteTarget.credentialRefs.length === 0
                 ? t(deleteTarget.settingsNs === 'llm-pi-ai' ? 'deleteDescriptionWithRecord' : 'deleteDescription')
                 : t('deleteDescriptionWithCredential'),

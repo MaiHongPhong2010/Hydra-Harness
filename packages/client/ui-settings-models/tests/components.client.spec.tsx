@@ -1617,7 +1617,7 @@ it('closes the open provider editor when removing that same configuration', asyn
   expect(screen.queryByLabelText(en.baseUrl)).toBeNull()
   expect(screen.getByRole('dialog', { name: openaiCopy(en.deleteTitle) })).toBeTruthy()
 })
-it.each(['antigravity', 'gemini-api', 'chatgpt'])('describes account cleanup for a removed %s route', async (provider) => {
+it.each(['antigravity', 'gemini-api', 'chatgpt', 'gemini-web'])('describes account cleanup for a removed %s route', async (provider) => {
   const scripted = scriptedFace()
   const route = { provider, displayName: provider, settingsNs: 'llm-account-auth', settingsPath: ['providers', provider], active: true }
   scripted.face.llm.providers.mockResolvedValue(ok({ providers: [route] }))
@@ -1631,7 +1631,8 @@ it.each(['antigravity', 'gemini-api', 'chatgpt'])('describes account cleanup for
   await mountFace(scripted)
   fireEvent.click(screen.getByRole('button', { name: providerCopy(en.removeProvider, route) }))
   const dialog = screen.getByRole('dialog')
-  const description = provider === 'chatgpt' ? en.deleteDescriptionWithAccounts : en.deleteDescriptionWithGoogleAccounts
+  const description = provider === 'gemini-web' ? en.deleteDescriptionWithGeminiWeb
+    : provider === 'chatgpt' ? en.deleteDescriptionWithAccounts : en.deleteDescriptionWithGoogleAccounts
   expect(dialog.textContent).toContain(providerCopy(description, route))
 })
 it('offers one Google add choice when both service routes are available', async () => {

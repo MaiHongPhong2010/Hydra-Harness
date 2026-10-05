@@ -112,7 +112,8 @@ describe('Google image tool', () => {
     const images = toolImageReferences(result.meta)
     expect(images.map(image => image.name)).toEqual(['generated-1.png', 'generated-2.png'])
     for (const ref of images) expect((await h.ctx.attachments.readImage(ref)).data).toEqual(new Uint8Array(Buffer.from(PNG, 'base64')))
-    expect(result.content).toEqual([{ type: 'text', text: 'Generated 2 image(s) with Google (gemini-3.1-flash-image).' }])
+    expect(result.content).toEqual([{ type: 'text', text: 'Generated 2 image(s) with Google (gemini-3.1-flash-image).\nImage attachments: '
+      + JSON.stringify(images.map(({ attachmentId, mediaType, width, height }) => ({ attachmentId, mediaType, width, height }))) }])
     expect(JSON.stringify(result)).not.toMatch(/provider-private|fixture-only-key|inlineData/)
     const tool = h.ctx.tools.get('image_generate_google')!
     expect(tool.presentCall?.({ prompt: 'test' })).toMatchObject({ card: 'media', kind: 'image', title: 'Generate image with Google', prompt: 'test' })

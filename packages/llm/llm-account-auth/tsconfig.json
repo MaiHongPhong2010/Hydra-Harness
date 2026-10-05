@@ -8,7 +8,9 @@
     "src"
   ],
   "references": [
-    { "path": "../../subprocess/subprocess" },
+    {
+      "path": "../../subprocess/subprocess"
+    },
     {
       "path": "../../../vendor/cosmokit"
     },
@@ -41,6 +43,12 @@
     },
     {
       "path": "../../runtime-diagnostics/invariants"
+    },
+    {
+      "path": "../../util/home-paths"
+    },
+    {
+      "path": "../../util/brand"
     }
   ]
 }

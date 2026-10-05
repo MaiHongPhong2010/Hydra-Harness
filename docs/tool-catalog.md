@@ -42,7 +42,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@hydraharness/harness-experimental-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All ten tools are scoped to implicit Team Leads and durable teammates. The shipped @hydraharness/harness-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@hydraharness/harness-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@hydraharness/harness-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
-| `@hydraharness/harness-tool-media` | `image_generate`, `image_generate_google`, `video_generate` | `ctx.tools`, `ctx.credentials`, `ctx.attachments` | `tool/call`, `tool/result with durable media presentation metadata` | - | Image and video output is stored before the Native tool result. Chat uses durable references; the model receives a text acknowledgement. Nested Code Mode dispatch is refused before billing. |
+| `@hydraharness/harness-tool-media` | `gemini_web_retrieve`, `image_generate`, `image_generate_google`, `video_generate` | `ctx.tools`, `ctx.credentials`, `ctx.attachments` | `tool/call`, `tool/result with durable media presentation metadata` | - | Image and video output is stored before the Native tool result. Chat uses durable references; the model receives a text acknowledgement. Nested Code Mode dispatch is refused before billing. |
 | `@hydraharness/harness-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 | `@hydraharness/harness-tool-browser` | `browser_back`, `browser_click`, `browser_click_at`, `browser_close`, `browser_close_tab`, `browser_console_messages`, `browser_drag`, `browser_drop`, `browser_file_upload`, `browser_fill`, `browser_fill_form`, `browser_find`, `browser_forward`, `browser_handle_dialog`, `browser_history_search`, `browser_hover`, `browser_navigate`, `browser_navigate_back`, `browser_network_request`, `browser_network_requests`, `browser_open_tab`, `browser_page_agent_run`, `browser_page_agent_status`, `browser_page_agent_stop`, `browser_press`, `browser_press_key`, `browser_resize`, `browser_screenshot`, `browser_scroll`, `browser_scroll_horizontally`, `browser_select_option`, `browser_select_text`, `browser_snapshot`, `browser_state`, `browser_switch_tab`, `browser_tabs`, `browser_take_screenshot`, `browser_type`, `browser_upload_file`, `browser_wait`, `browser_wait_for` | `ctx.tools`, `ctx.browsers`, `ctx.systemPrompt`, `a calling Agent (the window is owned per agent)` | `tool/call`, `tool/result` | - | The embedded browser window opens on the first browser_* call of an agent and closes with it. Without the optional electron package the tools still register and every call fails with BROWSER_UNAVAILABLE. |
 | `@hydraharness/harness-page-memory` | `page_memory_get`, `page_memory_upsert` | `ctx.tools`, `ctx.browsers`, `ctx.systemPrompt`, `a calling Agent in the configured workspace` | `tool/call`, `tool/result`, `user/message`, `private page-memory SQLite database` | - | - |
@@ -2356,6 +2356,36 @@ Source: [`packages/workflow/tool-workflow/src/index.ts`](../packages/workflow/to
 
 ## `@hydraharness/harness-tool-media`
 
+### `gemini_web_retrieve`
+
+Retrieve an existing Gemini Web image or video using the jobId from an earlier error. Displays saved media in chat and never sends a new generation prompt. Reconnect Gemini Web first if the account session expired.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "jobId": {
+      "type": "string",
+      "description": "Local jobId returned by the Gemini Web provider."
+    },
+    "kind": {
+      "type": "string",
+      "description": "Media kind of the original task.",
+      "enum": [
+        "image",
+        "video"
+      ]
+    }
+  },
+  "required": [
+    "jobId",
+    "kind"
+  ]
+}
+```
+
+Source: [`packages/media/tool-media/src/index.ts`](../packages/media/tool-media/src/index.ts)
+
 ### `image_generate`
 
 Generate images with the configured image model and display them in chat. Uses the connected provider's quota or API billing. Do not retry a timeout automatically.
@@ -2452,7 +2482,7 @@ Generate a video with the configured video model and display it in chat. Uses th
     },
     "seconds": {
       "type": "integer",
-      "description": "Duration in seconds; the selected model must support it.",
+      "description": "Duration in seconds; omit unless the user requests it. Gemini Web uses its fixed default duration.",
       "minimum": 1,
       "maximum": 15
     },
@@ -2463,6 +2493,13 @@ Generate a video with the configured video model and display it in chat. Uses th
         "1280x720",
         "720x1280"
       ]
+    },
+    "reference_image_ids": {
+      "type": "array",
+      "description": "Image attachmentIds from earlier user uploads or image-generation results in this conversation. Required when animating an existing image. Use \"latest\" for the last image when an older result did not include its id. Currently supported by Gemini Web.",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [

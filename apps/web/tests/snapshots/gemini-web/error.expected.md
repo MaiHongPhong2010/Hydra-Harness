@@ -1,0 +1,6 @@
+- region "Video generation failed":
+  - status: Video generation failed
+  - button "Copy prompt"
+  - button "View generation details"
+  - paragraph: A red paper boat on calm blue water.
+  - alert: "Error: Gemini download: HTTP_ERROR (HTTP 403) jobId={{uuid}}. Use gemini_web_retrieve with this jobId; do not send the prompt again. Reconnect if the session expired."

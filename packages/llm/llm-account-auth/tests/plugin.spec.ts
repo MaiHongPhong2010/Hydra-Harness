@@ -79,7 +79,7 @@ async function fixture(config: Config = { providers: { chatgpt: {}, antigravity:
 it('offers all native account flows while keeping Cursor out of callable chat providers', async () => {
   const providers = ['chatgpt', 'antigravity', 'gemini-api', 'claude', 'xai-account', 'kimi', 'cursor', 'kiro']
   const { ctx, flows } = await fixture({ providers: Object.fromEntries(providers.map(provider => [provider, {}])) })
-  expect(flows.mock.calls.map(([flow]) => flow.key)).toEqual(providers.filter(provider => provider !== 'gemini-api').map(provider => `llm-account-auth/${provider}`))
+  expect(flows.mock.calls.map(([flow]) => flow.key)).toEqual([...providers.filter(provider => provider !== 'gemini-api').map(provider => `llm-account-auth/${provider}`), 'llm-account-auth/gemini-web'])
   expect(flows.mock.calls.find(([flow]) => flow.label === 'Google')?.[0].methods).toEqual([
     { id: 'oauth', label: 'Sign in with Google for Antigravity' },
     { id: 'gemini-api', label: 'Connect Gemini API with a Cloud project' },
@@ -87,7 +87,7 @@ it('offers all native account flows while keeping Cursor out of callable chat pr
   expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(providers.filter(provider => provider !== 'cursor'))
   const login: AuthorizationSession = { method: 'oauth', signal: new AbortController().signal, notify: vi.fn(), prompt: vi.fn(async () => '') }
   for (const [flow] of flows.mock.calls) {
-    if (flow.key.endsWith('/chatgpt') || flow.key.endsWith('/antigravity')) continue
+    if (flow.key.endsWith('/chatgpt') || flow.key.endsWith('/antigravity') || flow.key.endsWith('/gemini-web')) continue
     await flow.run(login)
   }
   for (const provider of ['claude', 'xai-account', 'kimi']) expect(runtime.sdkLogin).toHaveBeenCalledWith(provider, login, expect.objectContaining({ key: `llm-account-auth/${provider}` }))
@@ -108,7 +108,7 @@ it.each(['gemini-api', 'kiro', 'claude', 'xai-account', 'kimi'])('loads the conf
 it('offers Google and native login flows before their routes are configured', async () => {
   const { flows } = await fixture({ providers: {} })
   const session: AuthorizationSession = { method: 'oauth', signal: new AbortController().signal, notify: vi.fn(), prompt: vi.fn(async () => '') }
-  for (const [flow] of flows.mock.calls) await flow.run(session)
+  for (const [flow] of flows.mock.calls) if (!flow.key.endsWith('/gemini-web')) await flow.run(session)
   expect(runtime.loginGoogle).toHaveBeenCalledWith(session, expect.any(Object), {}, {})
   expect(runtime.cursorLogin).toHaveBeenCalledWith(session, expect.any(Object), {})
   expect(runtime.kiroLogin).toHaveBeenCalledWith(session, expect.any(Object), {})

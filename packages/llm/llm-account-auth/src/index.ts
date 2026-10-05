@@ -12,6 +12,7 @@ import {
   ACCOUNT_PROVIDER_LABELS, ACCOUNT_PROVIDERS, Config, resolveProfiles,
   type AccountProvider, type AccountProviderProfile,
 } from './config.ts'
+import { GeminiWebAdapter } from './gemini-web.ts'
 
 export const name = 'llm-account-auth'
 export const inject = ['llm']
@@ -121,9 +122,11 @@ export function apply(ctx: Context, config: Config): void {
     return resolved
   }
   profiles()
+  const geminiWeb = new GeminiWebAdapter(ctx, () => source().geminiWeb)
+  ctx.effect(function* () { yield () => geminiWeb.dispose() })
 
   const pools = new Map<string, AccountPool>()
-  const routes = ACCOUNT_PROVIDERS.map((provider) => {
+  const routes = ACCOUNT_PROVIDERS.filter(provider => provider !== 'gemini-web').map((provider) => {
     const key = accountRecordKey(provider)
     const google = provider === 'antigravity' || provider === 'gemini-api'
     let pool = pools.get(key)
@@ -145,6 +148,7 @@ export function apply(ctx: Context, config: Config): void {
     settingsPath: ['providers', provider],
   })))
   ctx.llm.registerModelDiscovery(NS, async (request) => {
+    if (request.provider === 'gemini-web') return geminiWeb.discover(request.signal)
     const route = routes.find(candidate => candidate.provider === request.provider)
     if (route === undefined) throw new LlmError('Select an account sign-in provider to discover models', 'INVALID_DISCOVERY')
     return route.adapter.discover(request.signal)
@@ -195,7 +199,9 @@ export function apply(ctx: Context, config: Config): void {
     }
   })
 
+  geminiWeb.registerAuthorization()
   const register = (): void => {
+    geminiWeb.configure(profiles().has('gemini-web'), profiles().get('gemini-web')?.models)
     for (const route of routes) {
       const enabled = route.provider !== 'cursor' && profiles().has(route.provider)
       if (route.registration !== undefined) route.registration.replace(enabled ? [route.provider] : [])

@@ -1,0 +1,8 @@
+- region "Video ready":
+  - status: Video ready
+  - button "Copy prompt"
+  - button "View generation details"
+  - paragraph: Job {{uuid}}
+  - link "Download video":
+    - /url: blob:{{host}}/{{uuid}}
+  - text: Gemini Web Video

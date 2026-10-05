@@ -31,6 +31,7 @@ const EXPECTED_TOOLS = [
   'create_goal',
   'edit',
   'exit_plan_mode',
+  'gemini_web_retrieve',
   'get_goal',
   'image_generate',
   'image_generate_google',
@@ -138,6 +139,7 @@ it('assembles the shipped Web catalog, file-reference guidance, retry policy, an
     }
   `)
   expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual([
+    'gemini_web_retrieve',
     'image_generate', 'image_generate_google',
     'obsidian_knowledge_read', 'obsidian_knowledge_recall', 'obsidian_knowledge_save_approved',
     'session_version_list', 'session_version_read', 'video_generate',

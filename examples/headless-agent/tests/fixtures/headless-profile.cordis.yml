@@ -3,6 +3,10 @@
     provider: cli-mock
     model: cli-mock
 
+# The CLI mock serves conversation requests; title synthesis has separate fixtures.
+- id: session-title-llm
+  disabled: true
+
 - insert:
     - id: cli-mock-llm
       name: './snapshot-fixtures/cli-mock-llm.ts'

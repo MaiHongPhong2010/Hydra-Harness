@@ -1,0 +1,8 @@
+- region "Image ready":
+  - status: Image ready
+  - button "Copy prompt"
+  - button "View generation details"
+  - paragraph: A red paper boat on calm blue water.
+  - button "generated-1.png, click to view original":
+    - img "generated-1.png"
+  - text: Gemini Web Image

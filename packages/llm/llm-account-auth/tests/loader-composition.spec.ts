@@ -80,7 +80,7 @@ it('boots without network work and enables only the account routes saved in sett
 
   expect(ctx.llm.listProviders()).toEqual([])
   expect(ctx.llm.listConfigurableProviders().map(entry => entry.provider))
-    .toEqual(['chatgpt', 'antigravity', 'gemini-api', 'claude', 'xai-account', 'kimi', 'cursor', 'kiro'])
+    .toEqual(['chatgpt', 'antigravity', 'gemini-api', 'claude', 'xai-account', 'kimi', 'cursor', 'kiro', 'gemini-web'])
   expect(await ctx.authorization.listAccounts(credentialKey('llm-account-auth', 'chatgpt'))).toEqual([])
   expect(fetch).not.toHaveBeenCalled()
   expect(loaded.adapters).not.toHaveBeenCalled()
@@ -135,7 +135,7 @@ it('boots without network work and enables only the account routes saved in sett
   expect(ctx.authorization.list().map(entry => entry.key)).toEqual([
     'llm-account-auth/chatgpt', 'llm-account-auth/antigravity',
     'llm-account-auth/claude', 'llm-account-auth/xai-account', 'llm-account-auth/kimi',
-    'llm-account-auth/cursor', 'llm-account-auth/kiro',
+    'llm-account-auth/cursor', 'llm-account-auth/kiro', 'llm-account-auth/gemini-web',
   ])
   expect(fetch).not.toHaveBeenCalled()
   const { llm, authorization } = ctx

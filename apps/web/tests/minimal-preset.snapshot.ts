@@ -69,7 +69,7 @@ describe('minimal agent preset', () => {
     const shell = process.platform === 'win32' ? 'pwsh' : 'bash'
     const otherShell = shell === 'pwsh' ? 'bash' : 'pwsh'
     const shellSetup = process.platform === 'win32'
-      ? `Set-Location -LiteralPath '${stateDir.replaceAll("'", "''")}'; $env:HYDRA_MINIMAL_STATE = 'PERSISTED'`
+      ? `$ProgressPreference = 'SilentlyContinue'; Set-Location -LiteralPath '${stateDir.replaceAll("'", "''")}'; $env:HYDRA_MINIMAL_STATE = 'PERSISTED'`
       : `cd ${JSON.stringify(stateDir)} && export HYDRA_MINIMAL_STATE=PERSISTED`
     const shellRead = process.platform === 'win32'
       ? "Write-Output ($env:HYDRA_MINIMAL_STATE + ':' + $PWD.Path)"
@@ -122,6 +122,7 @@ describe('minimal agent preset', () => {
         "prompt": "You are a helpful software engineer assistant.",
         "shell": "PERSISTED:{{cwd}}/persistent-state",
         "tools": [
+          "gemini_web_retrieve",
           "image_generate",
           "image_generate_google",
           "obsidian_knowledge_read",

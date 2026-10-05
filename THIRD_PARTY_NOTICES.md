@@ -102,6 +102,7 @@ External packages that a workspace package resolves at runtime. The tier covers 
 | [`smol-toml`](https://github.com/squirrelchat/smol-toml) | BSD-3-Clause |
 | [`supports-color`](https://github.com/chalk/supports-color) | MIT |
 | [`tabbable`](https://github.com/focus-trap/tabbable) | MIT |
+| [`tough-cookie`](https://github.com/salesforce/tough-cookie) | BSD-3-Clause |
 | [`tsx`](https://github.com/privatenumber/tsx) | MIT |
 | [`turndown`](https://github.com/mixmark-io/turndown) | MIT |
 | [`typescript`](https://github.com/microsoft/TypeScript) | Apache-2.0 |

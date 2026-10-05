@@ -57,6 +57,7 @@
     "@hydraharness/harness-attachment-local": "workspace:^",
     "@hydraharness/harness-credentials-local": "workspace:^",
     "@hydraharness/harness-llm": "workspace:^",
-    "@hydraharness/harness-system-prompt": "workspace:^"
+    "@hydraharness/harness-system-prompt": "workspace:^",
+    "@hydraharness/harness-session": "workspace:^"
   }
 }

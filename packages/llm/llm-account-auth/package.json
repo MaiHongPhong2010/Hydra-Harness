@@ -3,7 +3,7 @@
   "description": "Native account authorization for provider subscriptions",
   "hydra": {
     "plugin": {
-      "application": "Connect ChatGPT, Google Antigravity/Gemini API, Claude, xAI, Kimi, Cursor, and Kiro accounts."
+      "application": "Connect ChatGPT, Google Antigravity/Gemini API, Gemini Web media, Claude, xAI, Kimi, Cursor, and Kiro accounts."
     }
   },
   "version": "0.1.1-rc.4",
@@ -46,12 +46,17 @@
     "@hydraharness/harness-llm": "workspace:^",
     "@hydraharness/harness-llm-pi-ai": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
-    "@hydraharness/harness-timeout": "workspace:^"
+    "@hydraharness/harness-timeout": "workspace:^",
+    "@hydraharness/harness-home-paths": "workspace:^",
+    "@hydraharness/harness-brand": "workspace:^"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.82.1",
     "@hydraharness/schemastery": "workspace:^",
-    "@smithy/core": "^3.33.2"
+    "@smithy/core": "^3.33.2",
+    "playwright-core": "1.61.1",
+    "tough-cookie": "6.0.1",
+    "undici": "7.28.0"
   },
   "devDependencies": {
     "@hydraharness/cordis": "workspace:^",
@@ -64,6 +69,8 @@
     "@hydraharness/harness-llm-pi-ai": "workspace:^",
     "@hydraharness/harness-session": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
-    "@hydraharness/harness-timeout": "workspace:^"
+    "@hydraharness/harness-timeout": "workspace:^",
+    "@hydraharness/harness-home-paths": "workspace:^",
+    "@hydraharness/harness-brand": "workspace:^"
   }
 }

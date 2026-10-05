@@ -3,6 +3,21 @@ import { MAX_TIMER_DELAY_MS } from '@hydraharness/harness-timeout'
 import { resolveProfiles, type AccountProviderProfile } from '../src/config.ts'
 
 describe('account provider settings', () => {
+  it('retains verified Gemini Web aliases and empty optional editor controls', () => {
+    for (const profile of [{}, { models: undefined, transport: undefined }, { reasoning: {} },
+      { models: [{ id: 'gemini-web-image', endpoints: ['images/generations'] }, { id: 'gemini-web-video', endpoints: ['videos'] }] }]) {
+      expect(resolveProfiles({ 'gemini-web': profile as AccountProviderProfile }).has('gemini-web')).toBe(true)
+    }
+  })
+
+  it.each([
+    { endpoint: 'https://fixture.test' }, { timeoutMs: 1000 }, { reasoning: { effort: 'low' } },
+    { models: [{ id: 'gemini-3.1-flash-image' }] }, { models: [{ id: 'gemini-web-image', endpoints: ['videos'] }] },
+    { models: [{ id: 'gemini-web-video', contextWindow: 1000 }] }, { models: [{ id: 'gemini-web-image', maxTokens: 1000 }] },
+  ])('rejects unsupported Gemini Web configuration %j', (profile) => {
+    expect(() => resolveProfiles({ 'gemini-web': profile as AccountProviderProfile })).toThrow('Gemini Web')
+  })
+
   it.each(['bad', 'us_east_1'])('rejects an invalid Kiro region %s', (region) => {
     expect(() => resolveProfiles({ kiro: { region } })).toThrow('invalid AWS region')
   })
@@ -56,7 +71,7 @@ describe('account provider settings', () => {
     expect(resolved.models?.[1]?.name).toBe('Two')
   })
 
-  it.each(['unknown', 'gemini-web'])('rejects unsupported route %s', (provider) => {
+  it.each(['unknown'])('rejects unsupported route %s', (provider) => {
     expect(() => resolveProfiles({ [provider]: {} })).toThrow('unknown provider')
   })
   it('accepts Kiro selector classification while retaining unsupported output-cap rejection', () => {

@@ -95,7 +95,8 @@ describe('OpenAI image tool', () => {
     const images = toolImageReferences(result.meta)
     expect(images.map(image => image.name)).toEqual(['generated-1.png', 'generated-2.png'])
     for (const image of images) expect((await h.ctx.attachments.readImage(image)).data).toEqual(new Uint8Array(Buffer.from(PNG, 'base64')))
-    expect(result.content).toEqual([{ type: 'text', text: 'Generated 2 image(s) with OpenAI (gpt-image-1.5).' }])
+    expect(result.content).toEqual([{ type: 'text', text: 'Generated 2 image(s) with OpenAI (gpt-image-1.5).\nImage attachments: '
+      + JSON.stringify(images.map(({ attachmentId, mediaType, width, height }) => ({ attachmentId, mediaType, width, height }))) }])
     const tool = h.ctx.tools.get('image_generate')!
     expect(tool.presentCall?.({ prompt: 'A tiny test image' })).toMatchObject({ card: 'media', kind: 'image', prompt: 'A tiny test image' })
     for (const [size, aspectRatio] of [['1024x1024', 1], ['1536x1024', 1.5], ['1024x1536', 2 / 3]] as const) {
@@ -196,7 +197,8 @@ describe('OpenAI image tool', () => {
     }) } as never)
     const result = await h.call({ prompt: 'A tree', format: 'jpeg' })
     expect(result.isError).toBe(false)
-    expect(result.content).toEqual([{ type: 'text', text: 'Generated 1 image(s) with gemini (gemini-3.1-flash-image).' }])
+    expect(JSON.stringify(result.content)).toContain('Generated 1 image(s) with gemini (gemini-3.1-flash-image).')
+    expect(JSON.stringify(result.content)).toContain(toolImageReferences(result.meta)[0]?.attachmentId)
     expect(toolImageReferences(result.meta)).toMatchObject([{ mediaType: 'image/png', name: 'generated-1.png' }])
     expect(h.requests).toEqual([])
   })

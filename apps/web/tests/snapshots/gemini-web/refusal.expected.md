@@ -1,0 +1,6 @@
+- region "Video generation failed":
+  - status: Video generation failed
+  - button "Copy prompt"
+  - button "View generation details"
+  - paragraph: Animate the red paper boat. Gentle ripples. Portrait.
+  - alert: "Error: Gemini finished the reply without generating a video. jobId={{uuid}}. This task has no video to retrieve; do not retry generation automatically."

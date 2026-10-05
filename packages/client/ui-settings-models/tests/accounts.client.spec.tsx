@@ -74,6 +74,29 @@ const t = (key: keyof typeof en) => en[key]
 const ok = <T,>(value: T): RpcResponse<T> => ({ rpcId: 'accounts-test' as never, result: { ok: true, value } })
 const flowKey = 'llm-account-auth/chatgpt'
 
+it.each(['add', 'manage'] as const)('offers managed Gemini Web Connect, Reconnect, and Remove in %s mode', async (mode) => {
+  const key = 'llm-account-auth/gemini-web'
+  let accounts: Array<{ id: string; label: string }> = []
+  const api = {
+    list: async () => ok({ entries: [{ key, label: 'Gemini Web', methods: [{ id: 'browser', label: 'Connect' }], inFlight: false, accounts }] }),
+    begin: vi.fn(async () => { accounts = [{ id: 'one', label: 'fixture@example.test' }]; return ok({ attemptId: 'managed-web' }) }),
+    state: async () => ok({ attempt: { id: 'managed-web', status: 'authorized' } }),
+    cancel: async () => ok({}), logout: vi.fn(async () => { accounts = []; return ok({}) }), usage: async () => ok({}),
+  }
+  const view = render(<ProviderAccounts flowKey={key} api={api as never} t={t} disabled={false} onBusy={vi.fn()} mode={mode} />)
+  const connect = await screen.findByRole<HTMLButtonElement>('button', { name: en.geminiWebConnect })
+  await waitFor(() => { expect(connect.disabled).toBe(false) })
+  expect(screen.getByText(en.geminiWebHint)).toBeTruthy()
+  fireEvent.click(connect)
+  await screen.findByRole('button', { name: en.geminiWebReconnect }, { timeout: 3000 })
+  expect(api.begin).toHaveBeenCalledWith({ key })
+  if (mode === 'manage') {
+    fireEvent.click(screen.getByRole('button', { name: en.geminiWebRemoveLabel.replace('{account}', 'fixture@example.test') }))
+    await waitFor(() => { expect(api.logout).toHaveBeenCalledWith({ key, accountId: 'one' }) })
+  }
+  view.unmount()
+})
+
 it.each(['first', 'second'])('starts the explicitly selected authorization %s method', async (choice) => {
   const key = 'example/import'
   const begin = vi.fn(async () => ok({ attemptId: 'gemini-choice' }))

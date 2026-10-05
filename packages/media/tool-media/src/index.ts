@@ -6,6 +6,7 @@ import z from '@hydraharness/schemastery'
 import { OpenAIImageConfig, registerOpenAIImages } from './image-openai.ts'
 import { GoogleImageConfig, registerGoogleImages } from './image-google.ts'
 import { VideoConfig, registerVideos } from './video.ts'
+import { registerGeminiWebRetrieve } from './gemini-web-retrieve.ts'
 
 /** Cordis plugin name. */
 export const name = 'tool-media'
@@ -38,4 +39,5 @@ export function apply(ctx: Context, config: Config): void {
   registerOpenAIImages(ctx, resolved.openai)
   registerGoogleImages(ctx, resolved.google)
   registerVideos(ctx, resolved.video)
+  registerGeminiWebRetrieve(ctx, resolved.google, resolved.video)
 }

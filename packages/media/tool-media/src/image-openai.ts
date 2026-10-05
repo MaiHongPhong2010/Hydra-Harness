@@ -2,7 +2,8 @@
  * @module @hydraharness/harness-tool-media
  */
 import type { Context } from '@hydraharness/cordis'
-import { admitGeneratedImages } from './generated-images.ts'
+import { admitGeneratedImages, generatedImageSummary } from './generated-images.ts'
+import { mediaJobId } from './media-job.ts'
 import z from '@hydraharness/schemastery'
 import { z as zod } from 'zod'
 import { toolImageReferences, toolMediaLabels } from '@hydraharness/harness-attachment'
@@ -123,10 +124,11 @@ export function registerOpenAIImages(ctx: Context, config: OpenAIImageConfig): v
     output: {
       schema: {
         type: 'object', additionalProperties: false,
-        properties: { model: { type: 'string', required: true }, provider: { type: 'string' }, images: { type: 'array', required: true, items: imageSchema } },
+        properties: { model: { type: 'string', required: true }, provider: { type: 'string' }, jobId: { type: 'string' }, images: { type: 'array', required: true, items: imageSchema } },
       },
-      render: (_args, value) => [{ type: 'text', text: `Generated ${value.images.length} image(s) with ${value.provider ?? 'OpenAI'} (${value.model}).` }],
-      presentationMeta: (_args, value) => ({ kind: 'tool-images', images: value.images, model: value.model, ...value.provider === undefined ? {} : { provider: value.provider } }),
+      render: (_args, value) => [{ type: 'text', text:
+        `Generated ${value.images.length} image(s) with ${value.provider ?? 'OpenAI'} (${value.model}).\n${generatedImageSummary(value.images)}` }],
+      presentationMeta: (_args, value) => ({ kind: 'tool-images', ...value }),
     },
     presentCall: args => ({
       card: 'media', kind: 'image', title: 'Generate image', prompt: args.prompt,
@@ -198,9 +200,11 @@ export function registerOpenAIImages(ctx: Context, config: OpenAIImageConfig): v
         : value.candidates.flatMap(candidate => candidate.content.parts.flatMap(part =>
           ('thought' in part && part.thought) || part.inlineData === undefined ? [] : [part.inlineData]))
       if (output.length !== request.n) throw new Error('Image provider returned an unexpected image count.')
-      const images = await admitGeneratedImages(ctx.attachments, output)
+      const images = await admitGeneratedImages(ctx.attachments, output, response.headers.get('x-hydra-job-id'))
       signal.throwIfAborted()
-      return { model: request.model, images: [...images], ...generated === undefined ? {} : { provider: generated.provider } }
+      const jobId = mediaJobId(response)
+      return { model: request.model, images: [...images], ...generated === undefined ? {} : { provider: generated.provider },
+        ...jobId === undefined ? {} : { jobId } }
     },
   }))
 }

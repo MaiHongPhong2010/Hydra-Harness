@@ -109,6 +109,9 @@ importers:
       spdx-expression-parse:
         specifier: ^5.0.0
         version: 5.0.0
+      tough-cookie:
+        specifier: 6.0.1
+        version: 6.0.1
       tsdown:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.22.4)(typescript@6.0.3)
@@ -454,6 +457,9 @@ importers:
       '@types/react-dom':
         specifier: ~18.3.0
         version: 18.3.7(@types/react@18.3.31)
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
       '@vitejs/plugin-react':
         specifier: ^4.0.0
         version: 4.7.0(vite@6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))
@@ -478,6 +484,9 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@22.20.0)(@vitest/coverage-v8@4.1.8)(happy-dom@20.14.5)(jsdom@29.1.1)(vite@6.4.3(@types/node@22.20.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))
+      ws:
+        specifier: 8.21.3
+        version: 8.21.3
 
   examples:
     dependencies:
@@ -6350,6 +6359,15 @@ importers:
       '@smithy/core':
         specifier: ^3.33.2
         version: 3.35.1
+      playwright-core:
+        specifier: 1.61.1
+        version: 1.61.1
+      tough-cookie:
+        specifier: 6.0.1
+        version: 6.0.1
+      undici:
+        specifier: 7.28.0
+        version: 7.28.0
     devDependencies:
       '@hydraharness/cordis':
         specifier: workspace:^
@@ -6360,12 +6378,18 @@ importers:
       '@hydraharness/harness-authorization':
         specifier: workspace:^
         version: link:../../credentials/authorization
+      '@hydraharness/harness-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
       '@hydraharness/harness-credentials':
         specifier: workspace:^
         version: link:../../credentials/credentials
       '@hydraharness/harness-credentials-local':
         specifier: workspace:^
         version: link:../../credentials/credentials-local
+      '@hydraharness/harness-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
       '@hydraharness/harness-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
@@ -6771,6 +6795,9 @@ importers:
       '@hydraharness/harness-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@hydraharness/harness-session':
+        specifier: workspace:^
+        version: link:../../core/session
       '@hydraharness/harness-system-prompt':
         specifier: workspace:^
         version: link:../../core/system-prompt

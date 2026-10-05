@@ -54,8 +54,10 @@ const DEFAULT_KILL_GRACE_MS = 2_000
 
 /** One configured local language server and its host bounds. */
 export interface LspLocalServerConfig {
-  /** Executable to spawn (absolute, or resolved on PATH at load). */
+  /** Executable to spawn (absolute, or resolved on the child PATH). */
   command: string
+  /** Resolve the executable at plugin load or before a new server starts. Default `load`. */
+  resolveAt?: 'load' | 'query'
   /** Lowercase leading-dot extension → LSP language id (e.g. `{ '.ts': 'typescript' }`). */
   extensionToLanguage: Record<string, string>
   /** Arguments passed to the executable (no shell). Default `[]`. */
@@ -90,6 +92,7 @@ type WorkspaceKey = HostWorkspace['target']['targetKey']
 
 const LspLocalServerConfig: z<LspLocalServerConfig> = z.object({
   command: z.string().required(),
+  resolveAt: z.union(['load', 'query']).default('load'),
   args: z.array(String).default([]),
   env: z.dict(String).default({}),
   extensionToLanguage: z.dict(String).required(),
@@ -117,9 +120,9 @@ function throwTeardownFailures(results: readonly PromiseSettledResult<void>[], m
 }
 
 /**
- * Register the configured stdio LSP providers. Resolves every executable at load (after credential
- * scrubbing) before publishing any provider; each process launches lazily on its first matching
- * query.
+ * Register the configured stdio LSP providers. Validates every entry before publishing routes.
+ * Executables resolve at load by default; `resolveAt: query` defers availability checks until a
+ * matching query needs a new server. Processes always launch lazily.
  * @param ctx - the plugin context carrying `fs`, `lsp`, and `subprocess`.
  * @param config - the resolved plugin configuration (schemastery has filled every default).
  */
@@ -143,17 +146,17 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       if (providerId.trim() === '') throw new Error('lsp-stdio: server ids must be non-empty strings')
       const resolved = rawConfig as ResolvedServerConfig
       validateServerConfig(providerId, resolved)
-      const executable = await ctx.subprocess.resolveExecutable(
-        resolved.command,
-        resolved.env,
-        setupAbort.signal,
-      )
+      const executable = resolved.resolveAt === 'load'
+        ? await ctx.subprocess.resolveExecutable(resolved.command, resolved.env, setupAbort.signal)
+        : undefined
       setupAbort.signal.throwIfAborted()
       return new LocalLspProvider(
         providerId,
         ctx.fs,
         resolved,
-        executable,
+        signal => executable === undefined
+          ? ctx.subprocess.resolveExecutable(resolved.command, resolved.env, signal)
+          : Promise.resolve(executable),
         spec => ctx.subprocess.spawn(spec),
       )
     })
@@ -230,7 +233,7 @@ class LocalLspProvider implements LspProvider {
     providerId: string,
     private readonly fs: Context['fs'],
     private readonly config: ResolvedServerConfig,
-    private readonly executable: string,
+    private readonly resolveExecutable: (signal: AbortSignal) => Promise<string>,
     private readonly spawner: ConnectionSpawner,
   ) {
     this.id = LspProviderId(providerId)
@@ -277,10 +280,9 @@ class LocalLspProvider implements LspProvider {
       // Read inside the workspace queue but before spawning: a queued query sees current bytes when
       // its turn starts, while an invalid source still cannot leave an idle process pooled.
       const source = await readHostSource(this.fs, request.filePath, workspace, this.config.maxDocumentBytes, querySignal)
-      // Disposal may have snapshotted the instance map while host I/O was pending. Re-check before a
-      // synchronous get-or-create so every spawned process remains owned by teardown.
+      // Disposal may have snapshotted the instance map while host I/O was pending.
       this.assertActive(querySignal)
-      let instance = this.instanceFor(workspaceKey, workspace)
+      let instance = await this.instanceFor(workspaceKey, workspace, querySignal)
       try {
         return await instance.query(request, source, querySignal)
       } catch (error) {
@@ -290,7 +292,7 @@ class LocalLspProvider implements LspProvider {
         await instance.dispose()
         this.evictIfCurrent(workspaceKey, instance)
         this.assertActive(querySignal)
-        instance = this.instanceFor(workspaceKey, workspace)
+        instance = await this.instanceFor(workspaceKey, workspace, querySignal)
         return await instance.query(request, source, querySignal)
       } finally {
         // Reach quiescence before dropping a dead slot; a replacement must survive this ownership check.
@@ -316,12 +318,24 @@ class LocalLspProvider implements LspProvider {
     return result
   }
 
-  /** Return or synchronously publish the one instance for a canonical workspace. */
-  private instanceFor(workspaceKey: WorkspaceKey, workspace: HostWorkspace): LspInstance {
-    this.assertActive()
+  /** Resolve and publish one server inside its workspace queue; teardown drains that queue. */
+  private async instanceFor(workspaceKey: WorkspaceKey, workspace: HostWorkspace, signal: AbortSignal): Promise<LspInstance> {
+    this.assertActive(signal)
     const existing = this.instances.get(workspaceKey)
     if (existing !== undefined) return existing
-    const created = this.createInstance(workspace)
+    let executable: string
+    try {
+      executable = await this.resolveExecutable(signal)
+    } catch (error: unknown) {
+      this.assertActive(signal)
+      throw new LspError(
+        `Language server "${this.config.command}" is unavailable. Install it on the host or configure a compatible executable in lsp-stdio.`,
+        'LSP_UNAVAILABLE',
+        { cause: error },
+      )
+    }
+    this.assertActive(signal)
+    const created = this.createInstance(workspace, executable)
     this.instances.set(workspaceKey, created)
     return created
   }
@@ -332,9 +346,9 @@ class LocalLspProvider implements LspProvider {
     if (this.instances.get(workspace) === instance) this.instances.delete(workspace)
   }
 
-  private createInstance(workspace: HostWorkspace): LspInstance {
+  private createInstance(workspace: HostWorkspace, executable: string): LspInstance {
     const spec: InstanceSpec = {
-      command: this.executable,
+      command: executable,
       args: this.config.args,
       cwd: workspace.canonicalPath,
       workspaceUri: workspace.fileUrl,

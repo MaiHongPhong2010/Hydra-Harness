@@ -76,6 +76,77 @@ function locationJson(line: number): unknown {
 }
 
 describe('lsp-stdio end to end over a fake server', () => {
+  it('defers executable lookup, reports an unavailable server, and recovers on the next query', async () => {
+    const ctx = await mount({ LSP_FAKE_HOVER: JSON.stringify({ contents: 'available' }) }, {
+      command: 'hydra-missing-language-server-fixture',
+      resolveAt: 'query',
+    })
+    const resolve = vi.spyOn(ctx.subprocess, 'resolveExecutable')
+    const spawn = vi.spyOn(ctx.subprocess, 'spawn')
+    try {
+      expect(resolve).not.toHaveBeenCalled()
+      const unavailable = ctx.lsp.query(query('hover'))
+      await expect(unavailable).rejects.toMatchObject({ code: 'LSP_UNAVAILABLE' })
+      await expect(unavailable).rejects.toThrow('Install it on the host')
+      await expect(unavailable).rejects.toHaveProperty('cause.message',
+        'subprocess-local: command "hydra-missing-language-server-fixture" was not found on PATH')
+      expect(spawn).not.toHaveBeenCalled()
+      resolve.mockResolvedValue(process.execPath)
+      const results = await Promise.all([ctx.lsp.query(query('hover')), ctx.lsp.query(query('hover'))])
+      expect(results).toEqual([
+        { kind: 'hover', hover: { contents: 'available' } },
+        { kind: 'hover', hover: { contents: 'available' } },
+      ])
+      expect(resolve).toHaveBeenCalledTimes(2)
+      expect(spawn).toHaveBeenCalledTimes(1)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('preserves caller cancellation during deferred executable lookup', async () => {
+    const ctx = await mount({}, { resolveAt: 'query' })
+    const started = Promise.withResolvers<AbortSignal>()
+    vi.spyOn(ctx.subprocess, 'resolveExecutable').mockImplementation(async (_command, _env, signal) => {
+      if (signal === undefined) throw new Error('executable lookup missing query signal')
+      started.resolve(signal)
+      return await rejectWhenAborted(signal)
+    })
+    const spawn = vi.spyOn(ctx.subprocess, 'spawn')
+    const controller = new AbortController()
+    const pending = ctx.lsp.query(query('hover'), controller.signal)
+    await started.promise
+    controller.abort(new Error('executable lookup cancelled'))
+    await expect(pending).rejects.toThrow('executable lookup cancelled')
+    expect(spawn).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
+
+  it.each(['reject', 'resolve'] as const)('drains a deferred lookup that %s after disposal without starting a server', async (outcome) => {
+    const ctx = await mount({}, { resolveAt: 'query' })
+    const started = Promise.withResolvers<AbortSignal>()
+    const release = Promise.withResolvers<undefined>()
+    vi.spyOn(ctx.subprocess, 'resolveExecutable').mockImplementation(async (_command, _env, signal) => {
+      if (signal === undefined) throw new Error('executable lookup missing query signal')
+      started.resolve(signal)
+      await release.promise
+      if (outcome === 'reject') throw new Error('lookup cleanup finished')
+      return process.execPath
+    })
+    const spawn = vi.spyOn(ctx.subprocess, 'spawn')
+    const pending = ctx.lsp.query(query('hover'))
+    const signal = await started.promise
+    let disposed = false
+    const disposing = ctx.fiber.dispose().then(() => { disposed = true })
+    await new Promise<void>(resolve => setImmediate(resolve))
+    expect(signal.aborted).toBe(true)
+    expect(disposed).toBe(false)
+    release.resolve(undefined)
+    await expect(pending).rejects.toMatchObject({ code: 'LSP_DISPOSED' })
+    await expect(disposing).resolves.toBeUndefined()
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
   it('routes different extensions to independent configured servers', async () => {
     await writeFile(join(ws, 'a.py'), 'x = 1\n')
     const ctx = new Context()

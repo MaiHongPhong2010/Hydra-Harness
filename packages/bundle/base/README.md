@@ -10,7 +10,7 @@ The row set and its rationale are documented inline in the patch file; the [gene
 
 The base bundle mounts DeepSeek, Serper, and Other search providers with [explicit Settings selection](../../web/web/README.md#product-search-settings) and public HTTP fetch. Standard and Code presets expose fetch; private origins require an explicit operator grant in the [HTTP provider](../../web/web-fetch-http/README.md). The optional [research policy](../../guard/research-policy/README.md) can impose deployment limits when configured explicitly.
 
-The base also mounts the LSP capability and stdio provider; coding presets expose its read-only tool only when `HYDRA_LSP_COMMAND` names a compatible language-server executable.
+The base also mounts the LSP capability; its stdio provider defaults to disabled unless `HYDRA_LSP_COMMAND` is set. The provider checks executable availability on query, so a saved enablement override or a command unavailable on another machine cannot prevent Desktop or Web startup. Install a compatible server on that host and set `HYDRA_LSP_COMMAND` to its command or absolute path; queries against a missing server return `LSP_UNAVAILABLE`. See [stdio configuration](../../lsp/lsp-stdio/README.md#configuration).
 
 ## Model Experience
 

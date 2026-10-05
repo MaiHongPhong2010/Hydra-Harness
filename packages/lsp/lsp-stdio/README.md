@@ -20,7 +20,8 @@ The `servers` record key is the stable provider id reserved on `ctx.lsp`; each v
 
 | Server key | Default | Meaning |
 |---|---|---|
-| `command` | (required) | Executable to spawn — absolute, or resolved on the child PATH at load. Launch uses no shell. |
+| `command` | (required) | Executable to spawn — absolute, or resolved on the child PATH. Launch uses no shell. |
+| `resolveAt` | `load` | `load` checks executable availability before registration; `query` checks it before starting each new server. |
 | `args` | `[]` | Arguments passed to the executable. |
 | `env` | `{}` | Extra env merged on top of the credential-scrubbed ambient env (vars matching `KEY`/`PASSWORD`/`SECRET`/`TOKEN` are not forwarded); an explicit `HYDRA_*` entry merges after the seam's scrub of ambient ones. |
 | `extensionToLanguage` | (required) | Lowercase leading-dot extension → LSP language id (e.g. `{ '.ts': 'typescript' }`). |
@@ -32,7 +33,9 @@ The `servers` record key is the stable provider id reserved on `ctx.lsp`; each v
 | `shutdownTimeoutMs` | `5000` | Graceful `shutdown`/`exit` budget before escalation. |
 | `killGraceMs` | `2000` | Grace for request cancellation and for SIGTERM→SIGKILL escalation. |
 
-`servers` must contain at least one entry, and every id must be non-empty. Timer budgets must be positive integers no greater than Node's `2_147_483_647` ms timer limit. All executables resolve at load after credential scrubbing; a bad later entry prevents every provider from registering. Processes launch lazily on the first matching query.
+`servers` must contain at least one entry, and every id must be non-empty. Timer budgets must be positive integers no greater than Node's `2_147_483_647` ms timer limit. Executables resolve at load after credential scrubbing by default; a failing entry prevents every provider from registering. Processes launch lazily on the first matching query.
+
+Use `resolveAt: query` for an optional server whose installation may differ between hosts. Missing executables produce an actionable `LSP_UNAVAILABLE` tool error without preventing Host startup; a later query checks availability again, so installing the configured command needs no provider reload. Configuration bounds and extension mappings still validate at load. Deferred lookups share the workspace queue and query cancellation signal; disposal aborts and drains them before completing.
 
 ## Protocol behavior
 

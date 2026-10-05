@@ -1568,8 +1568,10 @@ export interface Config {
 
 /** One configured local language server and its host bounds. */
 export interface LspLocalServerConfig {
-  /** Executable to spawn (absolute, or resolved on PATH at load). */
+  /** Executable to spawn (absolute, or resolved on the child PATH). */
   command: string
+  /** Resolve the executable at plugin load or before a new server starts. Default `load`. */
+  resolveAt?: 'load' | 'query'
   /** Lowercase leading-dot extension → LSP language id (e.g. `{ '.ts': 'typescript' }`). */
   extensionToLanguage: Record<string, string>
   /** Arguments passed to the executable (no shell). Default `[]`. */
@@ -1593,7 +1595,7 @@ export interface LspLocalServerConfig {
 }
 ```
 
-Source: [`packages/lsp/lsp-stdio/src/index.ts:82`](../packages/lsp/lsp-stdio/src/index.ts)
+Source: [`packages/lsp/lsp-stdio/src/index.ts:84`](../packages/lsp/lsp-stdio/src/index.ts)
 
 <a id="hydraharness-mcp-client"></a>
 

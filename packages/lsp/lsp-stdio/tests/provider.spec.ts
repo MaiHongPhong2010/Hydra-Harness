@@ -88,7 +88,7 @@ describe('lsp-stdio provider resolution', () => {
     await ctx.fiber.dispose()
   })
 
-  it('rejects a nonpositive teardown budget at load', async () => {
+  it.each(['load', 'query'] as const)('rejects a nonpositive teardown budget at load with %s resolution', async (resolveAt) => {
     const ctx = new Context()
     await ctx.plugin(Lsp)
     await ctx.plugin(LocalSubprocessRuntime)
@@ -96,6 +96,7 @@ describe('lsp-stdio provider resolution', () => {
     await expect(ctx.plugin(LspLocal, config('bad-budget', {
       command: process.execPath,
       args: ['-e', ''],
+      resolveAt,
       extensionToLanguage: { '.ts': 'typescript' },
       killGraceMs: 0,
     }))).rejects.toThrow(/servers\.bad-budget\.killGraceMs must be a positive integer/)

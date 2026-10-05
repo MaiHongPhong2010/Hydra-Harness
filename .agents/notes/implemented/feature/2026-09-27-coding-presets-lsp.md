@@ -19,3 +19,5 @@ Mount the LSP service and generic stdio provider in the shared base composition,
 ## Consequences
 
 Coding presets expose the read-only `lsp` schema and prompt guidance only when a deployment supplies a compatible stdio server through `HYDRA_LSP_COMMAND`. With no command configured, both the provider and its consumer stay disabled, so the default catalog has no tool that would always fail.
+
+The [optional LSP startup policy](../bug-fix/2026-10-05-optional-lsp-startup.md) governs executable checks when a saved core enablement override activates the provider on another host.

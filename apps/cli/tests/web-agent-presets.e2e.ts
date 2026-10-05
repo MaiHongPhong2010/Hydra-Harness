@@ -406,6 +406,27 @@ describe('the shipped Web composition', () => {
     }
   })
 
+  it('boots with an LSP enablement override when its executable is missing', async () => {
+    const settingsFile = join(await mkdtemp(join(tmpdir(), 'hydra-web-missing-lsp-')), 'settings.yaml')
+    await writeFile(settingsFile, '{}\n')
+    const context = await bootWeb(settingsFile, [{ id: 'lsp-stdio', disabled: false }], [], undefined,
+      'hydra-missing-language-server-fixture')
+    try {
+      await writeFile(join(dirname(settingsFile), 'probe.ts'), 'const value = 1\n')
+      const unavailable = context.lsp.query({
+        operation: 'hover',
+        filePath: 'probe.ts',
+        position: { line: 0, character: 0 },
+        workspaceRoot: dirname(settingsFile),
+      })
+      await expect(unavailable).rejects.toMatchObject({ code: 'LSP_UNAVAILABLE' })
+      await expect(unavailable).rejects.toThrow('Install it on the host')
+      expect(context.agentPresets).toBeDefined()
+    } finally {
+      await context.fiber.dispose()
+    }
+  })
+
   it('keeps LSP absent by default and enables it for standard and code when configured', async () => {
     await expect(ctx.lsp.query({
       operation: 'hover',

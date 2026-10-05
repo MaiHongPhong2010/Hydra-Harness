@@ -1,0 +1,25 @@
+# Exercise the model-facing LSP tool through the shipped ACP app and Loader entry path.
+# The optional server is absent on this host; the tool must report the availability error.
+- id: base
+  name: '@hydraharness/cordis-plugin-include'
+  config:
+    path: ../cordis.yml
+    patches:
+      - insert:
+          - id: lsp
+            name: '@hydraharness/harness-lsp'
+          - id: lsp-stdio
+            name: '@hydraharness/harness-lsp-stdio'
+            config:
+              servers:
+                fixture:
+                  command: hydra-missing-language-server-fixture
+                  resolveAt: query
+                  extensionToLanguage:
+                    '.ts': typescript
+          - id: timeout-policy
+            name: '@hydraharness/harness-tool-call-timeout-policy'
+          - id: tool-lsp
+            name: '@hydraharness/harness-tool-lsp'
+            config:
+              maxLocations: 1

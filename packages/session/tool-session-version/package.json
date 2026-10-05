@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-tool-session-version",
   "description": "Bounded reads of prompt and response versions stored in the calling session",
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": {
     "access": "public"
   },

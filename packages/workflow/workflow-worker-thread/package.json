@@ -6,7 +6,7 @@
       "application": "Run workflow orchestration in a worker while child agents execute the requested tasks."
     }
   },
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": {
     "access": "public"
   },

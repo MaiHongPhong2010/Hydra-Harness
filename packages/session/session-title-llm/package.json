@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-session-title-llm",
   "description": "Shared LLM generation policy for Hydra harness session-title providers",
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": {
     "access": "public"
   },

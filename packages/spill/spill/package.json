@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-spill",
   "description": "Abstract spill storage seam (ctx.spillStore) for the Hydra harness — save oversized tool text and return a retrieval locator",
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": {
     "access": "public"
   },

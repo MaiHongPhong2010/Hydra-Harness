@@ -6,7 +6,7 @@
       "application": "Let the agent manage the current session goal within its allowed authority."
     }
   },
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": {
     "access": "public"
   },

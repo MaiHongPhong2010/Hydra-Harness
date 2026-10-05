@@ -6,7 +6,7 @@
       "application": "Let the agent ask structured questions and wait for the user's answers."
     }
   },
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": {
     "access": "public"
   },

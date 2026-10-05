@@ -6,7 +6,7 @@
       "application": "Set and manage a persistent goal through the session's slash commands."
     }
   },
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": {
     "access": "public"
   },

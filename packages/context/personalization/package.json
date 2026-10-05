@@ -6,7 +6,7 @@
       "application": "Apply the user's saved custom instructions, personality, and memory preferences to conversations."
     }
   },
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": {
     "access": "public"
   },

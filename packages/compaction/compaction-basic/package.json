@@ -6,7 +6,7 @@
       "application": "Summarize conversation context when token usage reaches the configured compaction threshold."
     }
   },
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-client-ui-jev",
   "description": "Models settings option and write-only credential card for TypeSafe Jev",
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",

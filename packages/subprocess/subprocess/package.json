@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-subprocess",
   "description": "Subprocess seam (ctx.subprocess) for the Hydra harness — managed process groups, bounded spill-backed output, and escalated kills behind one abstract service",
-  "version": "0.1.1-rc.4",
+  "version": "0.1.1-rc.5",
   "publishConfig": {
     "access": "public"
   },

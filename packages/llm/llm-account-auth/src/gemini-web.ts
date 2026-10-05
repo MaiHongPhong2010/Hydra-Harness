@@ -12,6 +12,7 @@ import { LlmAdapter, LlmError, type GenerateOptions, type LlmDiscoveredModel, ty
   type MediaGenerationOptions, type StreamChunk, type AdapterRegistrationHandle } from '@hydraharness/harness-llm'
 import { GeminiWebHttp, GeminiWebError, geminiWebJob, type GeminiWebJob } from './gemini-web-http.ts'
 import { loginGeminiWeb } from './gemini-web-login.ts'
+import { importGeminiWebCookies } from './gemini-web-cookies.ts'
 import type { AccountModelProfile } from './config.ts'
 import type { GeminiWebInputImage } from './gemini-web-http.ts'
 
@@ -142,7 +143,7 @@ export class GeminiWebAdapter extends LlmAdapter {
   registerAuthorization(): void {
     this.ctx.inject(['authorization', 'credentials'], (authorized) => {
       authorized.authorization.registerFlow({ key: KEY, label: 'Gemini Web',
-        methods: [{ id: 'browser', label: 'Connect Gemini Web' }],
+        methods: [{ id: 'browser', label: 'Connect Gemini Web' }, { id: 'cookies', label: 'Import Cookies' }],
         accounts: {
           list: async () => {
             const current = grant(await this.store().readRecord(KEY))
@@ -183,7 +184,12 @@ export class GeminiWebAdapter extends LlmAdapter {
     const spec = this.spec()
     try { await this.run(session.signal, spec.loginTimeoutMs, async (signal) => {
       const before = grant(await this.store().readRecord(KEY))
-      const jar = await loginGeminiWeb(spec.root, spec.browser, signal, (message) =>{  session.notify({ message }) })
+      const jar = session.method === 'cookies'
+        ? await importGeminiWebCookies(await session.prompt({ kind: 'secret',
+          message: 'Gemini cookies JSON', placeholder: 'Paste exported Google cookies JSON', signal }))
+        : await loginGeminiWeb(spec.root, spec.browser, signal, (message) => { session.notify({ message }) })
+      signal.throwIfAborted()
+      session.notify({ message: 'Checking the Gemini session over HTTP before saving.' })
       const client = new GeminiWebHttp(jar, signal)
       let identity: { email: string }
       try { identity = await client.bootstrap() } finally { await client.close() }
@@ -195,7 +201,13 @@ export class GeminiWebAdapter extends LlmAdapter {
         if (grant(current)?.revision !== before?.revision) throw new LlmError('Gemini Web account changed during sign-in. Connect again.', 'ACCOUNT_CHANGED')
         return Promise.resolve({ kind: 'grant' as const, payload: next })
       })
-    }) } finally { this.loginBusy = false }
+    }) } catch (error) {
+      if (session.method === 'cookies' && (error instanceof GeminiWebError || error instanceof LlmError
+        && ['INVALID_COOKIES', 'UNSUPPORTED_COOKIES', 'ACCOUNT_MISMATCH', 'ACCOUNT_CHANGED'].includes(error.code))) {
+        session.notify({ message: error.message })
+      }
+      throw error
+    } finally { this.loginBusy = false }
   }
 
   override providerInfo(provider: string) { return { id: provider, name: 'Gemini Web' } }

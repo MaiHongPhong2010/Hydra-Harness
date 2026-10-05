@@ -4,7 +4,7 @@ Status: implemented
 
 ## Problem
 
-Consumer Gemini media uses a browser session and undocumented RPCs. Authentication alone cannot establish image/video delivery, and retrying an uncertain submission can create duplicate work. The [cookie-import removal decision](../simplification/2026-10-04-remove-gemini-web.md) retains its rejection of manual cookie transfer and paid-route substitution; its absence of a consumer provider is superseded by this explicitly authorized implementation.
+Consumer Gemini media uses a browser session and undocumented RPCs. Authentication alone cannot establish image/video delivery, and retrying an uncertain submission can create duplicate work. The [cookie-import removal decision](../simplification/2026-10-04-remove-gemini-web.md) retains its rejection of paid-route substitution; its absence of a consumer provider is superseded by this explicitly authorized implementation. The [explicit cookie-import decision](2026-10-05-gemini-web-cookie-import.md) owns optional session transfer without a browser.
 
 ## Decision
 
@@ -30,4 +30,4 @@ Live HTTP verification establishes text-prompt image and video delivery with the
 
 Google can change the unofficial protocol or account controls without compatibility guarantees. Unverified Web parameters fail before submission; public API identifiers are not inferred from Web features. A lost response before provider ids arrive can leave an unrecoverable job, and Hydra cannot safely infer whether Google accepted it. No uncertain operation resubmits or switches providers. Private task records survive removal so reconnecting the same account can recover its accepted work; another account cannot retrieve it.
 
-The earlier removal note remains active for its independent clipboard behavior, cookie-import rejection, account isolation, and reintroduction requirements. This partial supersession does not reverse those constraints.
+The earlier removal note remains active for its independent clipboard behavior, account isolation, and media reintroduction requirements. Explicit cookie import has its own validation and grant-replacement requirements.

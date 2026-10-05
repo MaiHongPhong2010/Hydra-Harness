@@ -56,7 +56,8 @@
     "@smithy/core": "^3.33.2",
     "playwright-core": "1.61.1",
     "tough-cookie": "6.0.1",
-    "undici": "7.28.0"
+    "undici": "7.28.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@hydraharness/cordis": "workspace:^",

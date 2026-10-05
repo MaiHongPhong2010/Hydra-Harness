@@ -18,6 +18,21 @@ Choose **Add provider**, select a provider such as Anthropic or OpenAI, enter it
 
 Providers with native authentication need their native credentials instead. Bedrock, Vertex, Azure, and Codex use AWS credentials and a region, an ADC project, an `api-version`, and OAuth respectively; filling only the API-key field does not configure them.
 
+## Import Gemini Web cookies
+
+This flow requires Windows Desktop or Web localhost with the Gemini Web provider enabled, plus an Edge or Chrome profile already signed in to the Google account you want to use. **Connect** remains available for signing in through Hydra's separate browser.
+
+1. In that Edge or Chrome profile, install **Cookie-Editor** using the store link on its [official website](https://cookie-editor.com/).
+2. Open [Gemini](https://gemini.google.com/), confirm the intended account, and keep that tab active. Open Cookie-Editor from the browser toolbar; allow access to the site if prompted.
+3. Choose **Export → JSON**. The extension copies the cookies for the active tab to your clipboard. If Export uses a previously selected format, choose JSON in Cookie-Editor's export-format settings. Keep the complete array, including domain, expiry, security and HttpOnly metadata. Do not copy individual cookie values.
+4. In Hydra, open **Settings → Models → Account sign-in**. Edit **Gemini Web**, or choose **Add sign-in provider → Gemini Web**. Select **Import Cookies** under **Sign-in method**, then click **Import Cookies**.
+5. Paste the clipboard contents into **Gemini cookies JSON**. Alternatively, paste them into a local text editor, save as `cookies.json`, and select that file under **Cookies JSON file**. Exports must be no larger than 64 KiB.
+6. Choose **Continue** and wait for **Account connected. Apply to save provider settings.** Confirm the account shown in the editor, then choose **Apply**. Hydra checks the session over HTTP before saving; a failed import keeps the existing session.
+
+Cookies can grant access to your Google account. Paste them only into Hydra, keep exported files private, and do not include them in chats, screenshots or issue reports. Console `document.cookie` omits HttpOnly cookies; copied Cookie headers and Netscape exports are not accepted. [Chrome's cookie documentation](https://developer.chrome.com/docs/devtools/application/cookies) describes these metadata fields.
+
+If the export lacks an unexpired `__Secure-1PSID`, sign in again and repeat the export from the active Gemini tab. If Hydra reports partitioned cookies, use **Connect** through its separate browser. To import a different account, use **Remove** first. A successful import does not prove remaining image or video quota. The [Gemini Web reference](../../../packages/llm/llm-account-auth/README.md#gemini-web) owns accepted formats and account restrictions.
+
 ## Add a custom provider
 
 Choose **Add a custom provider** for a company gateway, self-hosted server, or provider absent from the installed catalog. Supply a lowercase Provider ID, base URL, API protocol, credential, and at least one model.

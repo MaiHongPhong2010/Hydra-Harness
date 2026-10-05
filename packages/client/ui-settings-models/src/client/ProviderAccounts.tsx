@@ -11,6 +11,48 @@ import styles from './ModelsSection.module.css'
 
 type AuthorizationApi = IApiClient['authorization']
 
+/** A file read belongs to this prompt and cannot refill a withdrawn prompt. */
+function CookieFileInput({ id, busy, failure, t, onValue, read }: {
+  id: string
+  busy: boolean
+  failure: string | undefined
+  t: ProviderAccountsProps['t']
+  onValue: (value: string) => void
+  read: (work: () => Promise<void>) => Promise<void>
+}): ReactNode {
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+  return <>
+    <p id={`auth-${id}-hint`} className={styles['advancedHint']}>{t('geminiWebImportHint')}</p>
+    <details className={styles['customized']}>
+      <summary className={styles['customizedSummary']}>{t('geminiWebCopyGuide')}</summary>
+      <ol className={styles['advancedHint']}>
+        <li>{t('geminiWebCopyInstall')} <a href="https://cookie-editor.com/" target="_blank" rel="noopener noreferrer">Cookie-Editor</a>.</li>
+        <li>{t('geminiWebCopyOpen')}</li>
+        <li>{t('geminiWebCopyExport')}</li>
+        <li>{t('geminiWebCopyPaste')}</li>
+      </ol>
+      <p className={styles['advancedHint']}>{t('geminiWebCopyPrivacy')}</p>
+    </details>
+    <label className={styles['fieldLabel']} htmlFor={`auth-${id}-file`}>{t('geminiWebCookieFile')}</label>
+    <input id={`auth-${id}-file`} className={styles['input']} type="file" accept=".json,application/json" disabled={busy}
+      aria-invalid={failure === undefined ? undefined : true} aria-describedby={`auth-${id}-hint`}
+      onChange={(event) => {
+        const file = event.target.files?.[0]
+        if (file === undefined) return
+        onValue('')
+        void read(async () => {
+          if (file.size > 65536) throw new Error(t('geminiWebCookieFileTooLarge'))
+          const text = await file.text()
+          if (mounted.current) onValue(text)
+        })
+      }} />
+  </>
+}
+
 type UsageProvider = 'codex' | 'google' | 'other'
 
 function usageProvider(flowKey: string): UsageProvider {
@@ -154,7 +196,7 @@ interface ProviderAccountsProps {
   method?: string
   /** Add mode shows login controls; manage mode also lists accounts and usage. */
   mode?: 'add' | 'manage'
-  /** Authorization wire methods; tokens never reach this component. */
+  /** Authorization wire methods; responses exclude stored credentials. */
   api: AuthorizationApi
   /** Section copy. */
   t: (key: keyof typeof en) => string
@@ -435,6 +477,8 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
   }
 
   const prompt = running ? attempt.prompt : undefined
+  const cookieMethod = geminiWeb && (method ?? selectedMethod ?? entry?.methods[0]?.id) === 'cookies'
+  const cookiePrompt = cookieMethod && prompt?.kind === 'secret'
   const notice = attempt?.notice
   const snippet = notice?.snippet
   const safeUrl = notice?.url !== undefined && /^https?:\/\//i.test(notice.url) ? notice.url : undefined
@@ -444,6 +488,10 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
   return (
     <div className={styles['field']}>
       {geminiWeb && mode === 'add' ? <p className={styles['advancedHint']}>{t('geminiWebHint')}</p> : null}
+      {geminiWeb ? <p className={styles['advancedHint']}>
+        <a href="https://maihongphong1902.github.io/Hydra-Harness/guide/providers#import-gemini-web-cookies"
+          target="_blank" rel="noopener noreferrer">{t('geminiWebGuideLink')}</a>
+      </p> : null}
       {method === undefined && entry !== undefined && entry.methods.length > 1 ? <div className={styles['field']}>
         <label className={styles['fieldLabel']} htmlFor={`${usageId}-method`}>{t('accountSignInMethod')}</label>
         <select data-hydra-control="field" className={styles['input']} disabled={disabled || busy || running}
@@ -456,7 +504,7 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
       <div className={styles['accountActions']}>
         <button type="button" className={styles[mode === 'manage' ? 'primaryButton' : 'secondaryButton']}
           disabled={disabled || busy || running || unavailable}
-          onClick={() => { void begin() }}>{t(geminiWeb ? (entry?.accounts.length ? 'geminiWebReconnect' : 'geminiWebConnect') : 'accountAdd')}</button>
+          onClick={() => { void begin() }}>{t(geminiWeb ? (cookieMethod ? 'geminiWebImport' : entry?.accounts.length ? 'geminiWebReconnect' : 'geminiWebConnect') : 'accountAdd')}</button>
         {safeUrl === undefined ? null : <a className={styles['primaryButton']} href={safeUrl} target="_blank" rel="noopener noreferrer"
           onClick={openExternal === undefined ? undefined : (event) => {
             event.preventDefault()
@@ -587,6 +635,7 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
         })
       }}>
         <label className={styles['fieldLabel']} htmlFor={`auth-${prompt.id}`}>{prompt.message}</label>
+        {cookiePrompt ? <CookieFileInput id={prompt.id} busy={busy} failure={failure} t={t} onValue={setAnswer} read={act} /> : null}
         {prompt.kind === 'select'
           ? <select data-hydra-control="field" id={`auth-${prompt.id}`} className={styles['input']} value={answer} disabled={busy}
             onChange={(event) => { setAnswer(event.target.value) }}>
@@ -594,6 +643,8 @@ export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, dis
             {prompt.options?.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
           : <input data-hydra-control="field" id={`auth-${prompt.id}`} className={styles['input']} type={prompt.kind === 'secret' ? 'password' : 'text'}
+            aria-describedby={cookiePrompt ? `auth-${prompt.id}-hint` : undefined}
+            aria-invalid={cookiePrompt && failure !== undefined ? true : undefined}
             autoComplete="off" value={answer} placeholder={prompt.placeholder} disabled={busy}
             onChange={(event) => { setAnswer(event.target.value) }} />}
         <button type="submit" className={styles['secondaryButton']} disabled={busy || answer.trim().length === 0}>{t('accountContinue')}</button>

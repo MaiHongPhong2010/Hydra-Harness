@@ -6368,6 +6368,9 @@ importers:
       undici:
         specifier: 7.28.0
         version: 7.28.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.6.4
     devDependencies:
       '@hydraharness/cordis':
         specifier: workspace:^

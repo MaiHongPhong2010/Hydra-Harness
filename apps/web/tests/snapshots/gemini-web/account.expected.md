@@ -58,9 +58,16 @@
         - img "Account connected"
         - button "Edit Gemini Web (gemini-web)": Edit
         - text: Gemini Web gemini-web
-        - button "Reconnect"
+        - paragraph:
+          - link "Read the full cookie-copy guide":
+            - /url: https://maihongphong1902.github.io/Hydra-Harness/guide/providers#import-gemini-web-cookies
+        - text: Sign-in method
+        - combobox "Sign-in method":
+          - option "Connect Gemini Web"
+          - option "Import Cookies" [selected]
+        - button "Import Cookies"
         - text: Accounts 1 account
-        - paragraph: Connect one Gemini account in the separate Hydra browser. The browser closes after sign-in. Images and Landscape videos use Gemini Web defaults and your account access; model listing does not confirm remaining quota.
+        - paragraph: Connect one Gemini account in the separate Hydra browser or import its cookies. The browser closes after sign-in. Images and videos use your Gemini Web account access; model listing does not confirm remaining quota.
         - list "Accounts":
           - listitem:
             - text: fixture@example.test
@@ -69,7 +76,9 @@
             - button "Remove fixture@example.test": Remove
             - text: Usage unavailable from provider
         - text: 1–1 of 1
-        - status
+        - status:
+          - paragraph: Checking the Gemini session over HTTP before saving.
+          - paragraph: Account connected. Apply to save provider settings.
         - group: Customized settings
         - button "Cancel"
         - button "Apply"

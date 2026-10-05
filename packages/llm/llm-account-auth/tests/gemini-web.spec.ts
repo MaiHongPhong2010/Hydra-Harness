@@ -208,6 +208,44 @@ it('preserves the prior grant when HTTP validation after reconnect fails', async
   expect(await h.ctx.credentials.readRecord(KEY)).toEqual(before)
 })
 
+it.each(['success', 'invalid', 'expired', 'different', 'changed', 'removed', 'cancelled'] as const)('imports cookies with HTTP verification and protects the previous grant: %s', async (outcome) => {
+  const h = await fixture(); const before = await h.ctx.credentials.readRecord(KEY)
+  login.mockClear()
+  const controller = new AbortController()
+  const prompt = vi.fn(async () => {
+    if (outcome === 'cancelled') controller.abort()
+    return outcome === 'invalid' ? 'bad-secret-json' : JSON.stringify([{ name: '__Secure-1PSID', value: 'import-fixture',
+      domain: '.google.com', path: '/', secure: true, httpOnly: true }])
+  })
+  const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+    expect(new Headers(init?.headers).get('cookie')).toContain('__Secure-1PSID=import-fixture')
+    if (outcome === 'changed') await h.ctx.credentials.modifyRecord(KEY, async () => ({ kind: 'grant',
+      payload: { ...(before as { payload: object }).payload, revision: '00000000-0000-4000-8000-000000000002' } }))
+    if (outcome === 'removed') await h.ctx.credentials.deleteRecord(KEY)
+    return outcome === 'expired' ? new Response('Sign in', { status: 403 })
+      : new Response(outcome === 'different' ? html.replace('fixture@example.test', 'different@example.test') : html)
+  })
+  vi.stubGlobal('fetch', fetcher)
+  const notify = vi.fn()
+  const request = h.ctx.authorization.begin({ key: KEY, method: 'cookies', signal: controller.signal,
+    interaction: { notify, prompt } })
+  if (outcome === 'success') {
+    await expect(request).resolves.toEqual({ status: 'authorized' })
+    const saved = await h.ctx.credentials.readRecord(KEY) as { payload: { revision: string; jar: unknown } }
+    expect(saved.payload.revision).not.toBe(id)
+    expect(await (await CookieJar.deserialize(saved.payload.jar as never)).getCookieString('https://gemini.google.com')).toContain('import-fixture')
+  } else if (outcome === 'cancelled') await expect(request).resolves.toEqual({ status: 'cancelled' })
+  else await expect(request).rejects.toMatchObject({ code: outcome === 'invalid' ? 'INVALID_COOKIES' : outcome === 'expired' ? 'RECONNECT_REQUIRED'
+    : outcome === 'different' ? 'ACCOUNT_MISMATCH' : 'ACCOUNT_CHANGED' })
+  expect(login).not.toHaveBeenCalled()
+  expect(JSON.stringify(notify.mock.calls)).not.toMatch(/bad-secret-json|import-fixture/)
+  if (outcome === 'invalid') expect(notify).toHaveBeenCalledWith({ message: 'Import a Google cookie JSON array or Playwright storage state, up to 64 KiB.' })
+  expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ kind: 'secret', message: 'Gemini cookies JSON' }))
+  expect(fetcher).toHaveBeenCalledTimes(outcome === 'invalid' || outcome === 'cancelled' ? 0 : 1)
+  if (outcome === 'removed') expect(await h.ctx.credentials.readRecord(KEY)).toBeUndefined()
+  else if (outcome !== 'success' && outcome !== 'changed') expect(await h.ctx.credentials.readRecord(KEY)).toEqual(before)
+})
+
 it('does not overwrite a newer reconnect grant while an old HTTP operation finishes', async () => {
   const h = await fixture(); let release!: () => void
   const gate = new Promise<void>((resolve) => { release = resolve })
@@ -301,6 +339,7 @@ it('refuses unsupported routes, chat, missing grants, and work after disposal', 
   await h.adapter.dispose()
   await expect(h.adapter.discover()).rejects.toMatchObject({ code: 'ABORTED' })
   const standalone = new GeminiWebAdapter(new Context(), () => undefined)
+  standalone.configure(false)
   await expect(standalone.discover()).rejects.toMatchObject({ code: 'RECONNECT_REQUIRED' })
   await standalone.dispose()
 })

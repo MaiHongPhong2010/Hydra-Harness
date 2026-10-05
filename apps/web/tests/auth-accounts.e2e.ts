@@ -282,17 +282,23 @@ describe('web e2e: account-backed ChatGPT and Antigravity login', () => {
 
   it('deletes Antigravity configuration and shared credentials, then loads fresh account information after login', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-provider-delete'))
-    const dialog = await openModels(page)
     await scaffold.ctx.settings.mutate(settingsNamespace(ACCOUNT_AUTH_NAMESPACE), [
       { op: 'set', path: ['providers', 'gemini-api'], value: {} },
     ])
+    // Host-side fixture setup must be in the editor's initial settings revision.
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    const dialog = await openModels(page)
     const section = dialog.getByRole('region', { name: 'Account sign-in', exact: true })
     await openEditor(dialog, 'Edit Google Antigravity (antigravity)')
     await section.getByText('Customized settings', { exact: true }).click()
     const catalog = section.getByRole('region', { name: 'Antigravity', exact: true })
     await catalog.getByRole('button', { name: 'Add model', exact: true }).click()
     await catalog.getByRole('textbox', { name: /^Model ID \d+$/ }).last().fill('stale-antigravity-model')
+    const saved = page.waitForResponse(response => response.url().endsWith('/api/settings.mutate')
+      && response.request().postData()?.includes('stale-antigravity-model') === true)
     await applyEditor(dialog, 'Edit Google Antigravity (antigravity)')
+    expect((await (await saved).json() as { result: { ok: boolean } }).result.ok).toBe(true)
     const siblingBefore = scaffold.ctx.settings.describe().find(value => value.ns === ACCOUNT_AUTH_NAMESPACE)?.value as {
       providers: Record<string, unknown>
     }

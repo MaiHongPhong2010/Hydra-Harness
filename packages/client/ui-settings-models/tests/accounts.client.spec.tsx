@@ -74,6 +74,49 @@ const t = (key: keyof typeof en) => en[key]
 const ok = <T,>(value: T): RpcResponse<T> => ({ rpcId: 'accounts-test' as never, result: { ok: true, value } })
 const flowKey = 'llm-account-auth/chatgpt'
 
+it.each(['paste', 'file', 'oversized', 'read-failed', 'closed', 'withdrawn', 'empty'] as const)('imports Gemini cookies through masked prompts and handles %s input', async (input) => {
+  const key = 'llm-account-auth/gemini-web'
+  let promptId: string | undefined = 'cookies'
+  const api = {
+    list: async () => ok({ entries: [{ key, label: 'Gemini Web', methods: [
+      { id: 'browser', label: 'Connect Gemini Web' }, { id: 'cookies', label: 'Import Cookies' },
+    ], inFlight: false, accounts: [] }] }),
+    begin: vi.fn(async () => ok({ attemptId: 'import' })),
+    state: async () => ok({ attempt: { id: 'import', status: 'running',
+      ...promptId === undefined ? {} : { prompt: { id: promptId, kind: 'secret', message: 'Gemini cookies JSON' } } } }),
+    answer: vi.fn(async () => ok({})), cancel: vi.fn(async () => ok({})),
+  }
+  const view = render(<ProviderAccounts flowKey={key} api={api as never} t={t} disabled={false} onBusy={vi.fn()} mode="add" />)
+  fireEvent.change(await screen.findByRole('combobox', { name: en.accountSignInMethod }), { target: { value: 'cookies' } })
+  fireEvent.click(screen.getByRole('button', { name: en.geminiWebImport }))
+  const secret = await screen.findByLabelText<HTMLInputElement>('Gemini cookies JSON')
+  expect(secret.type).toBe('password')
+  expect(api.begin).toHaveBeenCalledWith({ key, method: 'cookies' })
+  if (input === 'paste') fireEvent.change(secret, { target: { value: 'fixture-cookie-json' } })
+  else {
+    const pending = Promise.withResolvers<string>()
+    const file = { size: input === 'oversized' ? 65537 : 20,
+      text: () => input === 'read-failed' ? Promise.reject(new Error('File unavailable'))
+        : input === 'closed' || input === 'withdrawn' ? pending.promise : Promise.resolve('fixture-cookie-json') }
+    fireEvent.change(screen.getByLabelText(en.geminiWebCookieFile), { target: { files: input === 'empty' ? [] : [file] } })
+    if (input === 'closed') { view.unmount(); pending.resolve('fixture-cookie-json'); await pending.promise; return }
+    if (input === 'withdrawn') {
+      promptId = undefined
+      await waitFor(() => { expect(screen.queryByLabelText('Gemini cookies JSON')).toBeNull() })
+      pending.resolve('fixture-cookie-json'); await pending.promise
+      expect(api.answer).not.toHaveBeenCalled(); return
+    }
+    if (input === 'oversized' || input === 'read-failed') {
+      await screen.findByRole('alert'); expect(secret.value).toBe(''); expect(api.answer).not.toHaveBeenCalled(); return
+    }
+    if (input === 'empty') { expect(secret.value).toBe(''); return }
+    await waitFor(() => { expect(secret.value).toBe('fixture-cookie-json') })
+  }
+  fireEvent.click(screen.getByRole('button', { name: en.accountContinue }))
+  await waitFor(() => { expect(api.answer).toHaveBeenCalledWith({ attemptId: 'import', promptId: 'cookies', value: 'fixture-cookie-json' }) })
+  await waitFor(() => { expect(secret.value).toBe('') })
+})
+
 it.each(['add', 'manage'] as const)('offers managed Gemini Web Connect, Reconnect, and Remove in %s mode', async (mode) => {
   const key = 'llm-account-auth/gemini-web'
   let accounts: Array<{ id: string; label: string }> = []
@@ -87,6 +130,10 @@ it.each(['add', 'manage'] as const)('offers managed Gemini Web Connect, Reconnec
   const connect = await screen.findByRole<HTMLButtonElement>('button', { name: en.geminiWebConnect })
   await waitFor(() => { expect(connect.disabled).toBe(false) })
   expect(screen.getByText(en.geminiWebHint)).toBeTruthy()
+  const guide = screen.getByRole('link', { name: en.geminiWebGuideLink })
+  expect(guide.getAttribute('href')).toBe('https://maihongphong1902.github.io/Hydra-Harness/guide/providers#import-gemini-web-cookies')
+  expect(guide.getAttribute('target')).toBe('_blank')
+  expect(guide.getAttribute('rel')).toBe('noopener noreferrer')
   fireEvent.click(connect)
   await screen.findByRole('button', { name: en.geminiWebReconnect }, { timeout: 3000 })
   expect(api.begin).toHaveBeenCalledWith({ key })

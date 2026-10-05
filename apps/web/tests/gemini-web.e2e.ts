@@ -22,6 +22,7 @@ const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQ
 describe.each(['image', 'video', 'retrieve', 'error', 'reference', 'refusal'] as const)('Gemini Web assembled %s', (scenario) => {
   let scaffold: WebScaffold; let browser: Browser; let page: Page
   let bytes: Buffer; let root: string; let home: string; let jar: CookieJar
+  let denyBootstrap = false
   const calls: string[] = []
   const kind = scenario === 'image' ? 'image' : 'video'
   const references = scenario === 'reference' || scenario === 'refusal'
@@ -35,7 +36,8 @@ describe.each(['image', 'video', 'retrieve', 'error', 'reference', 'refusal'] as
       const url = new URL(input instanceof Request ? input.url : String(input))
       if (!['gemini.google.com', 'lh3.google.com', 'contribution.usercontent.google.com', 'push.clients6.google.com'].includes(url.hostname)) return originalFetch(input, init)
       calls.push(url.pathname.includes('StreamGenerate') ? 'submit' : url.searchParams.get('rpcids') ?? url.pathname)
-      if (url.pathname === '/app') return new Response('{"SNlM0e":"fixture","cfb2h":"fixture-build","FdrFJe":"fixture-session","oPEP7c":"fixture@example.test","qKIAYe":"feeds/fixture"}')
+      if (url.pathname === '/app') return denyBootstrap ? new Response('Sign in', { status: 403 })
+        : new Response('{"SNlM0e":"fixture","cfb2h":"fixture-build","FdrFJe":"fixture-session","oPEP7c":"fixture@example.test","qKIAYe":"feeds/fixture"}')
       if (url.hostname === 'push.clients6.google.com') {
         if (new Headers(init?.headers).get('x-goog-upload-command') === 'start') return new Response(null, {
           headers: { 'x-goog-upload-url': 'https://push.clients6.google.com/upload/?upload_id=fixture' },
@@ -107,24 +109,91 @@ describe.each(['image', 'video', 'retrieve', 'error', 'reference', 'refusal'] as
     const dialog = page.getByRole('dialog', { name: 'Settings' })
     await dialog.getByRole('button', { name: 'Models', exact: true }).click()
     await dialog.getByRole('button', { name: 'Edit Gemini Web (gemini-web)', exact: true }).click()
+    const docs = dialog.getByRole('link', { name: 'Read the full cookie-copy guide', exact: true })
+    expect(await docs.getAttribute('href')).toBe('https://maihongphong1902.github.io/Hydra-Harness/guide/providers#import-gemini-web-cookies')
     if (scenario === 'image') {
       await dialog.getByRole('button', { name: 'Connect', exact: true }).waitFor()
       await expect.poll(() => dialog.getByRole('button', { name: 'Connect', exact: true }).isEnabled()).toBe(true)
       await dialog.getByText('No accounts connected.', { exact: true }).waitFor()
       await compareOrRefreshGolden(join(DIR, 'onboarding.expected.md'),
         await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), webSnapshotMode())
-      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
-      await scaffold.ctx.credentials.modifyRecord(credentialKey('llm-account-auth', 'gemini-web'), async () => ({ kind: 'grant', payload: {
-        version: 1, revision: JOB_ID, accountId, label: 'fixture@example.test', jar: await jar.serialize(),
-      } }))
-      await dialog.getByRole('button', { name: 'Edit Gemini Web (gemini-web)', exact: true }).click()
+      await dialog.getByRole('combobox', { name: 'Sign-in method' }).selectOption('cookies')
+      await dialog.getByRole('button', { name: 'Import Cookies', exact: true }).click()
+      const secret = dialog.getByLabel('Gemini cookies JSON', { exact: true })
+      await secret.waitFor()
+      expect(await secret.getAttribute('type')).toBe('password')
+      const copyGuide = dialog.getByText('How to copy cookies', { exact: true })
+      expect(await copyGuide.evaluate(element => element.parentElement?.hasAttribute('open'))).toBe(false)
+      await copyGuide.focus()
+      await page.keyboard.press('Enter')
+      await dialog.getByText('Choose Export → JSON to copy all cookies for that tab. Keep the complete JSON array and its metadata.', { exact: true }).waitFor()
+      const exporter = dialog.getByRole('link', { name: 'Cookie-Editor', exact: true })
+      expect(await exporter.getAttribute('href')).toBe('https://cookie-editor.com/')
+      expect(await exporter.getAttribute('rel')).toBe('noopener noreferrer')
+      await compareOrRefreshGolden(join(DIR, 'import.expected.md'),
+        await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), webSnapshotMode())
+      await dialog.getByRole('button', { name: 'Continue', exact: true }).scrollIntoViewIfNeeded()
+      await page.screenshot({ path: join(REPO_ROOT, '.artifacts', 'gemini-web-import.png') })
+      await secret.fill('invalid-secret-json')
+      await dialog.getByRole('button', { name: 'Continue', exact: true }).click()
+      await dialog.getByText('Import a Google cookie JSON array or Playwright storage state, up to 64 KiB.', { exact: true }).waitFor()
+      await dialog.getByRole('alert').waitFor()
+      expect(await scaffold.ctx.credentials.readRecord(credentialKey('llm-account-auth', 'gemini-web'))).toBeUndefined()
+      await compareOrRefreshGolden(join(DIR, 'import-invalid.expected.md'),
+        await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), webSnapshotMode())
+      for (const theme of ['Light', 'Dark']) {
+        await dialog.getByRole('button', { name: 'General', exact: true }).click()
+        await dialog.getByRole('button', { name: theme, exact: true }).click()
+        await dialog.getByRole('button', { name: 'Models', exact: true }).click()
+        await dialog.getByRole('button', { name: 'Edit Gemini Web (gemini-web)', exact: true }).click()
+        await dialog.getByRole('combobox', { name: 'Sign-in method' }).selectOption('cookies')
+        await dialog.getByRole('button', { name: 'Import Cookies', exact: true }).click()
+        await secret.waitFor()
+        await copyGuide.click()
+        for (const width of [1680, 560]) {
+          await page.setViewportSize({ width, height: 1000 })
+          await dialog.getByRole('button', { name: 'Continue', exact: true }).scrollIntoViewIfNeeded()
+          expect(await secret.evaluate(element => getComputedStyle(element).fontSize)).toBe('14px')
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+          await page.screenshot({ path: join(REPO_ROOT, '.artifacts', `gemini-web-import-${theme.toLowerCase()}-${width}.png`) })
+          await copyGuide.locator('..').screenshot({ path: join(REPO_ROOT, '.artifacts', `gemini-web-cookie-guide-${theme.toLowerCase()}-${width}.png`) })
+        }
+        await page.setViewportSize({ width: 1680, height: 1000 })
+        await dialog.getByRole('button', { name: 'Cancel sign-in', exact: true }).click()
+        await dialog.getByText('Sign-in cancelled.', { exact: true }).waitFor()
+      }
+      await dialog.getByRole('button', { name: 'Import Cookies', exact: true }).click()
+      await dialog.getByLabel('Cookies JSON file', { exact: true }).setInputFiles({ name: 'cookies.json', mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify([{ name: '__Secure-1PSID', value: 'import-fixture-cookie', domain: '.google.com', path: '/',
+          secure: true, httpOnly: true, hostOnly: false, session: true, sameSite: null, storeId: null }])) })
+      await expect.poll(() => secret.inputValue()).toContain('import-fixture-cookie')
+      await dialog.getByRole('button', { name: 'Continue', exact: true }).click()
+      await dialog.getByText('Account connected. Apply to save provider settings.', { exact: true }).waitFor()
+      expect(calls.filter(call => call === 'submit')).toHaveLength(0)
     }
     await dialog.getByText('fixture@example.test', { exact: true }).waitFor()
-    expect(await dialog.getByRole('button', { name: 'Reconnect', exact: true }).count()).toBe(1)
+    expect(await dialog.getByRole('button', { name: scenario === 'image' ? 'Import Cookies' : 'Reconnect', exact: true }).count()).toBe(1)
     expect(await dialog.getByRole('button', { name: 'Remove fixture@example.test', exact: true }).count()).toBe(1)
     await dialog.getByText('Usage unavailable from provider', { exact: true }).waitFor()
     if (scenario === 'image') await compareOrRefreshGolden(join(DIR, 'account.expected.md'),
       await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), webSnapshotMode())
+    if (scenario === 'image') {
+      const before = await scaffold.ctx.credentials.readRecord(credentialKey('llm-account-auth', 'gemini-web'))
+      denyBootstrap = true
+      await dialog.getByRole('button', { name: 'Import Cookies', exact: true }).click()
+      await dialog.getByLabel('Gemini cookies JSON', { exact: true }).fill(JSON.stringify([{ name: '__Secure-1PSID', value: 'expired-fixture-cookie',
+        domain: '.google.com', path: '/', secure: true, httpOnly: true }]))
+      await dialog.getByRole('button', { name: 'Continue', exact: true }).click()
+      await dialog.getByText('Gemini bootstrap: RECONNECT_REQUIRED (HTTP 403)', { exact: true }).waitFor()
+      await dialog.getByRole('alert').waitFor()
+      expect(await scaffold.ctx.credentials.readRecord(credentialKey('llm-account-auth', 'gemini-web'))).toEqual(before)
+      const output = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
+      expect(output).not.toMatch(/expired-fixture-cookie|import-fixture-cookie/)
+      await compareOrRefreshGolden(join(DIR, 'import-expired.expected.md'), output, webSnapshotMode())
+      denyBootstrap = false
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await dialog.getByRole('button', { name: 'Edit Gemini Web (gemini-web)', exact: true }).click()
+    }
     await dialog.getByText('Customized settings', { exact: true }).click()
     await dialog.getByRole('button', { name: 'Get all', exact: true }).click()
     await expect.poll(() => dialog.getByRole('textbox', { name: 'Model ID 1', exact: true }).inputValue()).toBe('gemini-web-image')

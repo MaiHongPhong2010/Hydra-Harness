@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-invariants",
   "description": "Registry service for package-owned Hydra harness runtime invariants",
-  "version": "0.1.1-rc.5",
+  "version": "0.1.1-rc.6",
   "publishConfig": {
     "access": "public"
   },

@@ -6,7 +6,7 @@
       "application": "Replace oversized tool output with a preview and a path to the retained full content."
     }
   },
-  "version": "0.1.1-rc.5",
+  "version": "0.1.1-rc.6",
   "publishConfig": {
     "access": "public"
   },

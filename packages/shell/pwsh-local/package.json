@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-pwsh-local",
   "description": "Local PowerShell implementation of the Hydra harness bash executor seam",
-  "version": "0.1.1-rc.5",
+  "version": "0.1.1-rc.6",
   "publishConfig": {
     "access": "public"
   },

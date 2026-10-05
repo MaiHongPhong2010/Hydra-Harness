@@ -6,7 +6,7 @@
       "application": "Deliver questions from running agents to the user and return their answers."
     }
   },
-  "version": "0.1.1-rc.5",
+  "version": "0.1.1-rc.6",
   "publishConfig": {
     "access": "public"
   },

@@ -6,7 +6,7 @@
       "application": "Connect ChatGPT, Google Antigravity/Gemini API, Gemini Web media, Claude, xAI, Kimi, Cursor, and Kiro accounts."
     }
   },
-  "version": "0.1.1-rc.5",
+  "version": "0.1.1-rc.6",
   "publishConfig": {
     "access": "public"
   },

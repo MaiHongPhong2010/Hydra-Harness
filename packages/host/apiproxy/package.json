@@ -6,7 +6,7 @@
       "application": "Connect the app to Host-owned conversations, uploads, and local file operations."
     }
   },
-  "version": "0.1.1-rc.5",
+  "version": "0.1.1-rc.6",
   "publishConfig": {
     "access": "public"
   },

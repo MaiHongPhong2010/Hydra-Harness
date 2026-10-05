@@ -6,7 +6,7 @@
       "application": "Cache derived session views to reduce work when reopening long conversations."
     }
   },
-  "version": "0.1.1-rc.5",
+  "version": "0.1.1-rc.6",
   "publishConfig": {
     "access": "public"
   },

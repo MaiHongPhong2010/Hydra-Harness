@@ -39,7 +39,7 @@ describe('gen-tool-catalog collectToolCatalog', () => {
       'browser_take_screenshot', 'browser_type', 'browser_upload_file', 'browser_wait', 'browser_wait_for',
       'cordis_define', 'cordis_inspect_list',
       'cordis_inspect_query', 'cordis_inspect_self', 'cordis_run', 'cordis_stop',
-      'cordis_undefine', 'create_goal', 'edit', 'exit_plan_mode', 'followup_task', 'get_goal', 'glob', 'grep',
+      'cordis_undefine', 'create_goal', 'edit', 'exit_plan_mode', 'followup_task', 'gemini_web_retrieve', 'get_goal', 'glob', 'grep',
       'image_generate', 'image_generate_google', 'interrupt_agent', 'interrupt_agent', 'job_kill', 'job_list', 'job_output',
       'list_agents', 'list_agents', 'lsp', 'page_memory_get', 'page_memory_upsert', 'pwsh', 'pwsh', 'ralph',
       'read', 'read_image', 'report', 'run_code', 'schedule_create', 'schedule_delete',

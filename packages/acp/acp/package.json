@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-acp",
   "description": "Automation-only Agent Client Protocol server for driving Hydra harness agents over JSON-RPC stdio",
-  "version": "0.1.1-rc.6",
+  "version": "0.1.1-rc.7",
   "publishConfig": {
     "access": "public"
   },

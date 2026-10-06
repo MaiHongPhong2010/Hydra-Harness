@@ -6,7 +6,7 @@
       "application": "Store conversation titles and coordinate the title provider selected by the profile."
     }
   },
-  "version": "0.1.1-rc.6",
+  "version": "0.1.1-rc.7",
   "publishConfig": {
     "access": "public"
   },

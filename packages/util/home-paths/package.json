@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-home-paths",
   "description": "Shared filesystem path helpers for the Hydra harness",
-  "version": "0.1.1-rc.6",
+  "version": "0.1.1-rc.7",
   "publishConfig": {
     "access": "public"
   },

@@ -6,7 +6,7 @@
       "application": "Remind an agent to change approach when it repeatedly calls the same tool with the same arguments."
     }
   },
-  "version": "0.1.1-rc.6",
+  "version": "0.1.1-rc.7",
   "publishConfig": {
     "access": "public"
   },

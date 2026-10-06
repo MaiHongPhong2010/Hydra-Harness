@@ -6,7 +6,7 @@
       "application": "Apply the session's read-only or workspace-write restrictions to file mutations."
     }
   },
-  "version": "0.1.1-rc.6",
+  "version": "0.1.1-rc.7",
   "publishConfig": {
     "access": "public"
   },

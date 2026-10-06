@@ -5,7 +5,7 @@
  * The hydra entry package carries its internal runtime closure, so this check
  * installs only that tarball. The other packed directories are still read to
  * validate their identities, but no internal package is supplied as a consumer
- * dependency. That is the bare npm install @hydraharness/harness path.
+ * dependency. Local and global installations retain normal lifecycle scripts.
  *
  * What this proves is that `files` selected a complete payload and that the
  * published dependency ranges resolve. A workspace link or a stale `lib/` in the
@@ -15,7 +15,7 @@
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { delimiter, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -170,6 +170,23 @@ async function main(): Promise<void> {
     }
     console.log('release verify-packed-install: bare launcher rejected non-interactive input as expected')
     await verifyWebBoot(bin, consumerRoot, environment)
+
+    if (family.id === 'hydra') {
+      const prefix = join(consumerRoot, 'global')
+      capture('npm', ['install', '--global', '--prefix', prefix, expected.url, '--no-audit', '--no-fund'],
+        { cwd: consumerRoot, env: environment })
+      const windows = process.platform === 'win32'
+      const globalModules = windows ? join(prefix, 'node_modules') : join(prefix, 'lib/node_modules')
+      const globalDirectory = windows ? prefix : join(prefix, 'bin')
+      const globalBin = join(globalModules, ...entry.packageName.split('/'), entry.binPath)
+      const globalVersion = capture('hydra', ['--version'], {
+        cwd: consumerRoot,
+        env: { ...environment, PATH: `${globalDirectory}${delimiter}${environment.PATH ?? environment.Path ?? ''}` },
+      })
+      if (globalVersion !== expected.version) throw new Error('global hydra shim reported an unexpected version')
+      await verifyWebBoot(globalBin, consumerRoot, environment)
+      console.log('release verify-packed-install: global hydra command and Web profile passed')
+    }
   } finally {
     rmSync(consumerRoot, { recursive: true, force: true })
   }

@@ -1,0 +1,71 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`installs the running release, then reuses it and opens the ordinary menu 1`] = `
+{
+  "calls": [
+    [
+      "prefix",
+      "--global",
+    ],
+    [
+      "install",
+      "--global",
+      "@hydraharness/harness@{{version}}",
+      "--no-audit",
+      "--no-fund",
+    ],
+    [
+      "prefix",
+      "--global",
+    ],
+  ],
+  "firstCode": 0,
+  "firstOutput": "Installing hydra {{version}} with npm...
+hydra is ready. Next time, run: hydra
+
+Hydra Harness
+
+Choose a mode:
+  1) Web       Start the Web UI
+  2) Headless  Run one task in this terminal
+  3) Desktop   Source checkout only
+Choice [1-3, q]: ",
+  "secondCode": 0,
+  "secondOutput": "hydra is ready. Next time, run: hydra
+
+Hydra Harness
+
+Choose a mode:
+  1) Web       Start the Web UI
+  2) Headless  Run one task in this terminal
+  3) Desktop   Source checkout only
+Choice [1-3, q]: ",
+  "stderr": "",
+}
+`;
+
+exports[`reports a missing PATH entry without claiming the command is ready 1`] = `
+{
+  "code": 0,
+  "output": "Installing hydra {{version}} with npm...
+hydra is installed. Add {{bin}} to PATH, then run: hydra
+
+Hydra Harness
+
+Choose a mode:
+  1) Web       Start the Web UI
+  2) Headless  Run one task in this terminal
+  3) Desktop   Source checkout only
+Choice [1-3, q]: ",
+  "stderr": "",
+}
+`;
+
+exports[`reports failed installation and does not open the menu 1`] = `
+{
+  "code": 1,
+  "output": "Installing hydra {{version}} with npm...",
+  "stderr": "npm fixture: global prefix is not writable
+hydra: npm global installation failed (exit 1). Check npm's error above and global-prefix permissions.",
+}
+`;

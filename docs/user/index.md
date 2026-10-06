@@ -84,6 +84,8 @@ Run the [npm package](https://www.npmjs.com/package/@hydraharness/harness) witho
 npx @hydraharness/harness
 ```
 
+The first interactive run installs the `hydra` command through npm. After that, run `hydra` from your workspace; [the installation reference](../../apps/cli/reference/README.md#persistent-command) covers PATH, updates, and removal.
+
 The interactive launcher offers Web, Headless, and Desktop. Desktop currently prints the source-checkout workflow because the npm package does not yet ship a supported Electron artifact. For scripts, CI, or redirected input, use `npx @hydraharness/harness web` or `npx @hydraharness/harness --profile headless "<task>"`; the Web UI starts at `http://127.0.0.1:3080`, and `--no-open` prevents the browser from opening automatically.
 
 ### From source

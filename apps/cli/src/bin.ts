@@ -65,6 +65,16 @@ async function dispatch(invocation: RunnableInvocation): Promise<void> {
 }
 
 if (invocation.mode === 'menu') {
+  if (process.env.npm_command === 'exec' && process.env.npm_lifecycle_event === 'npx'
+    && process.stdin.isTTY && process.stdout.isTTY && !process.env.CI) {
+    const { installNpxCommand } = await import('./install-command.ts')
+    try {
+      await installNpxCommand(readVersion())
+    } catch (error) {
+      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+      process.exit(1)
+    }
+  }
   const { runModeMenu } = await import('./mode-menu.ts')
   const selection = await runModeMenu()
   if (selection.kind === 'profile') {

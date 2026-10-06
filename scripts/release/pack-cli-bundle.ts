@@ -92,6 +92,14 @@ function unpackPackage(packageInfo: PackedPackage, nodeModules: string, temporar
   mkdirSync(dirname(target), { recursive: true })
   if (existsSync(target)) rmSync(target, { recursive: true, force: true })
   cpSync(join(extract, 'package'), target, { recursive: true, dereference: true })
+  // Only the CLI root declares installed dependencies. npm otherwise treats
+  // dependencies reached from a bundled package as bundled in global installs.
+  const manifestPath = join(target, 'package.json')
+  const manifest = readManifest(manifestPath)
+  for (const section of [...DEPENDENCY_SECTIONS, 'peerDependenciesMeta', 'devDependencies']) {
+    Reflect.deleteProperty(manifest, section)
+  }
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n')
   rmSync(extract, { recursive: true, force: true })
 }
 
@@ -171,8 +179,8 @@ function packPatchedDependencies(packages: readonly PackedPackage[], temporary: 
 
 /**
  * Pack the CLI with its internal dependency and peer closure and installed pnpm patches.
- * Bundled packages are opaque to npm's peer resolver; other external packages
- * stay ordinary dependencies so npm selects their platform-specific implementations.
+ * The CLI root owns all dependency declarations; bundled copies omit them so
+ * npm installs external platform packages in both local and global consumers.
  *
  * @param destination - directory holding hydra tarballs and receiving the replacement.
  * @param member - the CLI release member.

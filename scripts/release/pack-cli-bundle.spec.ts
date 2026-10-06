@@ -3,6 +3,7 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, expect, it, vi } from 'vitest'
 import { packCliBundle } from './pack-cli-bundle.ts'
 import { tarballName, type ReleaseMember } from './families.ts'
@@ -76,4 +77,36 @@ it.each(['1.0.0', '1.0.1'])('validates installed patched SDK version %s before b
   expect(manifest.bundleDependencies).not.toContain('node-pty')
   expect(manifest.dependencies['node-pty']).toBe('1.0.0')
   expect(capture(process.execPath, [join(consumer, 'package/lib/index.js')], { cwd: consumer })).toBe('installed-patch')
+}, 30_000)
+
+it('installs external dependencies and their lifecycle scripts under a global prefix', () => {
+  const root = mkdtempSync(join(tmpdir(), 'hydra-global-bundle-'))
+  roots.push(root)
+  const hydra = join(root, 'hydra')
+  const vendor = join(root, 'vendor')
+  const external = join(root, 'external')
+  mkdirSync(hydra)
+  mkdirSync(vendor)
+  mkdirSync(external)
+  write(join(external, 'package.json'), JSON.stringify({
+    name: 'fixture-native', version: '1.0.0', type: 'module', exports: './index.js',
+    scripts: { install: 'node install.js' },
+  }))
+  write(join(external, 'install.js'), 'import { writeFileSync } from "node:fs"; writeFileSync("installed", "ready")\n')
+  write(join(external, 'index.js'), 'import { readFileSync } from "node:fs"; export const value = readFileSync(new URL("installed", import.meta.url), "utf8")\n')
+  capture('npm', ['pack', '--pack-destination', root], { cwd: external })
+  const cli = packed(root, hydra, '@hydraharness/harness', 'apps/cli',
+    { '@hydraharness/harness-adapter': '1.0.0' },
+    'import { value } from "@hydraharness/harness-adapter"; console.log(value)\n')
+  packed(root, hydra, '@hydraharness/harness-adapter', 'packages/llm/adapter',
+    { 'fixture-native': pathToFileURL(join(root, 'fixture-native-1.0.0.tgz')).href },
+    'export { value } from "fixture-native"\n')
+  packed(root, vendor, '@hydraharness/cordis', 'vendor/cordis', {}, 'export {}\n')
+  write(join(root, 'pnpm-workspace.yaml'), 'patchedDependencies: {}\n')
+  vi.spyOn(process, 'cwd').mockReturnValue(root)
+  const tarball = packCliBundle(hydra, cli, vendor)
+  const prefix = join(root, 'global')
+  capture('npm', ['install', '--global', '--prefix', prefix, join(hydra, tarball), '--no-audit', '--no-fund'], { cwd: root })
+  const modules = process.platform === 'win32' ? join(prefix, 'node_modules') : join(prefix, 'lib/node_modules')
+  expect(capture(process.execPath, [join(modules, '@hydraharness/harness/lib/index.js')], { cwd: root })).toBe('ready')
 }, 30_000)

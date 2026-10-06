@@ -6,6 +6,20 @@ This reference defines the interactive menu, profile, web-alias, plugin-manageme
 
 A bare `hydra` invocation requires TTY stdin and stdout and no non-empty `CI` value. It presents Web, Headless, and Desktop choices. Web maps to the `web` profile, Headless prompts for one task and maps to the `headless` profile, and Desktop prints the source-checkout workflow without launching Electron because the npm artifact does not yet support Desktop. Use `hydra web` or `hydra --profile headless "task"` in scripts, CI, and redirected input; a non-interactive bare invocation exits 1 with those commands on stderr.
 
+### Persistent command
+
+Running bare `npx @hydraharness/harness` in an interactive terminal installs that running version with npm's global installer, verifies its version and command shim, and then opens the menu. The same installed version is reused. Later runs can use `hydra` from any workspace directory. npm's configured global prefix must be writable; installation failure exits nonzero before the menu. If the global command directory is absent from PATH, the launcher prints the directory to add and reports the package as installed rather than ready.
+
+Explicit npx commands such as `npx @hydraharness/harness web`, help, version, CI, redirected input, and direct `hydra` launches do not perform this setup. To install without the interactive menu, update, or remove the command, use npm:
+
+```sh
+npm install -g @hydraharness/harness@latest
+hydra
+npm uninstall -g @hydraharness/harness
+```
+
+The [persistent-command note](../../../.agents/notes/implemented/feature/2026-10-06-npx-persistent-command.md) records installer ownership and verification.
+
 ## Profile boot
 
 `hydra --profile <name>` boots the profile at `$HYDRA_HOME/profiles/<name>`. The effective tree is composed over an empty root by applying, in order: each bundle patch named in the profile manifest's `hydra.profile.bundles` list, the profile's own `cordis.patch.yml`, the home-level `$HYDRA_HOME/cordis.patch.yml` (machine-local preferences shared by every profile, so it outranks the per-profile layer), and each `--patch <path>` overlay in argv order. Later layers win per row; a patch replaces the targeted row's complete `config` value rather than deep-merging keys, and may insert new rows. A parse, schema, resolution, or plugin boot failure is reported and exits nonzero. SIGINT and SIGTERM dispose the mounted root before exit.

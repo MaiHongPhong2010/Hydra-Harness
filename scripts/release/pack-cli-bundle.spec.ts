@@ -3,7 +3,6 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { afterEach, expect, it, vi } from 'vitest'
 import { packCliBundle } from './pack-cli-bundle.ts'
 import { tarballName, type ReleaseMember } from './families.ts'
@@ -80,7 +79,7 @@ it.each(['1.0.0', '1.0.1'])('validates installed patched SDK version %s before b
 }, 30_000)
 
 it('installs external dependencies and their lifecycle scripts under a global prefix', () => {
-  const root = mkdtempSync(join(tmpdir(), 'hydra-global-bundle-'))
+  const root = mkdtempSync(join(tmpdir(), 'hydra-global~bundle-'))
   roots.push(root)
   const hydra = join(root, 'hydra')
   const vendor = join(root, 'vendor')
@@ -99,7 +98,8 @@ it('installs external dependencies and their lifecycle scripts under a global pr
     { '@hydraharness/harness-adapter': '1.0.0' },
     'import { value } from "@hydraharness/harness-adapter"; console.log(value)\n')
   packed(root, hydra, '@hydraharness/harness-adapter', 'packages/llm/adapter',
-    { 'fixture-native': pathToFileURL(join(root, 'fixture-native-1.0.0.tgz')).href },
+    // npm file specs keep Windows short-path tildes literal, unlike file URLs.
+    { 'fixture-native': 'file:' + join(root, 'fixture-native-1.0.0.tgz').replaceAll('\\', '/') },
     'export { value } from "fixture-native"\n')
   packed(root, vendor, '@hydraharness/cordis', 'vendor/cordis', {}, 'export {}\n')
   write(join(root, 'pnpm-workspace.yaml'), 'patchedDependencies: {}\n')

@@ -1,0 +1,117 @@
+name: Publish CLI to GitHub Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact CLI version already published on npmjs.org
+        required: true
+        type: string
+  workflow_run:
+    workflows: ['Release publish (hydra)']
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-package-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://npm.pkg.github.com
+
+      - name: Resolve release version
+        id: release
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict'
+          import { appendFileSync, readFileSync } from 'node:fs'
+          const version = process.env.REQUESTED_VERSION || JSON.parse(readFileSync('apps/cli/package.json', 'utf8')).version
+          assert.match(version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'An exact release version is required')
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`)
+          NODE
+
+      - name: Prepare GitHub tarball from the published CLI
+        id: package
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          mirror="$RUNNER_TEMP/github-package"
+          mkdir -p "$mirror/source"
+          npm pack "@hydraharness/harness@$VERSION" --ignore-scripts --json \
+            --registry=https://registry.npmjs.org --pack-destination "$mirror" > "$mirror/packed.json"
+          filename=$(node -p "JSON.parse(require('fs').readFileSync('$mirror/packed.json', 'utf8'))[0].filename")
+          tar -xzf "$mirror/$filename" -C "$mirror/source"
+          export MIRROR_ROOT="$mirror/source/package"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict'
+          import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+          import { join } from 'node:path'
+          const path = join(process.env.MIRROR_ROOT, 'package.json')
+          const manifest = JSON.parse(readFileSync(path, 'utf8'))
+          assert.equal(manifest.name, '@hydraharness/harness')
+          assert.equal(manifest.version, process.env.VERSION)
+          assert.equal(manifest.bin.hydra, 'lib/bin.js')
+          assert.ok(existsSync(join(process.env.MIRROR_ROOT, manifest.bin.hydra)))
+          manifest.name = `@${process.env.GITHUB_REPOSITORY_OWNER.toLowerCase()}/harness`
+          manifest.repository = { type: 'git', url: `https://github.com/${process.env.GITHUB_REPOSITORY}.git` }
+          manifest.publishConfig = { registry: 'https://npm.pkg.github.com' }
+          writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`)
+          appendFileSync(process.env.GITHUB_OUTPUT, `name=${manifest.name}\n`)
+          NODE
+          # Preserve bundled modules; fixed archive metadata makes retries comparable.
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+            -czf "$mirror/github-package.tgz" -C "$mirror/source" package
+          export MIRROR_TARBALL="$mirror/github-package.tgz"
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto'
+          import { appendFileSync, readFileSync } from 'node:fs'
+          const integrity = `sha512-${createHash('sha512').update(readFileSync(process.env.MIRROR_TARBALL)).digest('base64')}`
+          appendFileSync(process.env.GITHUB_OUTPUT, `integrity=${integrity}\n`)
+          NODE
+
+      - name: Publish and verify GitHub package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NAME: ${{ steps.package.outputs.name }}
+          VERSION: ${{ steps.release.outputs.version }}
+          INTEGRITY: ${{ steps.package.outputs.integrity }}
+        run: |
+          mirror="$RUNNER_TEMP/github-package"
+          if npm view "$NAME@$VERSION" dist.integrity --json --registry=https://npm.pkg.github.com \
+            > "$mirror/registry.json" 2> "$mirror/registry.err"; then
+            published=$(node -p "JSON.parse(require('fs').readFileSync('$mirror/registry.json', 'utf8'))")
+            if [[ "$published" != "$INTEGRITY" ]]; then
+              echo "::error::$NAME@$VERSION already exists with different content"
+              exit 1
+            fi
+            echo "$NAME@$VERSION is already published with identical content"
+          elif grep -q 'E404' "$mirror/registry.json" "$mirror/registry.err"; then
+            npm publish "$mirror/github-package.tgz" --ignore-scripts --tag latest --registry=https://npm.pkg.github.com
+          else
+            cat "$mirror/registry.err" >&2
+            exit 1
+          fi
+          npm view "$NAME@$VERSION" version repository dist.integrity --json --registry=https://npm.pkg.github.com
+          echo "Published $NAME@$VERSION: https://github.com/$GITHUB_REPOSITORY/pkgs/npm/harness" >> "$GITHUB_STEP_SUMMARY"

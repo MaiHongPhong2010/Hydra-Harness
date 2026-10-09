@@ -14,6 +14,8 @@ Two hard blockers sat in the way. All 217 workspace manifests set `private: true
 
 ## Decision
 
+The self-contained CLI also has a GitHub Packages mirror, published by [publish-github-package.yml](../../../../.github/workflows/publish-github-package.yml) after a successful npm release or an explicit version dispatch. It downloads the exact npmjs.org tarball and changes only the root manifest's name, repository, and registry; bundled modules retain their `@hydraharness` names. GitHub requires the destination scope to match the repository owner, so this mirror uses `@maihongphong1902/harness` and a repository-scoped `GITHUB_TOKEN` with `packages: write`. Normalizing tar metadata permits identical-content retries; an existing version with different integrity or a registry failure other than absence stops publication. Mirroring the published CLI avoids rebuilding an immutable release or renaming the source package family solely to populate the repository's Packages list.
+
 ### Three independent sequences
 
 `packages/`, `vendor/`, and `native/` each have one bump sequence and one publication, sharing no version, no trigger, and no waiting. Releasing hydra does not republish vendor; releasing vendor does not republish native.

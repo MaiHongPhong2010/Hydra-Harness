@@ -51,6 +51,8 @@ npx @hydraharness/harness
 
 The first interactive run installs the `hydra` command through npm. After that, start it from your workspace with `hydra`; [the installation reference](apps/cli/reference/README.md#persistent-command) covers PATH, updates, and removal.
 
+The CLI is also mirrored as `@maihongphong1902/harness` in this repository's [GitHub Packages](https://github.com/MaiHongPhong1902/Hydra-Harness/pkgs/npm/harness). Installing from that registry requires [GitHub Packages authentication](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-to-github-packages).
+
 The interactive launcher lets you choose Web, Headless, or Desktop. Web starts at `http://127.0.0.1:3080` and local launches open your browser automatically; SSH launches print the host URL so your SSH client or editor can handle forwarding. Choose Desktop only to see the source-checkout instructions: the npm package does not yet ship a supported Electron Desktop artifact.
 
 For scripts, CI, or redirected input, use an explicit command instead of the menu:

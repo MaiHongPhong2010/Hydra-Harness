@@ -181,6 +181,9 @@ importers:
       '@hydraharness/harness-cordis-client-runner':
         specifier: workspace:^
         version: link:../../packages/extensions/cordis-client-runner
+      '@hydraharness/harness-desktop':
+        specifier: workspace:^
+        version: link:../desktop
       '@hydraharness/harness-fs-local':
         specifier: workspace:^
         version: link:../../packages/fs/fs-local
@@ -378,9 +381,6 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@hydraharness/harness':
-        specifier: workspace:^
-        version: link:../cli
       '@hydraharness/harness-atomic-write':
         specifier: workspace:^
         version: link:../../packages/util/atomic-write
@@ -396,6 +396,10 @@ importers:
       prettier:
         specifier: ^3.9.5
         version: 3.9.6
+    devDependencies:
+      '@hydraharness/harness':
+        specifier: workspace:^
+        version: link:../cli
     optionalDependencies:
       electron:
         specifier: ^44.0.0

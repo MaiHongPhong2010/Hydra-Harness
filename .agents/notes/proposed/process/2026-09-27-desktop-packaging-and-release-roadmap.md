@@ -4,7 +4,7 @@ Status: proposed
 
 ## Problem
 
-Hydra Desktop is a Windows-first Electron developer preview launched from a source checkout. The source desktop shell and embedded browser/terminal layout are shipped, while packaging, installation, signing, updating, and crash-reporting policy remain future release work. A root build-plan document mixed shipped layout decisions with that unshipped roadmap and had no inbound owner link.
+Hydra Desktop is a Windows-first Electron developer preview launched from npm or a source checkout. The [npm Desktop launcher](../../implemented/feature/2026-10-09-npm-desktop-launch.md) supplies the Electron shell and embedded browser/terminal layout. Standalone installers, signing, updating, and crash-reporting policy remain future release work.
 
 ## Proposal
 

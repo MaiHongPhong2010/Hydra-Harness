@@ -22,6 +22,9 @@
     "@yarnpkg/cli-dist",
     "lightningcss"
   ],
+  "ignoreIssues": {
+    "scripts/release/verify-packed-install.ts": ["unlisted"]
+  },
   "workspaces": {
     "apps/desktop": {
       "entry": [

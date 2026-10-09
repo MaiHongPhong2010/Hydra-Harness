@@ -1,10 +1,10 @@
 # `hydra` CLI behavior reference
 
-This reference defines the interactive menu, profile, web-alias, plugin-management, and config-dump command modes. Argv is parsed once through [`src/args.ts`](../src/args.ts), and [`src/bin.ts`](../src/bin.ts) dynamically imports only the selected runner.
+This reference defines the interactive menu, Desktop, profile, web-alias, plugin-management, and config-dump command modes. Argv is parsed once through [`src/args.ts`](../src/args.ts), and [`src/bin.ts`](../src/bin.ts) dynamically imports only the selected runner.
 
 ## Interactive menu
 
-A bare `hydra` invocation requires TTY stdin and stdout and no non-empty `CI` value. It presents Web, Headless, and Desktop choices. Web maps to the `web` profile, Headless prompts for one task and maps to the `headless` profile, and Desktop prints the source-checkout workflow without launching Electron because the npm artifact does not yet support Desktop. Use `hydra web` or `hydra --profile headless "task"` in scripts, CI, and redirected input; a non-interactive bare invocation exits 1 with those commands on stderr.
+A bare `hydra` invocation requires TTY stdin and stdout and no non-empty `CI` value. It presents Web, Headless, and Desktop choices. Web maps to the `web` profile, Headless prompts for one task and maps to the `headless` profile, and Desktop launches Electron. Use `hydra web`, `hydra desktop`, or `hydra --profile headless "task"` with redirected input; a non-interactive bare invocation exits 1 with those commands on stderr.
 
 ### Persistent command
 
@@ -20,6 +20,10 @@ npm uninstall -g @hydraharness/harness
 
 The [persistent-command note](../../../.agents/notes/implemented/feature/2026-10-06-npx-persistent-command.md) records installer ownership and verification.
 
+## Desktop
+
+`hydra desktop [args...]` launches the installed Electron executable with the bundled Desktop entry and forwards its arguments. The launcher waits for Desktop to close and returns its exit status. Desktop starts the same installation's Web Host on an ephemeral loopback port, including when the CLI is installed under its GitHub Packages mirror name. Electron's optional dependency and install scripts must be enabled. `hydra desktop --help` prints command help without opening a window; profile and patch options supplied before `desktop` are rejected. See the [Desktop guide](../../../docs/user/guide/desktop.md) for setup and data locations.
+
 ## Profile boot
 
 `hydra --profile <name>` boots the profile at `$HYDRA_HOME/profiles/<name>`. The effective tree is composed over an empty root by applying, in order: each bundle patch named in the profile manifest's `hydra.profile.bundles` list, the profile's own `cordis.patch.yml`, the home-level `$HYDRA_HOME/cordis.patch.yml` (machine-local preferences shared by every profile, so it outranks the per-profile layer), and each `--patch <path>` overlay in argv order. Later layers win per row; a patch replaces the targeted row's complete `config` value rather than deep-merging keys, and may insert new rows. A parse, schema, resolution, or plugin boot failure is reported and exits nonzero. SIGINT and SIGTERM dispose the mounted root before exit.
@@ -34,7 +38,7 @@ The launcher's flags come first and end at the first token it does not recognize
 
 A composition mounts once. An ordinary plugin injects `cmdlineArgs`, parses this app's arguments, and provides what it resolved as a service; each row configured from flags injects that service, and Loader waits for it before evaluating the row's config (`port: !!js ctx.webStartup.port ?? 3080`). A flag therefore beats the value written beside it. This precedence requires the row to retain that expression; a user patch that replaces the whole `config` with literals removes the runtime read. Help and rejected arguments request exit — nonzero for a rejection, 0 for help — without activating rows that depend on the provider's service. A live `cordis.patch.yml` edit re-evaluates expressions against services that are still up, so it cannot reset a served port.
 
-Launcher flags must come before app arguments, and the launcher's parser consumes one `--`: an app argument that must arrive as a literal `--` needs `-- --`. A first app argument equal to `web` or `plugin` selects that subcommand instead. `ctx.cmdlineArgs.get()` is a shared immutable read: multiple plugins may parse the same snapshot, while a profile with no reader ignores its app arguments.
+Launcher flags must come before app arguments, and the launcher's parser consumes one `--`: an app argument that must arrive as a literal `--` needs `-- --`. A first app argument equal to `web`, `desktop`, or `plugin` selects that subcommand instead. `ctx.cmdlineArgs.get()` is a shared immutable read: multiple plugins may parse the same snapshot, while a profile with no reader ignores its app arguments.
 
 The shipped apps own these command lines:
 

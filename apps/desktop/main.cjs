@@ -13,7 +13,7 @@ const { stripVTControlCharacters } = require('node:util')
 const { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell, utilityProcess } = require('electron')
 const nodePty = require('node-pty')
 
-const CLI_ENTRY = join(require.resolve('@hydraharness/harness/package.json'), '..', 'lib', 'bin.js')
+const CLI_ENTRY = process.env.HYDRA_DESKTOP_CLI_ENTRY || join(require.resolve('@hydraharness/harness/package.json'), '..', 'lib', 'bin.js')
 const BROWSER_ENTRY = join(require.resolve('@hydraharness/harness-browser-electron/package.json'), '..', 'electron-app', 'main.cjs')
 const DESKTOP_ICON = join(__dirname, 'assets', process.platform === 'win32' ? 'hydra.ico' : 'hydra.png')
 const SMOKE_ZOOM = process.argv.includes('--smoke-zoom')

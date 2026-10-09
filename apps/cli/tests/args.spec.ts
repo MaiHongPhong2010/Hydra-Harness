@@ -21,6 +21,15 @@ function exitCode(argv: string[]): number {
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('parseHydraArgs', () => {
+  it('routes Desktop and forwards its arguments', () => {
+    expect(parse(['desktop'])).toEqual({ mode: 'desktop', args: [] })
+    expect(parse(['desktop', '--smoke', '--disable-gpu']))
+      .toEqual({ mode: 'desktop', args: ['--smoke', '--disable-gpu'] })
+    expect(exitCode(['--profile', 'web', 'desktop'])).toBe(1)
+    expect(exitCode(['--patch', 'a.yml', 'desktop'])).toBe(1)
+    expect(exitCode(['desktop', '--help'])).toBe(0)
+  })
+
   it('routes profile boots and the web alias, handing the rest to the app', () => {
     expect(parse(['--profile', 'tui'])).toEqual({ mode: 'profile', profile: 'tui', patches: [], args: [] })
     expect(parse(['--profile', 'tui', '--patch', 'a.yml', '--patch', 'b.yml']))

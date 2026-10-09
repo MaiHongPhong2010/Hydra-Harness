@@ -26,6 +26,7 @@
     "@hydraharness/cordis-plugin-timer": "workspace:^",
     "@hydraharness/harness-agent-tool-presentation": "workspace:^",
     "@hydraharness/harness-app-boot": "workspace:^",
+    "@hydraharness/harness-desktop": "workspace:^",
     "@hydraharness/harness-base": "workspace:^",
     "@hydraharness/harness-cordis-client-runner": "workspace:^",
     "@hydraharness/harness-client-ui-agent-preset": "workspace:^",

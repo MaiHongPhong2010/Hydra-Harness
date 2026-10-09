@@ -29,6 +29,11 @@ type RunnableInvocation = Exclude<HydraInvocation, { mode: 'menu' }>
 
 async function dispatch(invocation: RunnableInvocation): Promise<void> {
   switch (invocation.mode) {
+    case 'desktop': {
+      const { runDesktop } = await import('./desktop.ts')
+      process.exitCode = runDesktop(invocation.args)
+      break
+    }
     case 'profile': {
       const { runProfile } = await import('./profile-boot.ts')
       const running = await runProfile({
@@ -79,6 +84,8 @@ if (invocation.mode === 'menu') {
   const selection = await runModeMenu()
   if (selection.kind === 'profile') {
     await dispatch({ mode: 'profile', profile: selection.profile, patches: [], args: selection.args })
+  } else if (selection.kind === 'desktop') {
+    await dispatch({ mode: 'desktop', args: [] })
   } else {
     process.exitCode = selection.code
   }

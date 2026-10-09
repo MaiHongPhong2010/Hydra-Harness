@@ -53,12 +53,10 @@ describe('runModeMenu', () => {
     expect(run.error).toContain('a Headless task is required')
   })
 
-  it('reports Desktop as source-only without launching it', async () => {
+  it('selects Desktop', async () => {
     const run = await runMenu('3\n')
-    expect(run.result).toEqual({ kind: 'exit', code: 1 })
-    expect(run.output).toContain('pnpm run desktop')
-    expect(run.output).toContain('no supported npm Desktop artifact')
-    expect(run.output).not.toContain('npx @hydraharness/harness desktop')
+    expect(run.result).toEqual({ kind: 'desktop' })
+    expect(run.output).toContain('Open the Electron app')
   })
 
   it('exits successfully on q and EOF', async () => {

@@ -24,6 +24,6 @@ The [packed-install gate](../../../../scripts/release/verify-packed-install.ts) 
 
 ## Consequences
 
-The CLI tarball includes the patched SDK and its license. Patch configuration and the installed dependency version must agree at pack time. Browser interaction, provider credentials, media quota, and native Desktop behavior remain separate checks.
+The CLI tarball includes the patched SDK and its license. Patch configuration and the installed dependency version must agree at pack time. Browser interaction, provider credentials, media quota, and [native Desktop behavior](../feature/2026-10-09-npm-desktop-launch.md) remain separate checks.
 
 The regression fixture executes the patched API from an extracted CLI with no ambient SDK. The packed Web gate rejects the unpatched release artifact with its missing-module diagnostic.

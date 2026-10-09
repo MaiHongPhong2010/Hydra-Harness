@@ -22,6 +22,12 @@ interface MenuInvocation {
   mode: 'menu'
 }
 
+/** Launch the installed Electron desktop app with its own arguments. */
+interface DesktopInvocation {
+  mode: 'desktop'
+  args: string[]
+}
+
 /** Boot a named profile and hand it the invocation's inner arguments. */
 interface ProfileInvocation {
   mode: 'profile'
@@ -50,7 +56,7 @@ interface PluginInvocation {
 }
 
 /** The resolved `hydra` invocation. Help, version, and errors exit inside {@link parseHydraArgs}. */
-export type HydraInvocation = MenuInvocation | ProfileInvocation | DumpConfigInvocation | PluginInvocation
+export type HydraInvocation = MenuInvocation | DesktopInvocation | ProfileInvocation | DumpConfigInvocation | PluginInvocation
 
 /** Launcher flags shared by the default command and the `web` alias. */
 interface BootOptions {
@@ -69,6 +75,7 @@ const collect = (value: string, previous: string[] = []): string[] => [...previo
 const HELP_EXAMPLES = `
 Examples:
   hydra                                           choose Web, Headless, or Desktop interactively
+  hydra desktop                               open the Electron desktop app
   hydra --profile web                          boot the web profile (same as: hydra web)
   hydra --profile headless "run the tests"     answer one task, print the result, and exit
   hydra --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
@@ -173,6 +180,17 @@ export function parseHydraArgs(argv: readonly string[], version: string): HydraI
     .action((args: string[], options: BootOptions) => {
       rejectParentOptions('web')
       resolved = resolveBoot(web, 'web', options, args)
+    })
+
+  program.command('desktop')
+    .description('open the Electron desktop app')
+    .helpOption('-h, --help', 'show Desktop command help')
+    .allowUnknownOption()
+    .passThroughOptions()
+    .argument('[args...]', 'arguments for Electron and the desktop app')
+    .action((args: string[]) => {
+      rejectParentOptions('desktop')
+      resolved = { mode: 'desktop', args }
     })
 
   const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')

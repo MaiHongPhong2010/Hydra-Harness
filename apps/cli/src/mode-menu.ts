@@ -14,6 +14,7 @@ export interface ModeMenuIO {
 /** The profile launch selected by the interactive menu, or its exit status. */
 export type ModeMenuResult =
   | { kind: 'profile'; profile: 'web' | 'headless'; args: string[] }
+  | { kind: 'desktop' }
   | { kind: 'exit'; code: number }
 
 const MENU_TEXT = [
@@ -23,7 +24,7 @@ const MENU_TEXT = [
   'Choose a mode:',
   '  1) Web       Start the Web UI',
   '  2) Headless  Run one task in this terminal',
-  '  3) Desktop   Source checkout only',
+  '  3) Desktop   Open the Electron app',
   '',
 ].join('\n')
 
@@ -32,17 +33,7 @@ const NON_INTERACTIVE_TEXT = [
   'Use one of these explicit commands:',
   '  npx @hydraharness/harness web',
   '  npx @hydraharness/harness --profile headless "<task>"',
-  'Desktop is available only from a Hydra source checkout; see the Desktop guide.',
-].join('\n') + '\n'
-
-const DESKTOP_TEXT = [
-  '',
-  'Desktop is currently available from a source checkout only.',
-  'Run from the repository root:',
-  '  pnpm install',
-  '  pnpm run build',
-  '  pnpm run desktop',
-  'There is no supported npm Desktop artifact or npx Desktop command yet.',
+  '  npx @hydraharness/harness desktop',
 ].join('\n') + '\n'
 
 function defaultIO(): ModeMenuIO {
@@ -108,8 +99,7 @@ export async function runModeMenu(io: ModeMenuIO = defaultIO()): Promise<ModeMen
           }
         }
         case '3':
-          io.output.write(DESKTOP_TEXT)
-          return { kind: 'exit', code: 1 }
+          return { kind: 'desktop' }
         case 'q':
           return { kind: 'exit', code: 0 }
         default:

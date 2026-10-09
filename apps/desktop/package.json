@@ -14,7 +14,8 @@
   "files": [
     "main.cjs",
     "preload.cjs",
-    "assets"
+    "assets",
+    "tests/snapshots"
   ],
   "license": "MIT",
   "scripts": {
@@ -23,7 +24,6 @@
     "smoke:zoom": "electron . --smoke-zoom"
   },
   "dependencies": {
-    "@hydraharness/harness": "workspace:^",
     "@hydraharness/harness-atomic-write": "workspace:^",
     "@hydraharness/harness-browser-electron": "workspace:^",
     "@hydraharness/harness-subprocess": "workspace:^",
@@ -32,5 +32,11 @@
   },
   "optionalDependencies": {
     "electron": "^44.0.0"
+  },
+  "peerDependencies": {
+    "@hydraharness/harness": "workspace:^"
+  },
+  "devDependencies": {
+    "@hydraharness/harness": "workspace:^"
   }
 }

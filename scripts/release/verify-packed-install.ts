@@ -12,10 +12,11 @@
  * checkout cannot stand in for a missing file here.
  */
 
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { delimiter, join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -111,6 +112,25 @@ export async function verifyWebBoot(bin: string, consumerRoot: string, environme
   }
 }
 
+/**
+ * Require the installed Desktop payload and Electron executable without opening a window.
+ * @param bin - installed CLI entry used for dependency resolution.
+ */
+export function verifyDesktopPayload(bin: string): void {
+  const require = createRequire(bin)
+  const desktop = require.resolve('@hydraharness/harness-desktop')
+  const electron: unknown = require('electron')
+  require.resolve('node-pty')
+  const files = ['main.cjs', 'preload.cjs', 'assets/hydra.ico', 'assets/hydra.png',
+    'tests/snapshots/terminal-workspaces.expected.json', 'tests/snapshots/zoom-shortcuts.expected.md']
+  for (const file of files) {
+    if (!existsSync(join(dirname(desktop), file))) throw new Error(`installed Desktop is missing ${file}`)
+  }
+  if (typeof electron !== 'string' || !existsSync(electron)) {
+    throw new Error('installed Desktop is missing the Electron executable')
+  }
+}
+
 /** Install every tarball under `--from` and drive the `--family` entry. */
 async function main(): Promise<void> {
   const { values } = parseArgs({
@@ -161,6 +181,7 @@ async function main(): Promise<void> {
     const help = capture(process.execPath, [bin, '--help'], { cwd: consumerRoot, env: environment })
     if (!help.startsWith('Usage: hydra ')) throw new Error(`${entry.packageName} --help did not print the CLI usage`)
     console.log(`release verify-packed-install: installed ${entry.packageName} reports ${version}`)
+    if (family.id === 'hydra') verifyDesktopPayload(bin)
     const bare = attempt(process.execPath, [bin], {
       cwd: consumerRoot,
       env: { ...environment, CI: '1' },
@@ -179,6 +200,7 @@ async function main(): Promise<void> {
       const globalModules = windows ? join(prefix, 'node_modules') : join(prefix, 'lib/node_modules')
       const globalDirectory = windows ? prefix : join(prefix, 'bin')
       const globalBin = join(globalModules, ...entry.packageName.split('/'), entry.binPath)
+      verifyDesktopPayload(globalBin)
       const globalVersion = capture('hydra', ['--version'], {
         cwd: consumerRoot,
         env: { ...environment, PATH: `${globalDirectory}${delimiter}${environment.PATH ?? environment.Path ?? ''}` },

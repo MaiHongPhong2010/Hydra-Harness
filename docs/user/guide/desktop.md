@@ -1,10 +1,20 @@
 # Use the desktop app
 
-Hydra Desktop is a Windows-first Electron shell around the same Hydra Host and Web renderer. The bare `npx @hydraharness/harness` menu lists Desktop so users can find this workflow, but selecting it does not launch Electron: the repository does not publish an installer, supported npm Desktop artifact, or an `npx` desktop command. Desktop runs from a source checkout during the developer preview.
+Hydra Desktop is a Windows-first Electron shell around the same Hydra Host and Web renderer. Launch it from npm or a source checkout during the developer preview.
 
 ## Prerequisites
 
-Install Node.js **22.19 or later in the 22.x line, or 24 and newer**, Git, and pnpm. The desktop browser includes its locally owned BrowserAgent source.
+Install Node.js **22.19 or later in the 22.x line, or 24 and newer**. Source builds also require Git and pnpm. npm installs Electron and the native terminal dependency, so keep optional dependencies and install scripts enabled. Desktop needs a graphical session.
+
+## Launch from npm
+
+From your workspace directory, run:
+
+```sh
+npx @hydraharness/harness@latest desktop
+```
+
+You can also run bare `npx @hydraharness/harness` and choose **3) Desktop**. That interactive first run installs the persistent command; later launches use `hydra desktop`. The [installation reference](../../../apps/cli/reference/README.md#persistent-command) covers updates, PATH, and removal.
 
 ## Build and launch
 
@@ -39,8 +49,9 @@ Desktop-specific Electron data is stored below `$HYDRA_HOME/desktop-electron`. W
 ## Troubleshooting
 
 - **`Desktop Host is not built`** — run `pnpm run build` from the repository root, then run `pnpm run desktop` again.
-- **BrowserAgent package errors during install** — confirm the tracked `packages/browser/browser-electron/third-party/browseragent` source is present, then run `pnpm install` again.
-- **You want a downloadable installer** — packaging, signing, and auto-update are not available in the current developer preview; use the source launch above.
+- **`could not start Desktop`** — reinstall with `npm install -g @hydraharness/harness@latest`, including optional dependencies and allowing install scripts. Electron must finish downloading before it can launch.
+- **BrowserAgent package errors during a source install** — confirm the tracked `packages/browser/browser-electron/third-party/browseragent` source is present, then run `pnpm install` again.
+- **You want a downloadable installer** — the developer preview uses npm or a source checkout; signing and auto-update remain part of the installer roadmap.
 
 ## Continue
 

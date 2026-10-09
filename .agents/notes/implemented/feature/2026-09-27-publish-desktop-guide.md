@@ -8,14 +8,14 @@ The public documentation describes Hydra as a desktop application, but the publi
 
 ## Decision
 
-The documentation site publishes `docs/user/guide/desktop.md` at `/guide/desktop`. The page documents the source launch sequence, the embedded Web Host, the desktop panels, the Electron data directory, and the current developer-preview limitations. The home page and Web UI guide link to it, while the CLI remains documented with its existing Web command.
+The documentation site publishes `docs/user/guide/desktop.md` at `/guide/desktop`. The page documents npm and source launches, the embedded Web Host, the desktop panels, the Electron data directory, and developer-preview limitations. The home page and Web UI guide link to it. The [npm Desktop launch note](2026-10-09-npm-desktop-launch.md) owns the runnable npm distribution.
 
 ## Alternatives considered
 
 **Keep the desktop command only in the root README.** Rejected because the website's user guide is the public entry point and already advertises the desktop surface.
 
-**Document `npx @hydraharness/harness desktop`.** Rejected because the launcher and published package expose no desktop command or distributable installer.
+**Supply an npm Desktop launcher through documentation alone.** A runnable command requires the Electron entry and its dependency payload; the [npm Desktop launch note](2026-10-09-npm-desktop-launch.md) owns that implementation.
 
 ## Consequences
 
-Readers can reach a runnable desktop setup from the website without mistaking the source launch for an installable desktop release. Future installer or auto-update work follows the [desktop packaging and release roadmap](../../proposed/process/2026-09-27-desktop-packaging-and-release-roadmap.md) and needs a separate guide update when those artifacts exist.
+Readers can reach runnable npm and source desktop setups from the website. Standalone installer and auto-update work follows the [desktop packaging and release roadmap](../../proposed/process/2026-09-27-desktop-packaging-and-release-roadmap.md) and needs a separate guide update when those artifacts exist.

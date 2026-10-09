@@ -28,7 +28,7 @@ Hydra Harness
 Choose a mode:
   1) Web       Start the Web UI
   2) Headless  Run one task in this terminal
-  3) Desktop   Source checkout only
+  3) Desktop   Open the Electron app
 Choice [1-3, q]: ",
   "secondCode": 0,
   "secondOutput": "hydra is ready. Next time, run: hydra
@@ -38,8 +38,25 @@ Hydra Harness
 Choose a mode:
   1) Web       Start the Web UI
   2) Headless  Run one task in this terminal
-  3) Desktop   Source checkout only
+  3) Desktop   Open the Electron app
 Choice [1-3, q]: ",
+  "stderr": "",
+}
+`;
+
+exports[`prints Desktop command help without installing globally or opening Electron 1`] = `
+{
+  "calls": [],
+  "code": 0,
+  "output": "Usage: hydra desktop [options] [args...]
+
+open the Electron desktop app
+
+Arguments:
+  args        arguments for Electron and the desktop app
+
+Options:
+  -h, --help  show Desktop command help",
   "stderr": "",
 }
 `;
@@ -55,7 +72,7 @@ Hydra Harness
 Choose a mode:
   1) Web       Start the Web UI
   2) Headless  Run one task in this terminal
-  3) Desktop   Source checkout only
+  3) Desktop   Open the Electron app
 Choice [1-3, q]: ",
   "stderr": "",
 }

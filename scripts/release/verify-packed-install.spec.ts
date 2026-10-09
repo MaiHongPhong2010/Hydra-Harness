@@ -1,15 +1,38 @@
 /** Rejected HTTP resources and awaited process cleanup in the installed Web probe. */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
-import { verifyWebBoot } from './verify-packed-install.ts'
+import { verifyDesktopPayload, verifyWebBoot } from './verify-packed-install.ts'
 
 const roots: string[] = []
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+})
+
+it.each(['preload.cjs', 'electron.exe'])('rejects an installed Desktop missing %s', (missing) => {
+  const root = mkdtempSync(join(tmpdir(), 'hydra-desktop-payload-'))
+  roots.push(root)
+  const desktop = join(root, 'node_modules/@hydraharness/harness-desktop')
+  mkdirSync(join(desktop, 'assets'), { recursive: true })
+  mkdirSync(join(desktop, 'tests/snapshots'), { recursive: true })
+  writeFileSync(join(desktop, 'package.json'), JSON.stringify({ main: 'main.cjs' }))
+  for (const file of ['main.cjs', 'preload.cjs', 'assets/hydra.ico', 'assets/hydra.png',
+    'tests/snapshots/terminal-workspaces.expected.json', 'tests/snapshots/zoom-shortcuts.expected.md']) {
+    writeFileSync(join(desktop, file), '')
+  }
+  for (const name of ['electron', 'node-pty']) {
+    const directory = join(root, 'node_modules', name)
+    mkdirSync(directory)
+    writeFileSync(join(directory, 'index.js'), `module.exports = ${JSON.stringify(join(root, 'electron.exe'))}`)
+  }
+  writeFileSync(join(root, 'electron.exe'), '')
+  const bin = join(root, 'lib/bin.js')
+  expect(() => { verifyDesktopPayload(bin) }).not.toThrow()
+  rmSync(missing === 'electron.exe' ? join(root, missing) : join(desktop, missing))
+  expect(() => { verifyDesktopPayload(bin) }).toThrow(missing === 'electron.exe' ? 'Electron executable' : missing)
 })
 
 it.each([

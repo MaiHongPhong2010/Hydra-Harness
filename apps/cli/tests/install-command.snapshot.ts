@@ -75,9 +75,16 @@ it('reports failed installation and does not open the menu', async () => {
   expect({ code: result.exitCode, output: result.stdout.replaceAll(version, '{{version}}'), stderr: result.stderr }).toMatchSnapshot()
 })
 
+it('prints Desktop command help without installing globally or opening Electron', async () => {
+  const root = fixture()
+  const result = await run(root, ['desktop', '--help'])
+  expect({ code: result.exitCode, output: result.stdout, stderr: result.stderr, calls: calls(root) }).toMatchSnapshot()
+})
+
 it.each([
   { args: ['--version'], env: {} },
   { args: ['--help'], env: {} },
+  { args: ['desktop', '--help'], env: {} },
   { args: [], env: { npm_command: '', npm_lifecycle_event: '' } },
   { args: [], env: { CI: '1' } },
   { args: [], env: { HYDRA_INSTALL_TEST_TTY: '0' } },

@@ -6,7 +6,7 @@
       "application": "Save and recall website observations within the configured workspace, role, and locale."
     }
   },
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",

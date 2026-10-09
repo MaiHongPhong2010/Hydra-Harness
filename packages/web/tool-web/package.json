@@ -6,7 +6,7 @@
       "application": "Let the agent search the web and fetch pages through configured web providers."
     }
   },
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

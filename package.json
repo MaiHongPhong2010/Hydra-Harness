@@ -1,6 +1,6 @@
 {
   "name": "@hydraharness/harness-root",
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "license": "MIT",
   "private": true,
   "type": "module",

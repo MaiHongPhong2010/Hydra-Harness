@@ -6,7 +6,7 @@
       "application": "Run Bash commands under the session's configured filesystem and process restrictions."
     }
   },
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

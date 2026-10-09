@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-client-ui-brand-official",
   "description": "Official Hydra harness brand occupants for the Web client's sidebar and conversation Hero slots",
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

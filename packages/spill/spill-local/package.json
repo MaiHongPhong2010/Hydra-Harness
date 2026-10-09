@@ -6,7 +6,7 @@
       "application": "Store large tool output privately on disk for later retrieval within the session."
     }
   },
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

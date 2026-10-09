@@ -6,7 +6,7 @@
       "application": "Stop tool calls when their configured execution deadline is reached."
     }
   },
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

@@ -6,7 +6,7 @@
       "application": "Let the agent navigate websites, inspect page content, and interact with page controls."
     }
   },
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

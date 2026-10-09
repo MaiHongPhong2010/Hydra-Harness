@@ -6,7 +6,7 @@
       "application": "Record agent-made file changes and support undo when the file still matches the recorded change."
     }
   },
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": { "access": "public" },
   "repository": { "type": "git", "url": "git+https://github.com/MaiHongPhong1902/Hydra-Harness.git", "directory": "packages/fs/fs-review" },
   "type": "module",

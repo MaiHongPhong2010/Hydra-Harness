@@ -6,7 +6,7 @@
       "application": "Resolve the current session's sandbox mode and allowed workspace for each protected operation."
     }
   },
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

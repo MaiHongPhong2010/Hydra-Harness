@@ -6,7 +6,7 @@
       "application": "Search the web using the configured DeepSeek search provider."
     }
   },
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-client-modules",
   "description": "Client module system, dual-face: node half composes the __HYDRA_BOOT__ entry graph (incremental hydra.client scan, bundle route, index tap, webPlugins service); browser half is the lazy-CJS module table the vendored cordis Loader consumes as its internal seam",
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

@@ -6,7 +6,7 @@
       "application": "Reduce long tool results in model context while retaining selected beginning, middle, and ending content."
     }
   },
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

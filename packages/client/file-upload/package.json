@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-client-file-upload",
   "description": "Browser background upload service for Blob and ReadableStream request bodies",
-  "version": "0.1.1-rc.7",
+  "version": "0.1.1-rc.8",
   "publishConfig": {
     "access": "public"
   },

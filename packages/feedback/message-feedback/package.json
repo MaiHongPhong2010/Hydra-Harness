@@ -6,7 +6,7 @@
       "application": "Save feedback associated with individual assistant messages."
     }
   },
-  "version": "0.1.1-rc.8",
+  "version": "0.1.1-rc.9",
   "publishConfig": {
     "access": "public"
   },

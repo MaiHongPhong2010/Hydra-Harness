@@ -6,7 +6,7 @@
       "application": "Let the agent orchestrate multiple child tasks with a JavaScript workflow."
     }
   },
-  "version": "0.1.1-rc.8",
+  "version": "0.1.1-rc.9",
   "publishConfig": {
     "access": "public"
   },

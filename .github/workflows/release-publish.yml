@@ -1,7 +1,8 @@
 # Publish the hydra release sequence to npm, from a hydra-v* tag only — never
 # from pull_request, so this never appears as a PR check. release.yml pushes that
-# tag automatically once a main push bumps the version; workflow_dispatch remains
-# for republishing an existing tag by hand. Either way, the publish job below runs
+# tag automatically once a main push bumps the version and dispatches this
+# workflow from it; workflow_dispatch also allows retrying an existing tag.
+# Either way, the publish job below runs
 # under the NPM_TOKEN environment, so its required reviewers (configured on the
 # environment, not here) still approve every write to the registry. It repacks
 # the current tree before publishing so the bytes uploaded are exactly what this

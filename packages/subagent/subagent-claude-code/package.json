@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-subagent-claude-code",
   "description": "One-shot Claude Code subagent provider over the official Agent SDK",
-  "version": "0.1.1-rc.8",
+  "version": "0.1.1-rc.9",
   "publishConfig": {
     "access": "public"
   },

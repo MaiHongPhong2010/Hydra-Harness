@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-sandbox-windows-acl",
   "description": "Windows ACL write-restriction sandbox backend (restricted-token spawn with capability-SID write allowlist) for the Hydra harness sandbox seam",
-  "version": "0.1.1-rc.8",
+  "version": "0.1.1-rc.9",
   "publishConfig": {
     "access": "public"
   },

@@ -6,7 +6,7 @@
       "application": "Continue an active goal through additional agent rounds according to its saved state."
     }
   },
-  "version": "0.1.1-rc.8",
+  "version": "0.1.1-rc.9",
   "publishConfig": {
     "access": "public"
   },

@@ -527,6 +527,21 @@ describe('Issue lifecycle workflow', () => {
 })
 
 describe('npm release workflows', () => {
+  it('dispatches publication from the new release tag after packing succeeds', () => {
+    const workflow = loadWorkflow('.github/workflows/release.yml')
+    const tag = workflowJob(workflow, 'tag')
+    expect(workflow.permissions).toEqual({ contents: 'read' })
+    expect(tag.needs).toBe('pack')
+    expect(tag.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'")
+    expect(tag.permissions).toEqual({ contents: 'write', actions: 'write' })
+    if (!Array.isArray(tag.steps)) throw new TypeError('Release tagging must define steps')
+    const dispatch = tag.steps.filter(isRecord).find(step => step.run !== undefined)
+    expect(dispatch?.env).toEqual({ GH_TOKEN: '${{ github.token }}' })
+    expect(dispatch?.run).toContain('gh workflow run release-publish.yml --ref "$tag"')
+    expect(dispatch?.run).toMatch(/git push origin "refs\/tags\/\$tag"[\s\S]*gh workflow run/)
+    expect(dispatch?.run).toMatch(/if git ls-remote[\s\S]*exit 0[\s\S]*fi[\s\S]*gh workflow run/)
+  })
+
   it('checks the protected npm token without publishing', () => {
     const verify = workflowJob(loadWorkflow('.github/workflows/npm-connection.yml'), 'verify')
     expect(verify.environment).toBe('NPM_TOKEN')
@@ -540,8 +555,8 @@ describe('npm release workflows', () => {
 
   it('keeps publication tag/dispatch-only and pack in the PR workflow', () => {
     // pack stays in the PR/master release workflows so a PR proves the set packs.
-    // hydra's release.yml also tags a version bump on main once pack succeeds,
-    // which triggers release-publish.yml; the vendor sequence has no tag job.
+    // hydra's release.yml also tags and dispatches a version bump on main once
+    // pack succeeds; the vendor sequence has no tag job.
     const expectedJobs: Record<string, string[]> = {
       'release.yml': ['pack', 'tag'],
       'release-vendor.yml': ['pack'],
@@ -554,7 +569,7 @@ describe('npm release workflows', () => {
 
     // publication is never a PR check and keeps the NPM_TOKEN environment plus
     // the shared dist-tag group. hydra's release-publish.yml also triggers from
-    // the hydra-v* tag release.yml's tag job pushes; the vendor sequence stays
+    // a manually pushed hydra-v* tag; the vendor sequence stays
     // workflow_dispatch-only.
     const expectedOn: Record<string, string[]> = {
       'release-publish.yml': ['workflow_dispatch', 'push'],

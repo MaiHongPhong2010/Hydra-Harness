@@ -21,7 +21,7 @@ You can also run bare `npx @hydraharness/harness` and choose **3) Desktop**. Tha
 From the repository root, run:
 
 ```sh
-git clone https://github.com/MaiHongPhong1902/Hydra-Harness.git
+git clone https://github.com/MaiHongPhong2010/Hydra-Harness.git
 cd Hydra-Harness
 pnpm install
 pnpm run build

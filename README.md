@@ -4,6 +4,8 @@ Hydra harness (`hydra`) is an open-source workspace for working with AI agents t
 
 Agents can read and edit project files, run commands, use browser tools, and delegate tasks. You choose the model provider, workspace, and permission policy.
 
+Read the [documentation website](https://maihongphong2010.github.io/Hydra-Harness/) for setup, model configuration, and plugin development.
+
 ## Built around plugins
 
 Hydra follows DeepSeek Harness's **everything is a plugin** architecture, powered by [Cordis](https://github.com/cordiverse/cordis). Model adapters, tools, sessions, the user interface, and the agent loop are composed through plugins and configuration.
@@ -26,7 +28,7 @@ Use Node.js **22.19 or later in the 22.x line, or 24 and newer**. Building from 
 ### Run from source
 
 ```sh
-git clone https://github.com/MaiHongPhong1902/Hydra-Harness.git
+git clone https://github.com/MaiHongPhong2010/Hydra-Harness.git
 cd Hydra-Harness
 pnpm install
 pnpm run build
@@ -50,8 +52,6 @@ npx @hydraharness/harness
 ```
 
 The first interactive run installs the `hydra` command through npm. After that, start it from your workspace with `hydra`; [the installation reference](apps/cli/reference/README.md#persistent-command) covers PATH, updates, and removal.
-
-The CLI is also mirrored as `@maihongphong1902/harness` in this repository's [GitHub Packages](https://github.com/MaiHongPhong1902/Hydra-Harness/pkgs/npm/harness). Installing from that registry requires [GitHub Packages authentication](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-to-github-packages).
 
 The interactive launcher lets you choose Web, Headless, or Desktop. Web starts at `http://127.0.0.1:3080` and local launches open your browser automatically; SSH launches print the host URL so your SSH client or editor can handle forwarding. Desktop opens the Electron app with its embedded browser, terminals, and workspace files; see the [Desktop guide](docs/user/guide/desktop.md).
 
@@ -81,7 +81,7 @@ The [Web UI guide](docs/user/guide/index.md) walks through setup and the first s
 
 ## Community and contributing
 
-Share feedback and bug reports in [GitHub Discussions](https://github.com/MaiHongPhong1902/Hydra-Harness/discussions). Read [CONTRIBUTING.md](CONTRIBUTING.md) for the current contribution policy. If you publish a plugin, add the [`hydra-plugin`](https://github.com/topics/hydra-plugin) topic to help others find it.
+Share feedback and bug reports in [GitHub Issues](https://github.com/MaiHongPhong2010/Hydra-Harness/issues). Read [CONTRIBUTING.md](CONTRIBUTING.md) for the current contribution policy. If you publish a plugin, add the [`hydra-plugin`](https://github.com/topics/hydra-plugin) topic to help others find it.
 
 ## License
 

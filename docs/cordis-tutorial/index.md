@@ -13,7 +13,7 @@ To write plugins for the harness itself — loaded from a `cordis.yml` and drive
 You need a clone of this repository with dependencies installed; the [development guide](../development.md#setup-tutorial) lists the prerequisites. No API key is needed for this tutorial; every example runs keylessly.
 
 ```sh
-git clone https://github.com/MaiHongPhong1902/Hydra-Harness.git
+git clone https://github.com/MaiHongPhong2010/Hydra-Harness.git
 cd Hydra-Harness
 pnpm install
 ```

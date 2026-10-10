@@ -23,7 +23,7 @@ import {
   splitMarkdownUrlTarget,
 } from './markdown.ts'
 
-const REPOSITORY_URL = 'https://github.com/MaiHongPhong1902/Hydra-Harness'
+const REPOSITORY_URL = 'https://github.com/MaiHongPhong2010/Hydra-Harness'
 const root = resolve(import.meta.dirname, '..')
 const generatedRoot = resolve(root, 'website/.generated')
 
@@ -129,7 +129,7 @@ function githubTarget(
   image: boolean,
 ): string {
   const path = repoPath(absPath, repoRoot)
-  if (image) return `https://raw.githubusercontent.com/MaiHongPhong1902/Hydra-Harness/${repositoryRef}/${path}${suffix}`
+  if (image) return `https://raw.githubusercontent.com/MaiHongPhong2010/Hydra-Harness/${repositoryRef}/${path}${suffix}`
   const kind = lstatSync(absPath).isDirectory() ? 'tree' : 'blob'
   const lineSuffix = line === undefined ? suffix : `#L${line}`
   return `${REPOSITORY_URL}/${kind}/${repositoryRef}/${path}${lineSuffix}`

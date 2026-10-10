@@ -144,7 +144,7 @@ function escapeVueInterpolation(html: string): string {
 const base = process.env.DOCS_BASE ?? '/'
 
 /** Site identity shared by the VitePress configuration and the llms.txt index. */
-const siteUrl = 'https://maihongphong1902.github.io/Hydra-Harness/'
+const siteUrl = 'https://maihongphong2010.github.io/Hydra-Harness/'
 
 const siteIdentity = {
   title: 'Hydra harness',
@@ -673,7 +673,7 @@ export default withMermaid({
         description: siteIdentity.description,
         url: siteUrl,
         image,
-        codeRepository: 'https://github.com/MaiHongPhong1902/Hydra-Harness',
+        codeRepository: 'https://github.com/MaiHongPhong2010/Hydra-Harness',
         license: 'https://opensource.org/licenses/MIT',
       })])
     }
@@ -765,14 +765,14 @@ export default withMermaid({
     docFooter: { prev: 'Previous', next: 'Next' },
     search: { provider: 'local' },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/MaiHongPhong1902/Hydra-Harness' },
+      { icon: 'github', link: 'https://github.com/MaiHongPhong2010/Hydra-Harness' },
     ],
     editLink: {
       pattern: ({ frontmatter }: PageData) => {
         const data: unknown = frontmatter
         const editSource: unknown = typeof data === 'object' && data !== null ? Reflect.get(data, 'editSource') : undefined
         if (typeof editSource !== 'string') throw new Error('Projected documentation page has no editSource frontmatter.')
-        return `https://github.com/MaiHongPhong1902/Hydra-Harness/edit/main/${editSource}`
+        return `https://github.com/MaiHongPhong2010/Hydra-Harness/edit/main/${editSource}`
       },
       text: 'Edit this page on GitHub',
     },

@@ -42,12 +42,12 @@ export interface DesktopFilesApi {
     path: string,
     newName: string,
     workspaceId: string,
-  ): Promise<{ oldPath: string; path: string; name: string; directory?: boolean }>
+  ): Promise<{ oldPath: string; path: string; name: string; directory?: boolean; version?: { before: string; after: string } }>
   move?(
     path: string,
     destinationDirectory: string,
     workspaceId: string,
-  ): Promise<{ oldPath: string; path: string; name: string; directory?: boolean }>
+  ): Promise<{ oldPath: string; path: string; name: string; directory?: boolean; version?: { before: string; after: string } }>
   delete?(path: string, workspaceId: string): Promise<{ path: string }>
   reveal?(path: string, workspaceId: string): Promise<boolean>
   save(
@@ -314,7 +314,7 @@ export function DesktopFilesPanel(props: {
   const savingRef = useRef(false)
   const formattingRef = useRef(false)
   const creatingRef = useRef(false)
-  const movingRef = useRef(false)
+  const mutatingRef = useRef(false)
   const mountedRef = useRef(true)
   const rootWorkspaceRef = useRef<string>()
   const documentRef = useRef<EditorDocument>()
@@ -369,12 +369,21 @@ export function DesktopFilesPanel(props: {
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formatting, setFormatting] = useState(false)
-  const [moving, setMoving] = useState(false)
+  const [mutating, setMutating] = useState(false)
   const [draggedPath, setDraggedPath] = useState<string>()
   const [dropTargetPath, setDropTargetPath] = useState<string>()
 
   const deferredDraft = useDeferredValue(document?.draft)
   const dirty = documentIsDirty(document)
+
+  const publishDocuments = useCallback((nextList: EditorDocument[]) => {
+    openDocumentsRef.current = nextList
+    setOpenDocuments(nextList)
+    const nextActiveDoc = nextList.find(d => d.path === activePathRef.current)
+    documentRef.current = nextActiveDoc
+    setDocument(nextActiveDoc)
+    props.onDirtyChange?.(nextList.some(d => documentIsDirty(d)))
+  }, [props.onDirtyChange])
 
   const updateDocument = useCallback((update: (current: EditorDocument | undefined) => EditorDocument | undefined) => {
     if (!mountedRef.current) return
@@ -397,13 +406,28 @@ export function DesktopFilesPanel(props: {
       activePathRef.current = next.path
       setActivePath(next.path)
     }
-    openDocumentsRef.current = nextList
-    setOpenDocuments(nextList)
-    const nextActiveDoc = nextList.find(d => d.path === activePathRef.current)
-    documentRef.current = nextActiveDoc
-    setDocument(nextActiveDoc)
-    props.onDirtyChange?.(nextList.some(d => documentIsDirty(d)))
-  }, [props.onDirtyChange])
+    publishDocuments(nextList)
+  }, [publishDocuments])
+
+  const remapEntryPaths = (oldPath: string, newPath: string, version?: { before: string; after: string }) => {
+    const remap = (path: string) => samePath(path, oldPath) || pathContains(oldPath, path)
+      ? `${newPath}${path.slice(oldPath.length)}` : path
+    if (activePathRef.current !== undefined) {
+      activePathRef.current = remap(activePathRef.current)
+      setActivePath(activePathRef.current)
+    }
+    publishDocuments(openDocumentsRef.current.map(d => ({
+      ...d, path: remap(d.path),
+      version: samePath(d.path, oldPath) && version !== undefined && d.version === version.before ? version.after : d.version,
+    })))
+    setChildren(current => Object.fromEntries(Object.entries(current).map(([path, entries]) => [
+      remap(path), entries.map(entry => ({ ...entry, path: remap(entry.path), name: fileName(remap(entry.path)) })),
+    ])))
+    setExpanded(current => new Set([...current].map(remap)))
+    setSelectedDirectory(current => current === undefined ? current : remap(current))
+    setCreateDraft(current => current === undefined ? current : { ...current, parent: remap(current.parent) })
+    setQuery('')
+  }
 
   const loadDirectory = useCallback(async (path: string) => {
     if (api === undefined || rootPath === undefined || workspaceId === undefined
@@ -547,7 +571,7 @@ export function DesktopFilesPanel(props: {
 
   const openFile = useCallback(async (path: string) => {
     if (api === undefined || rootPath === undefined || workspaceId === undefined
-      || savingRef.current || !mountedRef.current) return
+      || savingRef.current || mutatingRef.current || !mountedRef.current) return
     const previous = documentRef.current
     if (previous?.path === path) return
     if (documentIsDirty(previous) && !window.confirm('Discard unsaved changes and open another file?')) return
@@ -621,17 +645,17 @@ export function DesktopFilesPanel(props: {
     setShowDiff(false)
   }, [dirty, document, updateDocument])
 
-  const startCreate = (kind: CreateDraft['kind']) => {
-    if (rootPath === undefined || creatingRef.current) return
+  const startCreate = (kind: CreateDraft['kind'], parent = selectedDirectory ?? rootPath) => {
+    if (parent === undefined || creatingRef.current || mutatingRef.current) return
     setQuery('')
     setError(undefined)
     setCreateName('')
-    setCreateDraft({ parent: selectedDirectory ?? rootPath, kind })
+    setCreateDraft({ parent, kind })
   }
 
   const submitCreate = async () => {
     if (api === undefined || createDraft === undefined || workspaceId === undefined || createName.trim() === ''
-      || creatingRef.current) return
+      || creatingRef.current || mutatingRef.current) return
     const draft = createDraft
     const name = createName.trim()
     const generation = listGeneration.current
@@ -663,43 +687,40 @@ export function DesktopFilesPanel(props: {
   }
 
   const startRename = (entry: DesktopFileEntry) => {
+    if (mutatingRef.current || savingRef.current || formattingRef.current || creatingRef.current) return
     setContextMenu(undefined)
     setRenamingPath(entry.path)
     setRenameName(entry.name)
   }
 
   const submitRename = async (entry: DesktopFileEntry) => {
+    if (mutatingRef.current || savingRef.current || formattingRef.current || creatingRef.current) return
     if (api?.rename === undefined || workspaceId === undefined || rootPath === undefined
       || renameName.trim() === '' || renameName.trim() === entry.name) {
       setRenamingPath(undefined)
       return
     }
     const newName = renameName.trim()
+    const generation = listGeneration.current
+    mutatingRef.current = true
+    setMutating(true)
+    setError(undefined)
+    readRequest.current += 1
+    setReading(false)
     try {
       const result = await api.rename(entry.path, newName, workspaceId)
-      const nextList = openDocumentsRef.current.map((d) => {
-        if (d.path === entry.path) return { ...d, path: result.path }
-        if (entry.directory && (d.path.startsWith(`${entry.path}/`) || d.path.startsWith(`${entry.path}\\`))) {
-          const sub = d.path.slice(entry.path.length)
-          return { ...d, path: `${result.path}${sub}` }
-        }
-        return d
-      })
-      openDocumentsRef.current = nextList
-      setOpenDocuments(nextList)
-      if (activePathRef.current === entry.path) {
-        activePathRef.current = result.path
-        setActivePath(result.path)
-        const nextDoc = nextList.find(d => d.path === result.path)
-        documentRef.current = nextDoc
-        setDocument(nextDoc)
-      }
+      if (!mountedRef.current || listGeneration.current !== generation) return
+      remapEntryPaths(entry.path, result.path, result.version)
       const parent = parentDirectory(rootPath, entry.path)
       await loadDirectory(parent)
     } catch (reason) {
-      setError(String(reason))
+      if (mountedRef.current && listGeneration.current === generation) setError(String(reason))
     } finally {
-      setRenamingPath(undefined)
+      mutatingRef.current = false
+      if (mountedRef.current) {
+        setMutating(false)
+        if (listGeneration.current === generation) setRenamingPath(undefined)
+      }
     }
   }
 
@@ -707,52 +728,45 @@ export function DesktopFilesPanel(props: {
     setDropTargetPath(undefined)
     setDraggedPath(undefined)
     if (api?.move === undefined || workspaceId === undefined || rootPath === undefined
-      || movingRef.current || samePath(sourcePath, destinationPath) || pathContains(sourcePath, destinationPath)) return
-    movingRef.current = true
-    setMoving(true)
+      || mutatingRef.current || savingRef.current || formattingRef.current || creatingRef.current
+      || samePath(parentDirectory(rootPath, sourcePath), destinationPath)
+      || samePath(sourcePath, destinationPath) || pathContains(sourcePath, destinationPath)) return
+    const generation = listGeneration.current
+    mutatingRef.current = true
+    setMutating(true)
     setError(undefined)
+    readRequest.current += 1
+    setReading(false)
     try {
       const result = await api.move(sourcePath, destinationPath, workspaceId)
-      const activePath = activePathRef.current
-      const activeNextPath = activePath !== undefined
-        && (samePath(activePath, sourcePath) || pathContains(sourcePath, activePath))
-        ? `${result.path}${activePath.slice(sourcePath.length)}`
-        : activePath
-      const nextList = openDocumentsRef.current.map((d) => {
-        if (d.path === sourcePath) return { ...d, path: result.path }
-        if (pathContains(sourcePath, d.path)) {
-          const suffix = d.path.slice(sourcePath.length)
-          return { ...d, path: `${result.path}${suffix}` }
-        }
-        return d
-      })
-      openDocumentsRef.current = nextList
-      setOpenDocuments(nextList)
-      if (activeNextPath !== activePath) {
-        activePathRef.current = activeNextPath
-        setActivePath(activeNextPath)
-        const nextDocument = nextList.find(d => d.path === activeNextPath)
-        documentRef.current = nextDocument
-        setDocument(nextDocument)
-      }
+      if (!mountedRef.current || listGeneration.current !== generation) return
+      remapEntryPaths(sourcePath, result.path, result.version)
       await Promise.all([
         loadDirectory(parentDirectory(rootPath, sourcePath)),
         loadDirectory(destinationPath),
       ])
     } catch (reason) {
-      setError(String(reason))
+      if (mountedRef.current && listGeneration.current === generation) setError(String(reason))
     } finally {
-      movingRef.current = false
-      if (mountedRef.current) setMoving(false)
+      mutatingRef.current = false
+      if (mountedRef.current) setMutating(false)
     }
   }
 
   const handleDelete = async (entry: DesktopFileEntry) => {
     setContextMenu(undefined)
-    if (api?.delete === undefined || workspaceId === undefined || rootPath === undefined) return
+    if (api?.delete === undefined || workspaceId === undefined || rootPath === undefined
+      || mutatingRef.current || savingRef.current || formattingRef.current || creatingRef.current) return
     if (!window.confirm(`Are you sure you want to delete "${entry.name}"?`)) return
+    const generation = listGeneration.current
+    mutatingRef.current = true
+    setMutating(true)
+    setError(undefined)
+    readRequest.current += 1
+    setReading(false)
     try {
       await api.delete(entry.path, workspaceId)
+      if (!mountedRef.current || listGeneration.current !== generation) return
       if (entry.directory) {
         const inside = openDocumentsRef.current.filter(d => d.path.startsWith(`${entry.path}/`) || d.path.startsWith(`${entry.path}\\`))
         for (const d of inside) {
@@ -762,9 +776,18 @@ export function DesktopFilesPanel(props: {
         closeTab(entry.path, true)
       }
       const parent = parentDirectory(rootPath, entry.path)
+      setSelectedDirectory(current => current !== undefined && (samePath(current, entry.path) || pathContains(entry.path, current))
+        ? parent : current)
+      setExpanded(current => new Set([...current].filter(path => !samePath(path, entry.path) && !pathContains(entry.path, path))))
+      setChildren(current => Object.fromEntries(Object.entries(current)
+        .filter(([path]) => !samePath(path, entry.path) && !pathContains(entry.path, path))))
+      setQuery('')
       await loadDirectory(parent)
     } catch (reason) {
-      setError(String(reason))
+      if (mountedRef.current && listGeneration.current === generation) setError(String(reason))
+    } finally {
+      mutatingRef.current = false
+      if (mountedRef.current) setMutating(false)
     }
   }
 
@@ -884,30 +907,27 @@ export function DesktopFilesPanel(props: {
   }, [props.onDirtyChange])
 
   const saveAllFiles = useCallback(async () => {
-    if (api === undefined || workspaceId === undefined || savingRef.current) return
+    if (api === undefined || workspaceId === undefined || savingRef.current || formattingRef.current || mutatingRef.current) return
     const dirtyDocs = openDocumentsRef.current.filter(d => documentIsDirty(d))
     if (dirtyDocs.length === 0) return
+    const generation = listGeneration.current
     savingRef.current = true
     setSaving(true)
     props.onSavingChange?.(true)
     setError(undefined)
     try {
-      const updatedList = [...openDocumentsRef.current]
-      for (let i = 0; i < updatedList.length; i += 1) {
-        const doc = updatedList[i]
-        if (doc && documentIsDirty(doc)) {
-          const saved = await api.save(doc.path, doc.draft, doc.version, workspaceId)
-          updatedList[i] = { ...doc, savedContent: doc.draft, version: saved.version }
-        }
+      for (const doc of dirtyDocs) {
+        if (!mountedRef.current || listGeneration.current !== generation) return
+        if (!openDocumentsRef.current.some(current => current.path === doc.path)) continue
+        const saved = await api.save(doc.path, doc.draft, doc.version, workspaceId)
+        // Acknowledgements update disk state without replacing newer drafts or reopening closed tabs.
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- unmount can occur while the save is pending.
+        if (!mountedRef.current || listGeneration.current !== generation) return
+        publishDocuments(openDocumentsRef.current.map(current => current.path === doc.path
+          ? { ...current, savedContent: doc.draft, version: saved.version } : current))
       }
-      openDocumentsRef.current = updatedList
-      setOpenDocuments(updatedList)
-      const currentActive = updatedList.find(d => d.path === activePathRef.current)
-      documentRef.current = currentActive
-      setDocument(currentActive)
-      props.onDirtyChange?.(false)
     } catch (reason) {
-      if (mountedRef.current) setError(String(reason))
+      if (mountedRef.current && listGeneration.current === generation) setError(String(reason))
     } finally {
       savingRef.current = false
       if (mountedRef.current) {
@@ -915,23 +935,24 @@ export function DesktopFilesPanel(props: {
         props.onSavingChange?.(false)
       }
     }
-  }, [api, props.onDirtyChange, props.onSavingChange, workspaceId])
+  }, [api, publishDocuments, props.onSavingChange, workspaceId])
 
   const saveFile = useCallback(async () => {
     if (api === undefined || document === undefined || workspaceId === undefined || !dirty
-      || savingRef.current || formattingRef.current) return
+      || savingRef.current || formattingRef.current || mutatingRef.current) return
     const snapshot = document
+    const generation = listGeneration.current
     savingRef.current = true
     setSaving(true)
     props.onSavingChange?.(true)
     setError(undefined)
     try {
       const saved = await api.save(snapshot.path, snapshot.draft, snapshot.version, workspaceId)
-      updateDocument(current => current?.path === snapshot.path
-        ? { ...current, savedContent: snapshot.draft, version: saved.version }
-        : current)
+      if (!mountedRef.current || listGeneration.current !== generation) return
+      publishDocuments(openDocumentsRef.current.map(current => current.path === snapshot.path
+        ? { ...current, savedContent: snapshot.draft, version: saved.version } : current))
     } catch (reason) {
-      if (mountedRef.current && documentRef.current?.path === snapshot.path) setError(String(reason))
+      if (mountedRef.current && listGeneration.current === generation) setError(String(reason))
     } finally {
       savingRef.current = false
       if (mountedRef.current) {
@@ -939,11 +960,11 @@ export function DesktopFilesPanel(props: {
         props.onSavingChange?.(false)
       }
     }
-  }, [api, dirty, document, props.onSavingChange, updateDocument, workspaceId])
+  }, [api, dirty, document, props.onSavingChange, publishDocuments, workspaceId])
 
   const formatFile = useCallback(async () => {
     if (api === undefined || document === undefined || workspaceId === undefined
-      || formattingRef.current || savingRef.current) return
+      || formattingRef.current || savingRef.current || mutatingRef.current) return
     const snapshot = document
     formattingRef.current = true
     setFormatting(true)
@@ -1096,18 +1117,20 @@ export function DesktopFilesPanel(props: {
                 autoFocus
                 className={css.renameInput}
                 aria-label={`Rename ${entry.name}`}
+                disabled={mutating}
                 value={renameName}
                 onChange={(e) => { setRenameName(e.currentTarget.value) }}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') setRenamingPath(undefined)
                 }}
               />
-              <button type="submit" aria-label="Confirm rename" className={css.renameBtn}>
+              <button type="submit" aria-label="Confirm rename" className={css.renameBtn} disabled={mutating}>
                 <IconCheckOutline14 />
               </button>
               <button
                 type="button"
                 aria-label="Cancel rename"
+                disabled={mutating}
                 className={css.renameBtn}
                 onClick={() => { setRenamingPath(undefined) }}
               >
@@ -1118,7 +1141,7 @@ export function DesktopFilesPanel(props: {
             <button
               type="button"
               className={css.row}
-              draggable={!moving}
+              draggable={!mutating && !saving && !formatting && !creating}
               data-drop-target={dropTargetPath === entry.path ? 'true' : undefined}
               style={{ paddingLeft: 8 + depth * 14 }}
               data-selected={entry.directory
@@ -1134,7 +1157,7 @@ export function DesktopFilesPanel(props: {
                 setContextMenu({ x: e.clientX, y: e.clientY, entry })
               }}
               onDragStart={(event) => {
-                if (moving) return
+                if (mutating || saving || formatting || creating) return
                 setDraggedPath(entry.path)
                 event.dataTransfer.effectAllowed = 'move'
                 event.dataTransfer.setData('text/plain', entry.path)
@@ -1142,7 +1165,7 @@ export function DesktopFilesPanel(props: {
               onDragEnd={() => { setDraggedPath(undefined); setDropTargetPath(undefined) }}
               onDragOver={(event) => {
                 if (!entry.directory || draggedPath === undefined || samePath(draggedPath, entry.path)
-                  || pathContains(draggedPath, entry.path) || moving) return
+                  || pathContains(draggedPath, entry.path) || mutating) return
                 event.preventDefault()
                 event.dataTransfer.dropEffect = 'move'
                 setDropTargetPath(entry.path)
@@ -1184,8 +1207,8 @@ export function DesktopFilesPanel(props: {
     ? 'Saving…'
     : formatting
       ? 'Formatting…'
-      : moving
-        ? 'Moving…'
+      : mutating
+        ? 'Updating files…'
         : creating
           ? 'Creating…'
           : searching
@@ -1224,7 +1247,7 @@ export function DesktopFilesPanel(props: {
                 className={css.sectionActionBtn}
                 title="Save all files"
                 aria-label="Save all files"
-                disabled={saving || !openDocuments.some(d => documentIsDirty(d))}
+                disabled={saving || formatting || mutating || !openDocuments.some(d => documentIsDirty(d))}
                 onClick={() => { void saveAllFiles() }}
               >
                 <IconCheckOutline14 size={12} />
@@ -1305,7 +1328,7 @@ export function DesktopFilesPanel(props: {
                 className={css.sectionActionBtn}
                 aria-label="New file"
                 title="New file"
-                disabled={creating}
+                disabled={creating || mutating}
                 onClick={() => { startCreate('file') }}
               >
                 <IconPlusOutline16 size={12} />
@@ -1315,7 +1338,7 @@ export function DesktopFilesPanel(props: {
                 className={css.sectionActionBtn}
                 aria-label="New folder"
                 title="New folder"
-                disabled={creating}
+                disabled={creating || mutating}
                 onClick={() => { startCreate('directory') }}
               >
                 <IconProjectAddOutline16 size={12} />
@@ -1334,7 +1357,7 @@ export function DesktopFilesPanel(props: {
                 className={css.sectionActionBtn}
                 aria-label="Refresh files"
                 title="Refresh files"
-                disabled={creating}
+                disabled={creating || mutating}
                 onClick={() => { void loadDirectory(rootPath) }}
               >
                 <IconRefreshOutline14 size={12} />
@@ -1357,10 +1380,10 @@ export function DesktopFilesPanel(props: {
                 className={css.tree}
                 role="tree"
                 aria-label="Workspace files"
-                aria-busy={loading || searching || creating || moving || undefined}
+                aria-busy={loading || searching || creating || mutating || undefined}
                 data-drop-target={dropTargetPath === rootPath ? 'true' : undefined}
                 onDragOver={(event) => {
-                  if (event.target !== event.currentTarget || draggedPath === undefined || moving) return
+                  if (event.target !== event.currentTarget || draggedPath === undefined || mutating) return
                   event.preventDefault()
                   event.dataTransfer.dropEffect = 'move'
                   setDropTargetPath(rootPath)
@@ -1618,7 +1641,7 @@ export function DesktopFilesPanel(props: {
                   className={css.editorActionBtn}
                   aria-label="Format"
                   aria-keyshortcuts="Shift+Alt+F"
-                  disabled={formatting || saving}
+                  disabled={formatting || saving || mutating}
                   title="Format document (Shift+Alt+F)"
                   onMouseDown={(event) => { event.preventDefault() }}
                   onClick={() => { void formatFile() }}
@@ -1630,7 +1653,7 @@ export function DesktopFilesPanel(props: {
                   className={`${css.editorActionBtn} ${dirty ? css.editorActionBtnDirty : ''}`}
                   aria-label="Save"
                   aria-keyshortcuts="Control+S"
-                  disabled={!dirty || saving || formatting}
+                  disabled={!dirty || saving || formatting || mutating}
                   title="Save (Ctrl+S)"
                   onMouseDown={(event) => { event.preventDefault() }}
                   onClick={() => { void saveFile() }}
@@ -1926,7 +1949,7 @@ export function DesktopFilesPanel(props: {
                 onClick={() => {
                   setContextMenu(undefined)
                   setSelectedDirectory(contextMenu.entry.path)
-                  startCreate('file')
+                  startCreate('file', contextMenu.entry.path)
                 }}
               >
                 <IconPlusOutline16 size={13} />
@@ -1939,7 +1962,7 @@ export function DesktopFilesPanel(props: {
                 onClick={() => {
                   setContextMenu(undefined)
                   setSelectedDirectory(contextMenu.entry.path)
-                  startCreate('directory')
+                  startCreate('directory', contextMenu.entry.path)
                 }}
               >
                 <IconProjectAddOutline16 size={13} />
@@ -1952,6 +1975,7 @@ export function DesktopFilesPanel(props: {
             type="button"
             className={css.contextMenuItem}
             role="menuitem"
+            disabled={api?.rename === undefined || mutating || saving || formatting || creating}
             onClick={() => { startRename(contextMenu.entry) }}
           >
             <IconEditOutline16 size={13} />
@@ -1961,6 +1985,7 @@ export function DesktopFilesPanel(props: {
             type="button"
             className={css.contextMenuItem}
             role="menuitem"
+            disabled={api?.delete === undefined || mutating || saving || formatting || creating}
             onClick={() => { void handleDelete(contextMenu.entry) }}
           >
             <IconTrashOutline16 size={13} />

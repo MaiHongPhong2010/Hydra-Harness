@@ -17,7 +17,8 @@ const CLI_ENTRY = process.env.HYDRA_DESKTOP_CLI_ENTRY || join(require.resolve('@
 const BROWSER_ENTRY = join(require.resolve('@hydraharness/harness-browser-electron/package.json'), '..', 'electron-app', 'main.cjs')
 const DESKTOP_ICON = join(__dirname, 'assets', process.platform === 'win32' ? 'hydra.ico' : 'hydra.png')
 const SMOKE_ZOOM = process.argv.includes('--smoke-zoom')
-const SMOKE = process.argv.includes('--smoke') || SMOKE_ZOOM
+const SMOKE_FILES = process.argv.includes('--smoke-files')
+const SMOKE = process.argv.includes('--smoke') || SMOKE_ZOOM || SMOKE_FILES
 const HOST_READY_TIMEOUT_MS = 90_000
 const HOST_REQUEST_TIMEOUT_MS = 15_000
 const HOST_SHUTDOWN_TIMEOUT_MS = 7_000
@@ -565,11 +566,18 @@ async function renameWorkspaceEntry(root, target, newName) {
   if (currentPath === rootCanonical) throw new Error('cannot rename workspace root')
   const parent = dirname(currentPath)
   const destination = join(parent, newName)
-  const targetStat = await stat(currentPath)
+  const targetStat = await stat(currentPath, { bigint: true })
   if (existsSync(destination)) throw new Error('a file or folder with this name already exists')
   await rename(currentPath, destination)
   const newConfined = await confinedPath(root, destination)
-  return { oldPath: currentPath, path: newConfined, name: newName, directory: targetStat.isDirectory() }
+  const version = targetStat.isFile() ? relocatedFileVersion(targetStat, await stat(newConfined, { bigint: true })) : undefined
+  return { oldPath: currentPath, path: newConfined, name: newName, directory: targetStat.isDirectory(), version }
+}
+
+function relocatedFileVersion(before, after) {
+  // Rename may change ctime; preserve conflicts for changed file identity, size, or modification time.
+  if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs) return undefined
+  return { before: fileVersion(before), after: fileVersion(after) }
 }
 
 async function moveWorkspaceEntry(root, target, destinationTarget) {
@@ -578,7 +586,7 @@ async function moveWorkspaceEntry(root, target, destinationTarget) {
   const rootCanonical = await realpath(root)
   if (currentPath === rootCanonical) throw new Error('cannot move workspace root')
   if (!(await stat(destinationDirectory)).isDirectory()) throw new Error('destination path is not a directory')
-  const targetStat = await stat(currentPath)
+  const targetStat = await stat(currentPath, { bigint: true })
   if (targetStat.isDirectory() && (destinationDirectory === currentPath
     || destinationDirectory.startsWith(`${currentPath}${sep}`))) {
     throw new Error('cannot move a folder into itself')
@@ -587,7 +595,8 @@ async function moveWorkspaceEntry(root, target, destinationTarget) {
   if (existsSync(destination)) throw new Error('a file or folder with this name already exists')
   await rename(currentPath, destination)
   const newConfined = await confinedPath(root, destination)
-  return { oldPath: currentPath, path: newConfined, name: basename(newConfined), directory: targetStat.isDirectory() }
+  const version = targetStat.isFile() ? relocatedFileVersion(targetStat, await stat(newConfined, { bigint: true })) : undefined
+  return { oldPath: currentPath, path: newConfined, name: basename(newConfined), directory: targetStat.isDirectory(), version }
 }
 
 async function deleteWorkspaceEntry(root, target) {
@@ -1117,6 +1126,133 @@ async function smokeZoomShortcuts() {
   }
 }
 
+async function smokeFiles() {
+  const root = smokeWorkspace.root
+  await mkdir(join(root, 'files-src'))
+  await mkdir(join(root, 'files-target'))
+  mainWindow.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'P', modifiers: ['control'] })
+  mainWindow.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'P', modifiers: ['control'] })
+  await waitForRenderer('Files root', `document.querySelector('[data-files-root]')?.getAttribute('data-files-root') === ${JSON.stringify(root)}`)
+  await waitForRenderer('Files onboarding', `(() => {
+    const dialogs = [...document.querySelectorAll('[role="dialog"]')]
+    for (const dialog of dialogs) {
+      const title = dialog.getAttribute('aria-label') ?? document.getElementById(dialog.getAttribute('aria-labelledby'))?.textContent
+      const label = title === 'Internal Testing Notice' ? 'Continue' : title === 'Settings' ? 'Close' : undefined
+      if (label) [...dialog.querySelectorAll('button')].find(button => button.textContent.trim() === label)?.click()
+    }
+    return dialogs.length === 0
+  })()`)
+  await selectControl('Refresh files')
+  const row = name => `[...document.querySelectorAll('[aria-label="Workspace files"] button')].find(node => node.textContent.trim() === ${JSON.stringify(name)})`
+  const clickRow = async name => {
+    await waitForRenderer(`Files row ${name}`, row(name))
+    await mainWindow.webContents.executeJavaScript(`${row(name)}.click()`)
+  }
+  const fill = async (label, value) => {
+    await waitForRenderer(`Files input ${label}`, `document.querySelector('[aria-label=${JSON.stringify(label)}]')`)
+    await mainWindow.webContents.executeJavaScript(`(() => {
+      const input = document.querySelector('[aria-label=${JSON.stringify(label)}]')
+      const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+      Object.getOwnPropertyDescriptor(prototype, 'value').set.call(input, ${JSON.stringify(value)})
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })()`)
+  }
+  const contextAction = async (name, action) => {
+    await waitForRenderer(`Files row ${name}`, row(name))
+    await mainWindow.webContents.executeJavaScript(`${row(name)}.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 200 }))`)
+    await waitForRenderer(`Files menu ${action}`, `document.querySelector('[aria-label="File options"]')`)
+    await mainWindow.webContents.executeJavaScript(`[...document.querySelectorAll('[role="menuitem"]')].find(node => node.textContent.trim() === ${JSON.stringify(action)}).click()`)
+  }
+  const save = async name => {
+    await waitForRenderer('Files Save enabled', `document.querySelector('[aria-label="File editor"] [aria-label="Save"]')?.disabled === false`)
+    await selectControl('Save', '[aria-label="File editor"]')
+    await waitForRenderer(`Files ${name} saved`, `!document.querySelector('[aria-label="Unsaved changes"]') && !document.querySelector('[aria-label="File editor"] [role="status"]')`)
+  }
+  await contextAction('files-src', 'New File')
+  await fill('New file name', 'a.ts')
+  await selectControl('Create file')
+  await waitForRenderer('Files created editor', `document.querySelector('[aria-label="Editor for a.ts"]')`)
+  if (!existsSync(join(root, 'files-src', 'a.ts')) || existsSync(join(root, 'a.ts'))) throw new Error('Files context creation used the wrong parent')
+  await fill('Editor for a.ts', 'renamed draft\n')
+  await contextAction('files-src', 'Rename')
+  await fill('Rename files-src', 'files-renamed')
+  await selectControl('Confirm rename')
+  await waitForRenderer('Files renamed editor path', `[...document.querySelectorAll('[role="tab"]')].some(node => node.title === ${JSON.stringify(join(root, 'files-renamed', 'a.ts'))})`)
+  await save('a.ts')
+  if (await readFile(join(root, 'files-renamed', 'a.ts'), 'utf8') !== 'renamed draft\n') throw new Error('Files renamed descendant did not save')
+  await mainWindow.webContents.executeJavaScript(`(() => {
+    const source = ${row('files-renamed')}
+    const target = ${row('files-target')}
+    const dataTransfer = new DataTransfer()
+    source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }))
+    target.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer }))
+  })()`)
+  const moved = join(root, 'files-target', 'files-renamed')
+  await waitForRenderer('Files moved editor path', `[...document.querySelectorAll('[role="tab"]')].some(node => node.title === ${JSON.stringify(join(moved, 'a.ts'))})`)
+  await fill('Editor for a.ts', 'moved draft\n')
+  await save('a.ts')
+  await clickRow('files-target')
+  await contextAction('a.ts', 'Rename')
+  await fill('Rename a.ts', 'b.ts')
+  await selectControl('Confirm rename')
+  await waitForRenderer('Files renamed file editor', `document.querySelector('[aria-label="Editor for b.ts"]')`)
+  await fill('Editor for b.ts', 'file renamed draft\n')
+  await save('b.ts')
+  await contextAction('files-renamed', 'New File')
+  await fill('New file name', 'c.ts')
+  await selectControl('Create file')
+  await waitForRenderer('Files second editor', `document.querySelector('[aria-label="Editor for c.ts"]')`)
+  await fill('Editor for c.ts', 'second draft\n')
+  await mainWindow.webContents.executeJavaScript(`[...document.querySelectorAll('[role="tab"]')].find(node => node.textContent.includes('b.ts')).click()`)
+  await fill('Editor for b.ts', 'first saved\n')
+  await writeFile(join(moved, 'c.ts'), 'external edit\n')
+  await selectControl('Save all files')
+  await waitForRenderer('Files partial Save All', `document.querySelector('[aria-label="File editor"] [role="alert"]')?.textContent.includes('file changed since it was opened')`)
+  const partial = await mainWindow.webContents.executeJavaScript(`(() => {
+    const dirty = name => [...document.querySelectorAll('[role="tab"]')].find(node => node.textContent.includes(name))?.querySelector('[title="Unsaved changes"]') !== null
+    return { firstDirty: dirty('b.ts'), secondDirty: dirty('c.ts') }
+  })()`)
+  if (partial.firstDirty || !partial.secondDirty || await readFile(join(moved, 'b.ts'), 'utf8') !== 'first saved\n'
+    || await readFile(join(moved, 'c.ts'), 'utf8') !== 'external edit\n') throw new Error('Files partial save lost disk or draft state')
+  const confinement = await mainWindow.webContents.executeJavaScript(`(async () => {
+    const api = window.hydraDesktop.files
+    const workspaceId = ${JSON.stringify(smokeWorkspace.workspaceId)}
+    const rejected = promise => promise.then(() => false, () => true)
+    return await Promise.all([
+      rejected(api.move(${JSON.stringify(root)}, ${JSON.stringify(moved)}, workspaceId)),
+      rejected(api.move(${JSON.stringify(moved)}, ${JSON.stringify(moved)}, workspaceId)),
+      rejected(api.move(${JSON.stringify(join(moved, 'b.ts'))}, ${JSON.stringify(smokeWorkspace.outside)}, workspaceId)),
+      rejected(api.move(${JSON.stringify(join(smokeWorkspace.outside, 'outside-only.txt'))}, ${JSON.stringify(root)}, workspaceId)),
+      rejected(api.move(${JSON.stringify(join(moved, 'b.ts'))}, ${JSON.stringify(join(moved, 'c.ts'))}, workspaceId)),
+      rejected(api.rename(${JSON.stringify(join(moved, 'b.ts'))}, 'c.ts', workspaceId)),
+      rejected(api.delete(${JSON.stringify(root)}, workspaceId)),
+    ])
+  })()`)
+  if (!confinement.every(Boolean)) throw new Error('Files mutation confinement failed')
+  const transcript = { contextCreate: 'files-src/a.ts', folderRename: 'files-renamed/a.ts', folderMove: 'files-target/files-renamed/a.ts', fileRename: 'files-target/files-renamed/b.ts', partialSave: { firstDirty: false, secondDirty: true, firstDisk: 'first saved\n', secondDisk: 'external edit\n' }, confined: confinement.length }
+  const expected = JSON.parse(await readFile(join(__dirname, 'tests', 'snapshots', 'files-operations.expected.json'), 'utf8'))
+  if (JSON.stringify(transcript) !== JSON.stringify(expected)) throw new Error(`Files transcript differs: ${JSON.stringify(transcript)}`)
+  const screenshots = []
+  const themeSource = nativeTheme.themeSource
+  for (const theme of SMOKE_FILES ? ['light', 'dark'] : []) {
+    nativeTheme.themeSource = theme
+    await waitForRenderer(`Files ${theme} theme`, `document.body.hasAttribute('data-ds-dark-theme') === ${theme === 'dark'}`)
+    await mainWindow.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))')
+    const path = join(process.env.HYDRA_HOME || root, `desktop-files-${theme}.png`)
+    await writeFile(path, (await mainWindow.webContents.capturePage()).toPNG())
+    screenshots.push(path)
+  }
+  nativeTheme.themeSource = themeSource
+  await mainWindow.webContents.executeJavaScript(`(() => {
+    const confirm = window.confirm
+    try {
+      window.confirm = () => true
+      document.querySelector('[aria-label="Close all files"]').click()
+    } finally { window.confirm = confirm }
+  })()`)
+  return { transcript, screenshots }
+}
+
 async function smoke() {
   if (nativeImage.createFromPath(DESKTOP_ICON).isEmpty()) throw new Error('desktop Hydra icon is unavailable')
   if (typeof smokeWorkspace?.workspaceId !== 'string') throw new Error('desktop smoke Workspace is unavailable')
@@ -1279,6 +1415,7 @@ async function smoke() {
   if (!bomCrlf.equals(Buffer.from('\ufeffone\r\ntwo\r\nthree\r\n'))) {
     throw new Error(`desktop Files changed BOM or CRLF bytes: ${JSON.stringify([...bomCrlf])}`)
   }
+  await smokeFiles()
   await selectControl('Terminal')
   await waitForHiddenBrowser('right Terminal')
   await waitForRenderer('right Terminal panel', `document.querySelector('[aria-label="Right terminal"]:not([hidden])')`)
@@ -1596,6 +1733,7 @@ async function shutdown() {
 app.whenReady().then(async () => {
   try {
     mainWindow = createWindow()
+    if (SMOKE_FILES) mainWindow.webContents.setBackgroundThrottling(false)
     browser = await installBrowserController(mainWindow)
     installRendererIpc()
     hostBaseUrl = await startHost()
@@ -1609,7 +1747,10 @@ app.whenReady().then(async () => {
       }
     })
     if (SMOKE) {
-      if (SMOKE_ZOOM) {
+      if (SMOKE_FILES) {
+        const files = await smokeFiles()
+        process.stdout.write(`${JSON.stringify({ event: 'desktop-files-smoke', ok: true, files })}\n`)
+      } else if (SMOKE_ZOOM) {
         await smokeZoomShortcuts()
         process.stdout.write(`${JSON.stringify({ event: 'desktop-zoom-smoke', ok: true })}\n`)
       } else {

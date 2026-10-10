@@ -1,0 +1,13 @@
+{
+  "contextCreate": "files-src/a.ts",
+  "folderRename": "files-renamed/a.ts",
+  "folderMove": "files-target/files-renamed/a.ts",
+  "fileRename": "files-target/files-renamed/b.ts",
+  "partialSave": {
+    "firstDirty": false,
+    "secondDirty": true,
+    "firstDisk": "first saved\n",
+    "secondDisk": "external edit\n"
+  },
+  "confined": 7
+}

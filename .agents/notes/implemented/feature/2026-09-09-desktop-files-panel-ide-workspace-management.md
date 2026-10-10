@@ -24,6 +24,10 @@ The code editor canvas adds breadcrumbs path navigation, an active cursor line g
 
 Single `aria-label="Unsaved changes"` accessibility contract is maintained on the editor title dirty indicator; tab and open editor dirty dots use `aria-hidden="true"` and `title="Unsaved changes"` to prevent screen reader ambiguity.
 
+Save All publishes each file's acknowledged disk version into the latest open-document list. A later failure leaves earlier successes clean and preserves unsaved drafts; edits made during a save remain dirty, and closed tabs remain closed. Rename and move remap descendant editor paths and cached tree paths together. Context-menu creation captures the clicked folder directly. File mutations serialize with saves, formatting, and creation, and ignore results and errors after a Workspace change.
+
+File relocation returns the versions immediately before and after renaming when device, inode, size, and modification time remain unchanged. The editor accepts that new version only if its previous version matches. This accounts for rename-induced change-time updates without accepting an already stale draft. Removing change time from all file versions would weaken ordinary external-edit detection.
+
 ## Alternatives considered
 
 **Full Monaco or CodeMirror embedding.** Heavier dependency footprint and complex multi-instance webview lifecycle. The lightweight syntax-overlay textarea preserves native typing, IME composition, system selection, and minimal memory overhead while providing VS Code-grade coding conveniences.
@@ -34,4 +38,6 @@ Single `aria-label="Unsaved changes"` accessibility contract is maintained on th
 
 ## Consequences
 
-Developers can navigate, edit, outline, and format workspace files with native VS Code-grade productivity directly inside the right panel. All existing component and browser integration tests pass without regression.
+Developers can navigate, edit, outline, and format workspace files directly inside the right panel. Save All can partially succeed; the panel reports the first failure without rolling back completed disk writes. A successful rename, move, or delete clears the file filter so the updated tree is visible. Drafts and editor selection remain transient.
+
+The focused Files operation specs cover context-menu parent selection, renamed and moved descendant drafts, matching relocation versions, partial Save All, newer typing, and stale Workspace failures. The desktop `--smoke-files` scenario also runs inside the normal desktop smoke, exercises the assembled renderer and real filesystem, compares its transcript with [the Files snapshot](../../../../apps/desktop/tests/snapshots/files-operations.expected.json), and checks mutation confinement and saved bytes.

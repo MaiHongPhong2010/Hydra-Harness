@@ -4,7 +4,7 @@
   "description": "Prebuilt landlock-run Landlock launcher binary for linux-arm64 (static musl) — resolved as a file path by @hydraharness/node-addon-landlock-run, never imported",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MaiHongPhong1902/Hydra-Harness.git",
+    "url": "git+https://github.com/MaiHongPhong2010/Hydra-Harness.git",
     "directory": "native/landlock-run/packages/linux-arm64"
   },
   "os": [

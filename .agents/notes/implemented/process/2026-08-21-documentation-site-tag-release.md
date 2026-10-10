@@ -14,7 +14,7 @@ Every other public surface of this project advances only at a release tag. The n
 
 The build job runs `release:verify --family hydra` with `RELEASE_PUBLISH=true` before it builds anything. That is the gate npm publication runs, so the site and the npm sequence share one definition of a released version rather than each carrying its own: the run must come from a `refs/tags/` ref, the tag must carry the family prefix, and the tag must name a version the working tree actually carries. Checkout takes complete history because the release scripts read tags.
 
-The `github-pages` environment carries a `hydra-v*` deployment tag policy and required reviewers, matching `npm-publish`. The two layers answer different failures: the script gate rejects a dispatch from the wrong ref, and the environment policy still rejects the deployment if a later workflow edit stops asking.
+The `github-pages` environment carries a `hydra-v*` deployment tag policy and required reviewers, matching `NPM_TOKEN`. The two layers answer different failures: the script gate rejects a dispatch from the wrong ref, and the environment policy still rejects the deployment if a later workflow edit stops asking.
 
 `DOCS_REPOSITORY_REF` stays `master`, so projected source links continue to target the public repository's default branch rather than the dispatched tag. That repository advances only to each release commit, so its master never carries unreleased work and the published tag adds no exposure control. It also retains only its most recent tags, so following the dispatched tag would leave every projected source link on a deploy from an older tag unresolvable.
 

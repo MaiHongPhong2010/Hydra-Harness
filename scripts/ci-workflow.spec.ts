@@ -527,6 +527,17 @@ describe('Issue lifecycle workflow', () => {
 })
 
 describe('npm release workflows', () => {
+  it('checks the protected npm token without publishing', () => {
+    const verify = workflowJob(loadWorkflow('.github/workflows/npm-connection.yml'), 'verify')
+    expect(verify.environment).toBe('NPM_TOKEN')
+    if (!Array.isArray(verify.steps)) throw new TypeError('npm verification must define steps')
+    expect(verify.steps.filter(isRecord).filter(step => step.run !== undefined)).toEqual([{
+      name: 'Authenticate npm access token',
+      env: { NODE_AUTH_TOKEN: '${{ secrets.NPM_TOKEN }}' },
+      run: 'npm whoami',
+    }])
+  })
+
   it('keeps publication tag/dispatch-only and pack in the PR workflow', () => {
     // pack stays in the PR/master release workflows so a PR proves the set packs.
     // hydra's release.yml also tags a version bump on main once pack succeeds,
@@ -541,7 +552,7 @@ describe('npm release workflows', () => {
       expect(Object.keys(workflow.jobs).sort()).toEqual(jobs)
     }
 
-    // publication is never a PR check and keeps the npm-publish environment plus
+    // publication is never a PR check and keeps the NPM_TOKEN environment plus
     // the shared dist-tag group. hydra's release-publish.yml also triggers from
     // the hydra-v* tag release.yml's tag job pushes; the vendor sequence stays
     // workflow_dispatch-only.
@@ -555,7 +566,7 @@ describe('npm release workflows', () => {
       expect(Object.keys(workflow.on)).toEqual(on)
       const publish = workflow.jobs.publish
       if (!isRecord(publish)) throw new TypeError(`${file} must define a publish job`)
-      expect(publish.environment).toBe('npm-publish')
+      expect(publish.environment).toBe('NPM_TOKEN')
       expect(publish.concurrency).toMatchObject({ group: 'Release-publish' })
     }
   })

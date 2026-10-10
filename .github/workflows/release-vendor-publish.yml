@@ -79,7 +79,7 @@ jobs:
     name: Publish to npm
     needs: pack
     runs-on: ubuntu-24.04
-    environment: npm-publish
+    environment: NPM_TOKEN
     concurrency:
       group: Release-publish
       cancel-in-progress: false

@@ -41,12 +41,12 @@ const publicLandlockPackages = new Set([
 const publicationSourceAllowlist: Readonly<Record<string, readonly string[]>> = {
   '@hydraharness/node-addon-landlock-run': ['src/main.c'],
 }
-const repositoryUrl = 'git+https://github.com/MaiHongPhong1902/Hydra-Harness.git'
+const repositoryUrl = 'git+https://github.com/MaiHongPhong2010/Hydra-Harness.git'
 /**
  * Source home the published packages point consumers at. Landlock trusted
  * publishing uses the same repository that runs CI.
  */
-const publishedRepositoryUrl = 'git+https://github.com/MaiHongPhong1902/Hydra-Harness.git'
+const publishedRepositoryUrl = 'git+https://github.com/MaiHongPhong2010/Hydra-Harness.git'
 /** Private packages that participate in workspace checks but not releases. */
 const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 /** npm namespace reserved for private experimental packages. */

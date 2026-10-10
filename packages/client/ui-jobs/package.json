@@ -42,7 +42,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MaiHongPhong1902/Hydra-Harness.git",
+    "url": "git+https://github.com/MaiHongPhong2010/Hydra-Harness.git",
     "directory": "packages/client/ui-jobs"
   },
   "publishConfig": {

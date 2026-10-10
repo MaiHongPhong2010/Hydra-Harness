@@ -142,10 +142,9 @@ jobs:
     if: inputs.publish
     needs: pack
     runs-on: ubuntu-24.04
-    environment: npm-publish
+    environment: NPM_TOKEN
     permissions:
       contents: read
-      id-token: write
     steps:
       # The publish script is the only repository file this job needs, and it
       # imports nothing outside Node's builtins, so there is no install step.
@@ -164,17 +163,11 @@ jobs:
           name: npm-tarballs
           path: native/landlock-run/dist/npm
 
-      - name: Configure npm token fallback
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [[ -n "$NPM_TOKEN" ]]; then
-            echo "NODE_AUTH_TOKEN=$NPM_TOKEN" >> "$GITHUB_ENV"
-          fi
-
       - name: Publish tarballs
         # Publication is decided per package against the registry, so re-running
         # this job over the same artifact skips what already landed instead of
         # failing on it. A bare `npm publish` loop could not be retried: the
         # registry answers a repeat of an existing version permanently.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node ./scripts/publish-release.mjs dist/npm

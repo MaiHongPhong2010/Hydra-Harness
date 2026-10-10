@@ -2,7 +2,7 @@
 # from pull_request, so this never appears as a PR check. release.yml pushes that
 # tag automatically once a main push bumps the version; workflow_dispatch remains
 # for republishing an existing tag by hand. Either way, the publish job below runs
-# under the npm-publish environment, so its required reviewers (configured on the
+# under the NPM_TOKEN environment, so its required reviewers (configured on the
 # environment, not here) still approve every write to the registry. It repacks
 # the current tree before publishing so the bytes uploaded are exactly what this
 # run produced.
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-24.04
     # Required reviewers and the allowed tags live on the environment; this is
     # the only job in the sequence that can write to the registry.
-    environment: npm-publish
+    environment: NPM_TOKEN
     concurrency:
       group: Release-publish
       cancel-in-progress: false

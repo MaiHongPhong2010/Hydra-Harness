@@ -87,6 +87,7 @@ interface TerminalPaneItem {
 function SingleTerminalPane({
   id,
   workspaceId,
+  cwd,
   open,
   name,
   active,
@@ -98,6 +99,7 @@ function SingleTerminalPane({
 }: {
   id: DesktopTerminalId
   workspaceId: WorkspaceId | undefined
+  cwd?: string | undefined
   open: boolean
   name: string
   active: boolean
@@ -127,7 +129,7 @@ function SingleTerminalPane({
     const attempt = ++startAttemptRef.current
     onStatusChange(id, { status: 'starting', exitCode: null })
     fit.fit()
-    void (async () => api.start(id, terminalSize(terminal), workspaceId))().then((state) => {
+    void api.start(id, terminalSize(terminal), workspaceId, cwd).then((state) => {
       if (!mountedRef.current || startAttemptRef.current !== attempt) return
       startingRef.current = false
       onStatusChange(id, { status: state.running ? 'running' : 'exited', exitCode: null })
@@ -139,7 +141,7 @@ function SingleTerminalPane({
       onStatusChange(id, { status: 'error', exitCode: null, error: message })
       terminal.writeln(`\r\n${message}`)
     })
-  }, [api, id, onStatusChange, workspaceId])
+  }, [api, id, onStatusChange, workspaceId, cwd])
 
   useEffect(() => {
     if (active && openRef.current) {
@@ -271,6 +273,7 @@ export function DesktopTerminalPanel({
   open,
   terminalId = 'bottom',
   workspaceId,
+  cwd,
   terminalLabel,
   sessionTitle,
   embedded = false,
@@ -281,6 +284,7 @@ export function DesktopTerminalPanel({
   open: boolean
   terminalId?: DesktopTerminalId
   workspaceId?: WorkspaceId | undefined
+  cwd?: string | undefined
   terminalLabel?: string | undefined
   sessionTitle?: string | undefined
   embedded?: boolean
@@ -487,6 +491,7 @@ export function DesktopTerminalPanel({
               <SingleTerminalPane
                 id={pane.id}
                 workspaceId={workspaceId}
+                cwd={cwd}
                 open={open && stoppingPane !== pane.id}
                 name={pane.name}
                 active={pane.id === activePaneId}

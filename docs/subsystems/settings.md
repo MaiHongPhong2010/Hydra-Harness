@@ -111,7 +111,7 @@ interface SettingsDescriptor {
    * Send it back as `expectedRevision` on a write to refuse a stale one.
    */
   revision: number
-  /** Registrant's composition `base` layer (detached), when one was declared. */
+  /** Lower resolved parent value or registrant's composition `base` (detached), when declared. */
   base?: unknown
   /**
    * Raw user section from the stored document (detached), when one exists and
@@ -152,6 +152,12 @@ interface SettingsDescribeOptions {
 }
 ```
 
+## Inherited providers
+
+`inherit(parent, namespaces)` mirrors an explicit subset of a lower provider's registrations, resolved values, schemas, validators, and effect timing. A child owner can claim each inherited registration once; its raw section overrides the parent's resolved value without changing the parent document. Parent writes and registrations propagate to descendants, and inherited descriptors expose the lower resolved value as `base`.
+
+`setLayerEnabled(false)` suppresses raw overrides in effective reads while retaining them in descriptors and on disk. Writes still validate the proposed section. Workspace configuration uses this to keep untrusted project files editable without executing their settings. `observe()` lets configuration transports refresh on raw, resolved, registry, and inherited descriptor changes; consumer `watch()` callbacks retain their ordered asynchronous semantics.
+
 ## Change commits
 
 Every committed change — an in-process write or an externally observed provider edit — emits `settings/updated (ns, next, prev, source)` after the new value is authoritative, and never when the resolved value is deep-equal. The source tag separates the two entry paths.
@@ -185,10 +191,38 @@ Abstract settings service. Providers implement raw-document storage (`load`/`per
 prepareDocument(): Promise<string | undefined>
 
 /**
- * Register a namespace schema and receive its owner scope. The registration
- * is an effect on the calling plugin's fiber: disposing that fiber removes
- * the namespace and its observers. An invalid stored section fails the
- * registration itself — the earliest point where the schema can judge it.
+ * Mirror selected parent namespaces, using their resolved values beneath
+ * this provider's raw sections. Schemas, validators, timing, registrations,
+ * and parent commits stay synchronized without exposing owner callbacks in
+ * descriptors. One consumer may claim each inherited namespace with register().
+ * @param parent - provider of the lower settings layer; cycles are refused.
+ * @param namespaces - namespaces allowed to inherit into this provider.
+ * @returns awaitable disposer removing the inherited registrations and subscription.
+ */
+inherit(parent: SettingsProvider, namespaces: readonly SettingsNamespace[]): () => void | Promise<void>
+
+/**
+ * Enable or suppress this provider's raw layer without changing stored data.
+ * Descriptors and writes retain the raw section while resolved reads inherit.
+ * @param enabled - whether raw sections participate in effective resolution.
+ */
+setLayerEnabled(enabled: boolean): void
+
+/**
+ * Observe this provider's committed raw, resolved, registry, or inherited
+ * descriptor changes. Callbacks run synchronously after the relevant state
+ * changes; failures are contained. The calling fiber owns the subscription.
+ * @param callback - re-read descriptors after a provider change.
+ * @returns awaitable disposer preventing further callback invocations.
+ */
+observe(callback: () => void): () => void | Promise<void>
+
+/**
+ * Register a namespace schema and receive its owner scope. Disposing the
+ * calling plugin removes its observers and its non-inherited registration.
+ * An inherited namespace accepts one owner while keeping its parent's
+ * schema, validation, timing, and lower value. An invalid effective section
+ * fails initial registration; suppressed raw sections are validated on writes.
  * @param ns - unique namespace; duplicate registration fails loud.
  * @param schema - schemastery schema resolving this namespace's value.
  * @param options - composition `base` layer and effect timing.
@@ -262,7 +296,7 @@ Source: [`packages/settings/settings/src/index.ts`](../../packages/settings/sett
 
 #### `settings/document-updated` — emit
 
-One registered namespace's RAW user section changed, whether or not the resolved value did. `settings/updated` is the consumer-facing event and stays deep-equal-gated; this one exists for configuration surfaces, which must learn that a field went from inherited to overridden (same resolved value, different meaning) and that their held revision is stale. Listener containment matches `settings/updated`.
+One registered namespace's RAW user section changed, whether or not the resolved value did. `settings/updated` is the consumer-facing event and stays deep-equal-gated; this one exists for configuration surfaces, which must learn that a field went from inherited to overridden (same resolved value, different meaning) and that their held revision is stale. Listener containment matches `settings/updated`. The emitting provider is the Cordis receiver for service-realm routing.
 
 ```ts cordis-catalog
 /**
@@ -272,6 +306,7 @@ One registered namespace's RAW user section changed, whether or not the resolved
  * which must learn that a field went from inherited to overridden (same
  * resolved value, different meaning) and that their held revision is
  * stale. Listener containment matches `settings/updated`.
+ * The emitting provider is the Cordis receiver for service-realm routing.
  * @param ns - the namespace whose stored section changed.
  * @param revision - the namespace's new revision.
  * @mode emit
@@ -285,13 +320,14 @@ Source: [`packages/settings/settings/src/types.ts`](../../packages/settings/sett
 
 #### `settings/registry-updated` — emit
 
-A settings namespace was registered or removed with its owning plugin. Configuration surfaces use this to refresh their served-namespace list after plugin lifecycle changes that do not modify the settings file.
+A settings namespace was registered or removed with its owning plugin. Configuration surfaces use this to refresh their served-namespace list after plugin lifecycle changes that do not modify the settings file. The emitting provider is the Cordis receiver for service-realm routing.
 
 ```ts cordis-catalog
 /**
  * A settings namespace was registered or removed with its owning plugin.
  * Configuration surfaces use this to refresh their served-namespace list
  * after plugin lifecycle changes that do not modify the settings file.
+ * The emitting provider is the Cordis receiver for service-realm routing.
  * @param ns - the namespace whose registration changed.
  * @mode emit
  */
@@ -304,13 +340,15 @@ Source: [`packages/settings/settings/src/types.ts`](../../packages/settings/sett
 
 #### `settings/updated` — emit
 
-Committed change to one registered namespace's resolved value. Emitted after the provider persisted (for `update`) or published (`provider`) the change; never emitted when the resolved value is deep-equal. Listener failures are contained and logged — a sync throw and an async rejection alike — except `INVARIANT`-coded failures, which rethrow after every listener ran; that rethrow reaches the emitter only from synchronous listeners, so invariant checks on this event must not be async functions.
+Committed change to one registered namespace's resolved value, after the provider persisted (for `update`) or published (`provider`) the change; never emitted when the resolved value is deep-equal. The committing provider is the Cordis receiver, so ordinary listeners receive only their settings service's isolation realm. Listener failures are contained and logged — a sync throw and an async rejection alike — except `INVARIANT`-coded failures, which rethrow after every listener ran; that rethrow reaches the emitter only from synchronous listeners, so invariant checks on this event must not be async functions.
 
 ```ts cordis-catalog
 /**
- * Committed change to one registered namespace's resolved value. Emitted
- * after the provider persisted (for `update`) or published (`provider`)
- * the change; never emitted when the resolved value is deep-equal.
+ * Committed change to one registered namespace's resolved value, after
+ * the provider persisted (for `update`) or published (`provider`) the
+ * change; never emitted when the resolved value is deep-equal. The
+ * committing provider is the Cordis receiver, so ordinary listeners
+ * receive only their settings service's isolation realm.
  * Listener failures are contained and logged — a sync throw and an async
  * rejection alike — except `INVARIANT`-coded failures, which rethrow
  * after every listener ran; that rethrow reaches the emitter only from
@@ -327,3 +365,23 @@ Committed change to one registered namespace's resolved value. Emitted after the
 
 Source: [`packages/settings/settings/src/types.ts`](../../packages/settings/settings/src/types.ts)
 <!-- END GENERATED cordis-surface -->
+
+## Client section navigation
+
+The [client Settings plugin](../../packages/client/ui-settings/README.md) declares section owner props. The shell handles navigation; registrants own their data and mutations.
+
+```ts type-equiv
+/**
+ * Owner share of a settings section entry. The shell owns modal visibility
+ * and navigation; a section's data arrives through its own inject faces and
+ * stores. Sections can close the panel or navigate to another registered page.
+ */
+interface SettingsSectionOwnerProps {
+  /** Settings navigation search; General filters its registered row labels. */
+  query?: string
+  /** Close the settings panel (the shell owns the open state). */
+  close: () => void
+  /** Open a registered section, clear navigation search, and focus its heading. */
+  openSection: (id: string) => void
+}
+```

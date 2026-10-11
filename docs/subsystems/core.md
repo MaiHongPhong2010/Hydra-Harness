@@ -459,6 +459,41 @@ composeFrom(agentCtx: Context, parentCtx: Context): string | undefined
 composedPreset(agentCtx: Context): string | undefined
 
 /**
+ * Enable or revoke one workspace project root. Revocation disposes its
+ * generations, including pending mounts; generations from other roots remain live.
+ * @param path - project directory containing preset subdirectories.
+ * @param enabled - whether the project root may supply compositions.
+ * @returns completion after revoked project generations have stopped.
+ */
+async setProjectRoot(path: string, enabled: boolean): Promise<void>
+
+/**
+ * Whether an agent joined a generation supplied below a project directory,
+ * including a generation disposed after trust was revoked.
+ * @param agentCtx - the agent's registration context.
+ * @param root - project directory whose preset origins to recognize.
+ * @returns whether the joined generation originates inside that directory.
+ */
+isProjectContext(agentCtx: Context, root: string): boolean
+
+/**
+ * Whether an agent retains a project generation stopped by trust revocation.
+ * Re-trusting a workspace permits fresh generations, without restoring stopped ones.
+ * @param agentCtx - the agent's registration context.
+ * @param root - project directory whose stopped generations to recognize.
+ * @returns whether continuing this agent requires a fresh composition.
+ */
+isRetiredProjectContext(agentCtx: Context, root: string): boolean
+
+/**
+ * Resolve a locally writable preset directory for an editor.
+ * @param id - the preset to edit.
+ * @returns its directory after checking authoring ownership and canonical containment.
+ * @throws when the preset is inherited, read-only, or escapes through a link.
+ */
+async authoringDirectory(id: string): Promise<string>
+
+/**
  * Read one preset's composition text.
  * @param id - the preset id.
  * @returns the composition exactly as stored.
@@ -468,16 +503,18 @@ async read(id: string): Promise<string>
 
 /**
  * List the explicit leaf rows every preset can switch for future sessions.
+ * @param settings - optional selected layer whose desired enablement to read.
  * @returns every leaf with its persisted desired state.
  */
-async listPluginEntries(): Promise<AgentPresetPluginEntry[]>
+async listPluginEntries(settings?: SettingsProvider): Promise<AgentPresetPluginEntry[]>
 
 /**
  * Persist one preset leaf state and let only later sessions mount a new generation.
  * @param entryId - preset-qualified leaf entry id.
  * @param enabled - desired state for later sessions.
+ * @param settings - selected write layer; omitted uses this roster's provider.
  */
-async setPluginEnabled(entryId: string, enabled: boolean): Promise<void>
+async setPluginEnabled(entryId: string, enabled: boolean, settings?: SettingsProvider): Promise<void>
 
 /**
  * Create a locally authored preset by copying an existing one whole.
@@ -499,7 +536,8 @@ async copy(from: string, id: string, name?: string): Promise<void>
 /**
  * Delete a locally authored preset.
  * @param id - the preset id.
- * @throws when the preset is unknown or ships with the deployment.
+ * @throws when the preset is unknown, ships with the deployment, or remains
+ * a workspace's inherited default.
  */
 async remove(id: string): Promise<void>
 
@@ -557,7 +595,7 @@ async recompose(agentCtx: Context, id: string): Promise<AgentPreset>
 async standingKeyFor(id?: string): Promise<ScopeKey>
 ```
 
-Types: [ScopeKey](scope.md)
+Types: [ScopeKey](scope.md) · [SettingsProvider](settings.md)
 
 Source: [`packages/preset/agent-presets/src/index.ts`](../../packages/preset/agent-presets/src/index.ts)
 

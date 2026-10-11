@@ -292,6 +292,38 @@ function expectNoDerivedMessages(agent: Agent): void {
 }
 
 describe('workspace context instruction discovery', () => {
+  it('loads fixed workspace guidance and its private overlay before descendant instructions', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    try {
+      const cwd = join(root, 'pkg')
+      await mkdir(join(root, '.git'), { recursive: true })
+      await write(join(root, 'AGENTS.md'), 'root guidance')
+      await write(join(root, 'AGENTS.local.md'), 'ordinary private guidance')
+      await write(join(root, '.hydra/AGENTS.md'), 'workspace guidance')
+      await write(join(root, '.hydra/AGENTS.local.md'), 'private workspace guidance')
+      await write(join(cwd, 'AGENTS.md'), 'package guidance')
+
+      const files = await discoverBaselineInstructionFiles({ cwd, hydraHome: home })
+      expect(files.map(file => file.displayPath)).toEqual([
+        'AGENTS.md', 'AGENTS.local.md', '.hydra/AGENTS.md',
+        '.hydra/AGENTS.local.md', join('pkg', 'AGENTS.md'),
+      ])
+      expect(files.find(file => file.displayPath === '.hydra/AGENTS.md')?.absolutePath)
+        .toBe(join(root, '.hydra', 'AGENTS.md'))
+      const loaded = await loadBaselineInstructions({ cwd, hydraHome: home, maxBytes: 65536 })
+      expect(loaded?.text.indexOf('workspace guidance')).toBeLessThan(loaded!.text.indexOf('package guidance'))
+
+      await write(join(root, '.hydra/AGENTS.md'), ' root guidance \n')
+      const deduped = await loadBaselineInstructions({ cwd, hydraHome: home, maxBytes: 65536 })
+      expect(deduped?.text).not.toContain('Instructions from: .hydra/AGENTS.md')
+      expect(deduped?.text).toContain('private workspace guidance')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('treats ENOTDIR while probing a host candidate as confirmed absence', async () => {
     const root = await tempRepo()
     const homeFile = join(root, 'not-a-directory')
@@ -982,6 +1014,107 @@ describe('workspace context rendering', () => {
 })
 
 describe('workspace context request injection', () => {
+  it('bounds selected workspace guidance when the session cwd uses a directory alias', async () => {
+    const container = await tempRepo()
+    const root = join(container, 'workspace')
+    const alias = join(container, 'alias')
+    const ctx = new Context()
+    try {
+      await write(join(container, 'AGENTS.md'), 'outside selected workspace')
+      await write(join(root, 'nested/AGENTS.md'), 'nested workspace guidance')
+      await write(join(root, '.hydra/AGENTS.md'), 'selected workspace guidance')
+      await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir')
+      ctx.provide('workspaceConfig', { resolveRoot: async () => root })
+      await mountWorkspaceContext(ctx, { hydraHome: join(container, 'home'), maxBytes: 65536 })
+      const agent = stubAgent(join(alias, 'nested'))
+      await composeBaselinePrefix(ctx, agent)
+
+      expect(derivedText(agent)).toContain('selected workspace guidance')
+      expect(derivedText(agent)).toContain('nested workspace guidance')
+      expect(derivedText(agent)).not.toContain('outside selected workspace')
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(container, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps guidance isolated by selected workspace root across nested Git directories', async () => {
+    const container = await tempRepo()
+    const home = await tempRepo()
+    const ctx = new Context()
+    const first = join(container, 'first')
+    const second = join(container, 'second')
+    try {
+      for (const root of [first, second]) {
+        await mkdir(join(root, 'nested/.git'), { recursive: true })
+        await write(join(root, '.hydra/AGENTS.md'), root === first ? 'first workspace guidance' : 'second workspace guidance')
+        await write(join(root, '.hydra/AGENTS.local.md'), root === first ? 'first private guidance' : 'second private guidance')
+        await write(join(root, 'nested/AGENTS.md'), 'nested guidance')
+      }
+      ctx.provide('workspaceConfig', {
+        resolveRoot: async (cwd: string) => cwd.startsWith(first) ? first : second,
+      })
+      await mountWorkspaceContext(ctx, { hydraHome: home, maxBytes: 65536 })
+      const firstAgent = stubAgent(join(first, 'nested'))
+      const secondAgent = stubAgent(join(second, 'nested'))
+      await Promise.all([composeBaselinePrefix(ctx, firstAgent), composeBaselinePrefix(ctx, secondAgent)])
+
+      expect(derivedText(firstAgent)).toContain('first workspace guidance')
+      expect(derivedText(firstAgent)).toContain('first private guidance')
+      expect(derivedText(firstAgent)).not.toContain('second workspace guidance')
+      expect(derivedText(secondAgent)).toContain('second workspace guidance')
+      expect(derivedText(secondAgent)).not.toContain('first private guidance')
+      expect(derivedText(firstAgent).indexOf('first private guidance')).toBeLessThan(derivedText(firstAgent).indexOf('nested guidance'))
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(container, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('reconciles private workspace guidance under root scope across refresh and resume', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    const ctx = new Context()
+    try {
+      await mkdir(join(root, '.git'), { recursive: true })
+      await write(join(root, '.hydra/AGENTS.md'), 'shared workspace guidance')
+      const privatePath = join(root, '.hydra/AGENTS.local.md')
+      await write(privatePath, 'private workspace guidance')
+      await mountWorkspaceContext(ctx, { hydraHome: home, maxBytes: 65536 })
+      const original = stubAgent(root)
+      await composeBaselinePrefix(ctx, original)
+      expect(baselineEvents(original)[0]).toMatchObject({ data: { source: { changes: [
+        { action: 'set', scope: sk('.', '.hydra/AGENTS.md'), path: '.hydra/AGENTS.md' },
+        { action: 'set', scope: sk('.', '.hydra/AGENTS.local.md'), path: '.hydra/AGENTS.local.md' },
+      ] } } })
+
+      await write(privatePath, 'edited private workspace guidance')
+      const resumed = stubAgent(root, [...original.session.events])
+      await composeBaselinePrefix(ctx, resumed)
+      expect(baselineEvents(resumed)).toHaveLength(1)
+      expect(blocksText(resumed.session.deriveMessages().at(-1)?.content)).toContain('edited private workspace guidance')
+      expect(resumed.session.events.at(-1)).toMatchObject({ data: { source: { changes: [
+        { action: 'replace', scope: sk('.', '.hydra/AGENTS.local.md') },
+      ] } } })
+
+      await rm(privatePath)
+      await composeBaselinePrefix(ctx, resumed)
+      expect(resumed.session.events.at(-1)).toMatchObject({ data: { source: { changes: [
+        { action: 'remove', scope: sk('.', '.hydra/AGENTS.local.md') },
+      ] } } })
+      await write(privatePath, 'restored private workspace guidance')
+      await composeBaselinePrefix(ctx, resumed)
+      const restoredText = blocksText(resumed.session.deriveMessages().at(-1)?.content)
+      expect(restoredText).toContain('These instructions apply to work under `.`')
+      expect(restoredText).not.toContain('These instructions apply to work under `.hydra`')
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('requires an explicit maxBytes configuration', async () => {
     const ctx = new Context()
 

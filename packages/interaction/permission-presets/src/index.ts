@@ -14,6 +14,7 @@ import { Context, Service } from '@hydraharness/cordis'
 import z from '@hydraharness/schemastery'
 import { z as zod } from 'zod'
 import type { Session, SessionEvent } from '@hydraharness/harness-session'
+import type { Agent } from '@hydraharness/harness-agent'
 import type { SandboxMode } from '@hydraharness/harness-sandbox'
 import { SANDBOX_MODES, effectiveSandboxMode, setSandboxMode } from '@hydraharness/harness-sandbox-policy'
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
@@ -22,6 +23,7 @@ import type {} from '@hydraharness/harness-shell'
 import type { ApprovalPolicy } from '@hydraharness/harness-user-approval'
 import { APPROVAL_POLICIES, effectiveApprovalPolicy, setApprovalPolicy } from '@hydraharness/harness-user-approval'
 import { installSettingsSection, settingsNamespace } from '@hydraharness/harness-settings'
+import type {} from '@hydraharness/harness-workspace-config'
 // Type-only: resolves ctx.sessionProjections / ctx.commands for the optional children.
 import type {} from '@hydraharness/harness-session-projection'
 import type {} from '@hydraharness/harness-commands'
@@ -349,7 +351,7 @@ export class PermissionPresetService extends Service {
     const selected = latestPermissionSelection(events)
     if (selected?.data.origin !== 'default') return
     if (this.current(events) !== selected.data.preset) return
-    this.apply(session, this.defaultPreset, (policy) => {
+    this.apply(session, this.defaultForSession(session), (policy) => {
       setApprovalPolicy(session, policy)
     }, 'default')
   }
@@ -427,6 +429,16 @@ export class PermissionPresetService extends Service {
     }, 'selection')
   }
 
+  /**
+   * Apply a user selection to a live agent, including the approval policy's logged model update.
+   * @param agent - currently served agent in this permission service's realm.
+   * @param name - configured preset; validation precedes all writes.
+   */
+  setLive(agent: Agent, name: string): void {
+    this.resolve(name)
+    this.apply(agent.session, name, (policy) => { this.ctx.approval.setPolicy(agent, policy) }, 'selection')
+  }
+
   /** Apply one preset with the caller-selected live or initialization policy writer. */
   private apply(
     session: Session,
@@ -447,6 +459,14 @@ export class PermissionPresetService extends Service {
     }
   }
 
+  /** Read the workspace default prepared before session creation, or the user default. */
+  private defaultForSession(session: Session): string {
+    const cwd = session.header.cwd
+    const environment = cwd === undefined ? undefined : this.ctx.get('workspaceConfig')?.currentEnvironment(cwd)
+    const settings = environment?.settings.get(PERMISSION_SETTINGS_NAMESPACE) as PermissionSettings | undefined
+    return settings?.defaultPreset ?? this.defaultPreset
+  }
+
   /**
    * Fill every missing permission fact before a session is published. A
    * genuinely fresh session uses the current user default; seeded or partially
@@ -460,7 +480,7 @@ export class PermissionPresetService extends Service {
     const approval = effectiveApprovalPolicy(events)
     const seeded = events.some(event => event.type === 'session/end-seed')
     if (selected === undefined && sandbox === undefined && approval === undefined && !seeded) {
-      const name = this.defaultPreset
+      const name = this.defaultForSession(session)
       const spec = this.resolve(name)
       session.append('permission/preset', { preset: name, origin: 'default' })
       setSandboxMode(session, spec.sandbox)

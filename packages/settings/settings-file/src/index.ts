@@ -1,6 +1,6 @@
 /**
- * File-backed settings provider. One YAML or JSON document under the user's
- * harness home carries every namespace section; external edits hot-publish
+ * File-backed settings provider. One YAML or JSON document carries namespace
+ * sections; external edits hot-publish
  * through the seam, and every write re-reads the document under a
  * cross-process writer lock before patching it as a comment-preserving
  * leaf-level diff.
@@ -10,8 +10,8 @@
 import { Context, Service } from '@hydraharness/cordis'
 import z from '@hydraharness/schemastery'
 import { watch as chokidarWatch } from 'chokidar'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, extname, join, resolve } from 'node:path'
+import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { Document, parseDocument } from 'yaml'
 import { withFileLock, writeFileAtomic } from '@hydraharness/harness-atomic-write'
 import { canonicalizeWatchPath, resolveHydraHome } from '@hydraharness/harness-home-paths'
@@ -27,6 +27,12 @@ export interface Config {
   watch?: boolean
   /** Watcher write-settle window in milliseconds; defaults to 100. */
   debounceMs?: number
+  /** Allowed document namespaces; omitted permits every namespace. */
+  allowedNamespaces?: string[] | undefined
+  /** Apply raw sections to resolved reads; defaults to true. Stored sections remain editable. */
+  layerEnabled?: boolean
+  /** Canonical workspace root confining document reads and writes; omitted for global settings. */
+  confinedRoot?: string
 }
 
 /** Document format derived from the configured file extension. */
@@ -44,13 +50,16 @@ interface ResolvedSpec {
   format: SettingsFormat
   watch: boolean
   debounceMs: number
+  allowedNamespaces: ReadonlySet<string> | undefined
+  layerEnabled: boolean
+  confinedRoot: string | undefined
 }
 
 /**
  * Resolve the runtime spec from plugin config: an explicit `path` wins,
  * otherwise the document lives at `<harness home>/settings.yaml`.
  * @param config - raw plugin config.
- * @returns the resolved file location, format, and watch behavior.
+ * @returns the resolved file location, format, watch behavior, and access restrictions.
  */
 export function resolveSpec(config: Config): ResolvedSpec {
   const filename = resolve(config.path ?? join(resolveHydraHome(config.hydraHome), 'settings.yaml'))
@@ -63,6 +72,9 @@ export function resolveSpec(config: Config): ResolvedSpec {
     format,
     watch: config.watch ?? true,
     debounceMs: config.debounceMs ?? 100,
+    allowedNamespaces: config.allowedNamespaces === undefined ? undefined : new Set(config.allowedNamespaces),
+    layerEnabled: config.layerEnabled ?? true,
+    confinedRoot: config.confinedRoot === undefined ? undefined : resolve(config.confinedRoot),
   }
 }
 
@@ -108,6 +120,9 @@ export class FileSettingsProvider extends SettingsProvider {
     hydraHome: z.string(),
     watch: z.boolean().default(true),
     debounceMs: z.number().min(0).default(100),
+    allowedNamespaces: z.union([z.const(undefined), z.array(z.string())]),
+    layerEnabled: z.boolean().default(true),
+    confinedRoot: z.string(),
   })
 
   private readonly spec: ResolvedSpec
@@ -137,6 +152,7 @@ export class FileSettingsProvider extends SettingsProvider {
     // Programmatic construction may bypass Schemastery normalization; resolve
     // the same defaults in one explicit step either way.
     this.spec = resolveSpec(config)
+    this.setLayerEnabled(this.spec.layerEnabled)
   }
 
   /** The local document is always writable through {@link SettingsProvider.update}. */
@@ -152,8 +168,10 @@ export class FileSettingsProvider extends SettingsProvider {
   /** Materialize an absent owner-only document, then return its resolved path. */
   override prepareDocument(): Promise<string> {
     return this.enqueue(async () => {
+      await this.assertConfined()
       await mkdir(dirname(this.spec.filename), { recursive: true, mode: 0o700 })
       await withFileLock(this.spec.filename, async () => {
+        await this.assertConfined()
         try {
           await writeFile(this.spec.filename, '', { flag: 'wx', mode: 0o600 })
         } catch (error) {
@@ -168,6 +186,7 @@ export class FileSettingsProvider extends SettingsProvider {
   }
 
   protected async load(): Promise<Record<string, unknown>> {
+    await this.assertConfined()
     let text: string
     try {
       text = await readFile(this.spec.filename, 'utf8')
@@ -183,6 +202,7 @@ export class FileSettingsProvider extends SettingsProvider {
 
   protected override withWriteTransaction(operation: () => Promise<void>): Promise<void> {
     return this.enqueue(async () => {
+      await this.assertConfined()
       await mkdir(dirname(this.spec.filename), { recursive: true, mode: 0o700 })
       await withFileLock(this.spec.filename, async () => {
         await this.reconcileFromDisk()
@@ -210,6 +230,8 @@ export class FileSettingsProvider extends SettingsProvider {
   }
 
   protected async persist(ns: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
+    this.validateNamespace(ns)
+    await this.assertConfined()
     const output = this.spec.format === 'yaml'
       ? this.renderYaml(ns, section)
       : this.renderJson(ns, section)
@@ -280,7 +302,15 @@ export class FileSettingsProvider extends SettingsProvider {
     if (typeof root !== 'object' || root === null || Array.isArray(root)) {
       throw new TypeError(`settings-file: ${this.spec.filename} must be a map of namespace sections`)
     }
+    for (const ns of Object.keys(root)) this.validateNamespace(ns)
     return root as Record<string, unknown>
+  }
+
+  /** Refuse sections outside the file owner's permitted namespace set. */
+  private validateNamespace(ns: string): void {
+    if (this.spec.allowedNamespaces !== undefined && !this.spec.allowedNamespaces.has(ns)) {
+      throw new Error(`settings-file: namespace "${ns}" is not allowed in ${this.spec.filename}`)
+    }
   }
 
   /**
@@ -308,6 +338,7 @@ export class FileSettingsProvider extends SettingsProvider {
    * and keeps the last good document, a write fails loud.
    */
   private async reconcileFromDisk(): Promise<void> {
+    await this.assertConfined()
     let text: string | undefined
     try {
       text = await readFile(this.spec.filename, 'utf8')
@@ -324,6 +355,24 @@ export class FileSettingsProvider extends SettingsProvider {
     const doc = this.parse(text)
     this.text = text
     this.publish(doc)
+  }
+
+  /** Refuse redirected workspace document access before reads or writes begin. */
+  private async assertConfined(): Promise<void> {
+    if (this.spec.confinedRoot === undefined) return
+    const canonicalPath = await canonicalizeWatchPath(this.spec.filename)
+    const suffix = relative(this.spec.confinedRoot, canonicalPath)
+    if (isAbsolute(suffix) || suffix === '..' || suffix.startsWith(`..${sep}`)) {
+      throw new Error(`settings-file: document ${this.spec.filename} escapes workspace ${this.spec.confinedRoot}`)
+    }
+    try {
+      const entry = await lstat(this.spec.filename)
+      if (entry.isSymbolicLink() || !entry.isFile()) {
+        throw new Error(`settings-file: workspace document ${this.spec.filename} must be a regular file`)
+      }
+    } catch (error) {
+      if (!isENOENT(error)) throw error
+    }
   }
 
   /**

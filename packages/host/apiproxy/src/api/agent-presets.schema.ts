@@ -8,6 +8,7 @@ import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import { sessionIdSchema } from './sessions.schema.ts'
 import type { AgentPresetEntry } from './agent-presets.ts'
+import { workspaceIdSchema } from './workspace.schema.ts'
 
 /** AgentPresetEntry row of agentPreset.list. */
 export const agentPresetEntrySchema = z.object({
@@ -21,6 +22,7 @@ export const agentPresetEntrySchema = z.object({
 
 /** agentPreset.list request payload. */
 export const agentPresetListRequestSchema = z.object({
+  workspaceId: workspaceIdSchema.optional(),
 }) satisfies z.ZodType<Wire<RequestPayload<'agentPreset.list'>>>
 
 /** agentPreset.list response value. */
@@ -43,6 +45,7 @@ export const agentPresetSelectValueSchema = z.object({
 
 /** agentPreset.read request payload. */
 export const agentPresetReadRequestSchema = z.object({
+  workspaceId: workspaceIdSchema.optional(),
   agentPreset: z.string().min(1),
 }) satisfies z.ZodType<Wire<RequestPayload<'agentPreset.read'>>>
 
@@ -57,6 +60,7 @@ export const agentPresetReadValueSchema = z.object({
 
 /** agentPreset.copy request payload. */
 export const agentPresetCopyRequestSchema = z.object({
+  workspaceId: workspaceIdSchema.optional(),
   from: z.string().min(1),
   agentPreset: z.string().min(1),
   name: z.string().optional(),
@@ -69,6 +73,7 @@ export const agentPresetCopyValueSchema = z.object({
 
 /** agentPreset.openDocument request payload. */
 export const agentPresetOpenDocumentRequestSchema = z.object({
+  workspaceId: workspaceIdSchema.optional(),
   agentPreset: z.string().min(1),
 }) satisfies z.ZodType<Wire<RequestPayload<'agentPreset.openDocument'>>>
 
@@ -80,6 +85,7 @@ export const agentPresetOpenDocumentValueSchema = z.union([
 
 /** agentPreset.remove request payload. */
 export const agentPresetRemoveRequestSchema = z.object({
+  workspaceId: workspaceIdSchema.optional(),
   agentPreset: z.string().min(1),
 }) satisfies z.ZodType<Wire<RequestPayload<'agentPreset.remove'>>>
 

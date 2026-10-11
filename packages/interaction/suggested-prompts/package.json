@@ -1,0 +1,70 @@
+{
+  "name": "@hydraharness/harness-suggested-prompts",
+  "version": "0.1.1-rc.9",
+  "description": "Bounded suggestions for empty chats",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    }
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/interaction/suggested-prompts",
+    "url": "git+https://github.com/MaiHongPhong2010/Hydra-Harness.git",
+    "type": "git"
+  },
+  "peerDependencies": {
+    "@hydraharness/cordis": "workspace:^",
+    "@hydraharness/harness-agent": "workspace:^",
+    "@hydraharness/harness-fs": "workspace:^",
+    "@hydraharness/harness-llm": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/harness-optional-plugins": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
+    "@hydraharness/harness-session": "workspace:^",
+    "@hydraharness/harness-invariants": "workspace:^"
+  },
+  "devDependencies": {
+    "@hydraharness/cordis": "workspace:^",
+    "@hydraharness/harness-agent": "workspace:^",
+    "@hydraharness/harness-fs": "workspace:^",
+    "@hydraharness/harness-llm": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/harness-optional-plugins": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
+    "@hydraharness/harness-session": "workspace:^",
+    "@hydraharness/harness-invariants": "workspace:^"
+  },
+  "hydra": {
+    "plugin": {
+      "application": "Suggest bounded draft prompts from readable project context."
+    }
+  },
+  "dependencies": {
+    "zod": "^4.1.5",
+    "@hydraharness/schemastery": "workspace:^"
+  }
+}

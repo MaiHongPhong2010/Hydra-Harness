@@ -119,7 +119,8 @@
     "@hydraharness/schemastery": "workspace:^",
     "commander": "^15.0.0",
     "open": "^11.0.0",
-    "@hydraharness/harness-client-ui-review": "workspace:^"
+    "@hydraharness/harness-client-ui-review": "workspace:^",
+    "@hydraharness/harness-client-ui-suggested-prompts": "workspace:^"
   },
   "peerDependencies": {
     "@hydraharness/harness-agent": "workspace:^",

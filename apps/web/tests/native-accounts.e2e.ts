@@ -46,21 +46,21 @@ it('adds the five native sign-in providers, persists their accounts, and makes C
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.waitFor()
   await dialog.getByRole('button', { name: 'Models', exact: true }).click()
-  const section = dialog.getByRole('region', { name: 'Account sign-in', exact: true })
-  await section.getByRole('button', { name: 'Add sign-in provider', exact: true }).waitFor({ timeout: 15_000 })
+  const section = dialog.getByRole('region', { name: 'Account-backed models', exact: true })
+  await section.getByRole('button', { name: 'Add provider', exact: true }).waitFor({ timeout: 15_000 })
   for (const provider of providers) {
-    await section.getByRole('button', { name: 'Add sign-in provider', exact: true }).click()
+    await section.getByRole('button', { name: 'Add provider', exact: true }).click()
     const selection = section.getByLabel('Provider', { exact: true })
     if (provider === providers[0]) {
       const choices = await selection.locator('option').allTextContents()
-      for (const name of ['ChatGPT', 'Google', 'Claude', 'xAI', 'Kimi Code', 'Cursor', 'Kiro']) expect(choices).toContain(name)
+      for (const name of ['ChatGPT', 'Google Antigravity', 'Claude', 'xAI', 'Kimi Code', 'Cursor', 'Kiro']) expect(choices).toContain(name)
       await page.screenshot({ path: join(shots, 'provider-options.png') })
     }
     await selection.selectOption(provider)
     expect(await section.getByRole('list', { name: 'Accounts', exact: true }).count()).toBe(0)
     expect(await dialog.getByText(`${provider}@example.test`, { exact: true }).count()).toBe(0)
     expect(await section.getByRole('textbox', { name: 'API key', exact: true }).count()).toBe(0)
-    expect(await section.getByRole('button', { name: 'Add account', exact: true }).isVisible()).toBe(true)
+    expect(await section.getByRole('button', { name: 'Add account', exact: true }).count()).toBe(0)
     if (provider === 'cursor') {
       await section.getByText(/Cursor account management is available/).waitFor()
     }
@@ -72,7 +72,7 @@ it('adds the five native sign-in providers, persists their accounts, and makes C
     if (provider === 'cursor') {
       expect(await section.getByRole('button', { name: 'Fetch', exact: true }).isDisabled()).toBe(true)
     }
-    await dialog.getByRole('button', { name: 'Apply', exact: true }).click()
+    await section.getByRole('button', { name: 'Apply', exact: true }).click()
     const label = ACCOUNT_PROVIDER_LABELS[provider]
     await section.getByRole('button', { name: `Edit ${label} (${provider})`, exact: true }).waitFor({ timeout: 10_000 })
     if (provider === 'cursor') {
@@ -111,11 +111,15 @@ it('adds the five native sign-in providers, persists their accounts, and makes C
     const label = ACCOUNT_PROVIDER_LABELS[provider as AccountProvider]
     await page.getByRole('button', { name: `Edit ${label} (${provider})`, exact: true }).waitFor({ timeout: 10_000 })
     await section.getByRole('button', { name: `Edit ${label} (${provider})`, exact: true }).click()
-    await section.getByText(`${provider}@example.test`, { exact: true }).waitFor({ timeout: 10_000 })
+    expect(await section.getByText(provider + '@example.test', { exact: true }).count()).toBe(0)
     await section.getByText('Customized settings', { exact: true }).click()
     expect(await section.getByRole('checkbox', { name: `Image ${provider}-catalog-alias`, exact: true }).isChecked()).toBe(true)
     expect(await section.getByRole('checkbox', { name: `Video ${provider}-catalog-alias`, exact: true }).isChecked()).toBe(true)
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Manage accounts', exact: true }).click()
+    await dialog.getByLabel('Provider', { exact: true }).selectOption('llm-account-auth/' + provider)
+    await dialog.getByText(provider + '@example.test', { exact: true }).waitFor()
+    await dialog.getByRole('button', { name: 'Manage models', exact: true }).click()
   }
   expect(tripwire.warnings).toEqual([])
   expect(tripwire.pageErrors).toEqual([])

@@ -1,6 +1,6 @@
 /**
  * Models settings and product-onboarding plugin, browser half. It registers
- * the Models page plus the ordered internal-testing notice and provider-setup
+ * the Models and Accounts pages plus the ordered internal-testing notice and provider-setup
  * navigation. The Host
  * settings and credential contracts stay behind their existing wire APIs.
  * Export discipline:
@@ -16,6 +16,7 @@ import type {} from '@hydraharness/harness-client-locale/client'
 // (settings/credentials invalidations ride the allowlist) into this program.
 import type {} from '@hydraharness/harness-api-remotes/client'
 import { ModelsSection } from './ModelsSection.tsx'
+import { AccountsSection } from './AccountsSection.tsx'
 import type { ModelsSectionInjected } from './ModelsSection.tsx'
 import { ProviderOnboarding } from './ProviderOnboarding.tsx'
 import type { ProviderOnboardingInjected } from './ProviderOnboarding.tsx'
@@ -25,6 +26,7 @@ import { decodeWelcomeSection, WelcomeNoticeStore } from './welcome-store.ts'
 import { ModelsSettingsStore } from './store.ts'
 import { createSettingsSchemaOperations } from './schema-operations.ts'
 import { en, type ModelsKey } from './locales.ts'
+import { SpeedPreferenceRow, type SpeedPreferenceRowInjected } from './SpeedPreferenceRow.tsx'
 import { WELCOME_NOTICE_SETTINGS_NAMESPACE } from '../onboarding-copy.ts'
 
 export type { ModelsSectionInjected, ModelsSectionProps } from './ModelsSection.tsx'
@@ -37,24 +39,19 @@ declare module '@hydraharness/harness-client-ui-slots' {
   }
 
   interface SlotMap {
-    /** Optional provider options, configured rows, and editors owned by settings plugins. */
-    'settings.models.provider-option': { kind: 'list'; scope: 'root'; owner: ModelsProviderOptionOwnerProps }
+    /** Decision preferences and credential editors owned by their provider plugins. */
+    'settings.models.decision': { kind: 'list'; scope: 'root'; owner: ModelsDecisionOwnerProps }
   }
 }
 
-/** Owner props for an optional provider's selection, saved row, or editor. */
-export type ModelsProviderOptionOwnerProps = { mode: 'option' } | {
-  mode: 'row'
+/** Owner props for a decision provider's preferences and credential editor. */
+export interface ModelsDecisionOwnerProps {
   /** Value-free states from the page's refreshed credential describe. */
   credentials: Readonly<Record<string, CredentialView>>
-  /** Open the editor for this contribution's registered id. */
-  onEdit: (id: string) => void
-} | {
-  mode: 'editor'
   /** Whether the host settings provider is read-only. */
   readOnly: boolean
-  /** Close the editor and report whether it committed a change. */
-  onClose: (changed: boolean) => void
+  /** Navigate to another Settings section. */
+  openSection: (id: string) => void
 }
 
 /** Dictionary namespace owned by this plugin. */
@@ -79,7 +76,7 @@ export function refreshIfLoaded(controller: ModelsSettingsStore): void {
 export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope', 'settingsSchema']
 
 /**
- * Register the Models section once the `settings.section` declaration is on
+ * Register the Models and Accounts sections once the `settings.section` declaration is on
  * the ledger, wire its store to the connection, and keep it fresh on every
  * pushed invalidation (settings, credentials, or provider topology).
  * @param ctx - client root context.
@@ -88,8 +85,19 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-settings-models: copy dictionaries')
 
   const connection = ctx.get('connection') as ConnectionHandle
+  const speed = ctx.settingsScope.bind<{ tier: 'standard' | 'priority' }>({ namespace: 'llm-speed' })
+  const defaultModel = ctx.settingsScope.bind<{ provider: string; model: string }>({ namespace: 'agent-default-model' })
+  ctx.slots.inject('settings.general.general.item', () => ctx.slots.register({
+    name: 'settings.general.general.item', id: 'speed', order: 75, label: () => ctx.locale.bind(NS)('speed.title'), locale: NS,
+    inject: (): SpeedPreferenceRowInjected => ({ api: connection.api, current: () => ctx.get('sessions')?.list.getSnapshot().current,
+      save: async (tier) => {
+        await speed.set('tier', tier)
+        if (speed.getSnapshot().value?.tier !== tier) throw new Error('Could not save the processing speed. Try again.')
+      }, hooks: { speed, model: defaultModel } }),
+  }, SpeedPreferenceRow))
   const schema = createSettingsSchemaOperations(ctx.settingsSchema)
-  const controller = new ModelsSettingsStore(connection.api, schema, ctx.settingsScope.describe())
+  const settings = ctx.settingsScope.describe()
+  const controller = new ModelsSettingsStore(connection.api, schema, settings)
   // Registration-time text (the nav label thunk) and the inject faces share
   // one bound translate; copy freshness rides the locale revision.
   const t = ctx.locale.bind(NS) as ModelsSectionInjected['t']
@@ -97,14 +105,16 @@ export function apply(ctx: ClientContext): void {
     controller,
     hooks: {
       snapshot: controller.store,
-      providerOptions: {
-        getSnapshot: () => ctx.slots.entries('settings.models.provider-option').length,
-        subscribe: listener => ctx.slots.subscribe('settings.models.provider-option', listener),
+      selection: ctx.settingsScope.selection(),
+      decisions: {
+        getSnapshot: () => ctx.slots.entries('settings.models.decision').length,
+        subscribe: listener => ctx.slots.subscribe('settings.models.decision', listener),
       },
     },
     api: connection.api,
     schema,
     t,
+    acceptSettings: (view) => { settings.acceptView(view) },
   })
   const providerOnboardingInjected = (): ProviderOnboardingInjected => ({
     controller,
@@ -148,8 +158,12 @@ export function apply(ctx: ClientContext): void {
     order: 10,
     label: () => t('nav'),
     inject: injected,
-    children: { 'settings.models.provider-option': { kind: 'list', scope: 'root' } },
+    children: { 'settings.models.decision': { kind: 'list', scope: 'root' } },
   }, ModelsSection))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section', id: 'accounts', order: 11, label: () => t('accountsTitle'),
+    inject: () => ({ controller, api: connection.api, t, hooks: { snapshot: controller.store } }),
+  }, AccountsSection))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'welcome-notice',

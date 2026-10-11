@@ -6,8 +6,11 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { stat } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { mkdir, mkdtemp, rmdir, stat } from 'node:fs/promises'
+import { basename, isAbsolute, join } from 'node:path'
+import z from '@hydraharness/schemastery'
+import { resolveHydraHome } from '@hydraharness/harness-home-paths'
+import { settingsNamespace, type SettingsScope } from '@hydraharness/harness-settings'
 import { Context, Service } from '@hydraharness/cordis'
 import type { SessionHeader, SessionId } from '@hydraharness/harness-session'
 import type {} from '@hydraharness/harness-session-persistence'
@@ -91,6 +94,7 @@ const compareHeaders = (left: SessionHeader, right: SessionHeader): number =>
  */
 export class WorkspaceRegistry extends Service {
   static inject = ['storageDomain', 'sessionPersistence']
+  private taskSettings?: SettingsScope<{ root: string }>
 
   private table?: KvTable<WorkspaceId, WorkspaceRecord>
   private global?: DomainGlobal<WorkspaceDomainState>
@@ -113,6 +117,34 @@ export class WorkspaceRegistry extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'workspaceRegistry')
+    ctx.inject(['settings'], (sctx) => {
+      this.taskSettings = sctx.settings.register(settingsNamespace('projectless-tasks'), z.object({
+        root: z.string().pattern(/^(?!.*\0)(?:\/|[A-Za-z]:[\\/]|\\\\)/u),
+      }), { base: { root: join(resolveHydraHome(), 'tasks') } })
+    })
+  }
+
+  /**
+   * Create a distinct validated directory for a chat outside projects; later root changes affect only new tasks.
+   * @returns the task workspace, retained for Files and Terminal ownership.
+   */
+  async createTask(): Promise<Workspace> {
+    const root = this.taskSettings?.get().root ?? join(resolveHydraHome(), 'tasks')
+    if (!isAbsolute(root) || root.includes('\0')) throw new Error('Projectless task root must be an absolute path')
+    await mkdir(root, { recursive: true })
+    const parent = await realpathNormalize(root)
+    const path = await mkdtemp(join(parent, 'chat-'))
+    try {
+      const canonical = await realpathNormalize(path)
+      return await this.enqueueOperation(async () => {
+        await this.ctx.parallel('workspace/pre-create', canonical)
+        return await this.createCanonical(canonical, 'Standalone chat', 'task')
+      })
+    } catch (error: unknown) {
+      try { await rmdir(path) }
+      catch (cleanup: unknown) { throw new AggregateError([error, cleanup], 'Task creation failed; its directory could not be removed') }
+      throw error
+    }
   }
 
   /** Open the domain, finish bootstrap when required, and rebuild the ordered cache. */
@@ -146,6 +178,8 @@ export class WorkspaceRegistry extends Service {
    * canonical path return the existing entity without changing its title.
    * A newly created workspace is prepended to the durable registry order.
    * Different canonical paths may share a display title.
+   * Workspace preparation listeners run before registration writes, including
+   * when the canonical path already has a record; a rejected listener aborts creation.
    * @param path - Existing directory to own, in any path spelling.
    * @param title - Display title used only when a new record is created.
    * @returns the existing or newly durable workspace.
@@ -160,7 +194,10 @@ export class WorkspaceRegistry extends Service {
     if (!(await stat(canonical)).isDirectory()) {
       throw new Error(`cannot create a workspace at '${canonical}': path is not a directory`)
     }
-    return await this.enqueueOperation(() => this.createCanonical(canonical, title))
+    return await this.enqueueOperation(async () => {
+      await this.ctx.parallel('workspace/pre-create', canonical)
+      return await this.createCanonical(canonical, title)
+    })
   }
 
   /**
@@ -318,7 +355,7 @@ export class WorkspaceRegistry extends Service {
     return undefined
   }
 
-  private async createCanonical(canonical: string, title?: string): Promise<WorkspaceEntity> {
+  private async createCanonical(canonical: string, title?: string, kind?: 'task'): Promise<WorkspaceEntity> {
     for (const entity of this.entities.values()) {
       if (entity.path === canonical) return entity
     }
@@ -329,6 +366,7 @@ export class WorkspaceRegistry extends Service {
     const id = WorkspaceId(randomUUID())
     const now = new Date().toISOString()
     const record: WorkspaceRecord = {
+      ...(kind === undefined ? {} : { kind }),
       path: canonical,
       title: workspaceName,
       sessionIds: [],

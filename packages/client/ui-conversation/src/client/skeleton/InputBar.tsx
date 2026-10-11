@@ -80,12 +80,13 @@ export function InputBar({
   useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
   draftBrowserAnnotations, removeBrowserAnnotation, updateBrowserAnnotationComment,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
-  renderSlot, useNotices, useLexicon, useMenuLauncher,
+  renderSlot, useNotices, useLexicon, useMenuLauncher, useComposerPreferences,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
   placeholder, accessory, overlay, leftItems, rightItems, footer,
 }: InputBarProps) {
   const input = useInput(s => s)
+  const preferences = useComposerPreferences(state => state)
   const notice = useNotices(s => s)
   const lexicon = useLexicon(s => s)
   const commandMenuOpen = useMenuLauncher(source => source === 'command')
@@ -374,7 +375,7 @@ export function InputBar({
     if (input === undefined || keyboard === undefined || inputActions === undefined) return
     // Shift+Enter is the native newline UNCONDITIONALLY — decided before the
     // IME guard so a composition-closing Shift+Enter still breaks the line.
-    if (e.key === 'Enter' && e.shiftKey) return
+    if (e.key === 'Enter' && e.shiftKey && !(e.ctrlKey || e.metaKey)) return
     // keyCode 229 is the legacy IME-composition signal engines emit without isComposing.
     // oxlint-disable-next-line typescript/no-deprecated
     const composing = composingRef.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229
@@ -424,6 +425,8 @@ export function InputBar({
     }
     if (e.key !== 'Enter') return
     if (composing) return
+    const accelerated = e.ctrlKey || e.metaKey
+    if (!accelerated && preferences.sendShortcut === 'mod-enter') return
     // Menu-open Enter picks the highlight through arbitration; a no-highlight
     // menu passes down to the machine's own adjudication.
     const arbitrated = keyboard.arbitrate('enter', composing)
@@ -434,7 +437,6 @@ export function InputBar({
     e.preventDefault()
     if (e.repeat) return // held-down Enter must not machine-gun sends
     if (locked || machineBusy) return
-    const accelerated = e.ctrlKey || e.metaKey
     // Empty-draft accelerated Enter acts on the queue instead of the (empty)
     // draft: the machine rejects empty drafts, so the gesture steers every
     // still-pending queued message into the running turn (the dock's per-row
@@ -446,7 +448,7 @@ export function InputBar({
     }
     keyboard.submit(resolveSubmitMode(
       running,
-      accelerated ? 'accelerated' : 'enter',
+      accelerated && e.shiftKey ? 'alternate' : accelerated ? 'accelerated' : 'enter',
       subagent === null,
     ))
   }
@@ -573,11 +575,9 @@ export function InputBar({
     if (el !== null) toggleCommandMenu?.(selectionOf(el))
   }
 
-  // Ordinary sessions retain their primary Send/Stop toggle. A continuable
-  // child keeps Send as the primary action and exposes Stop independently so
-  // pointer users can queue follow-ups while its current turn is running.
-  const primaryStops = running && subagent === null
-  const interruptible = running && continuable
+  // A draft keeps Send beside Stop so pointer users can submit busy follow-ups.
+  const primaryStops = running && subagent === null && empty
+  const interruptible = running && !primaryStops && (subagent === null || continuable)
   const primaryLabel = primaryStops ? t('input.stop') : t('input.send')
   const onPrimary = (): void => {
     if (primaryStops) {
@@ -586,7 +586,7 @@ export function InputBar({
     }
     if (inputActions === undefined) return // absent machine: the button is disabled
     /* v8 ignore next -- defensive: the primary button is disabled while empty||disabled, so a click cannot reach the false arm. */
-    if (!empty && !disabled && !machineBusy) inputActions.submit()
+    if (!empty && !disabled && !machineBusy) keyboard.submit(resolveSubmitMode(running, 'send', subagent === null))
   }
 
   // The Access seat: the projection-fed permission chip (renders nothing
@@ -599,7 +599,8 @@ export function InputBar({
   // Mirror-layer decorations: a visible backdrop with transparent textarea
   // text. Claim tokens and references retain the draft's own glyph metrics,
   // so their decoration cannot drift from wrapping, selection, or the caret.
-  const deco = input === undefined ? INERT_DECORATIONS : deriveDecorations(input, lexicon)
+  const derivedDecorations = input === undefined ? INERT_DECORATIONS : deriveDecorations(input, lexicon)
+  const deco = preferences.plainText ? { ...derivedDecorations, textRefs: [] } : derivedDecorations
   const backdrop: ReactNode[] = []
   {
     // Segment boundaries: the token range end, every structured-reference
@@ -813,7 +814,7 @@ export function InputBar({
           <div className={css.trailing}>
             {rightItems}
             {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
-            <ContextMeter useProjection={useProjection} t={t} />
+            {preferences.showContextUsage && <ContextMeter useProjection={useProjection} t={t} />}
             {interruptible && (
               <Tooltip label={t('input.stop')} side="top" delayMs={500}>
                 <button

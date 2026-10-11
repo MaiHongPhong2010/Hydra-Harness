@@ -50,6 +50,13 @@ for line in sys.stdin:
         ]
         for event_type, data in diagnostics:
             print(json.dumps({"jsonrpc": "2.0", "method": "session.event", "params": {"sessionId": params["sessionId"], "event": {"type": event_type, "data": data}}}), flush=True)
+        auxiliary = [
+            ("suggestions/request", {"config": {"provider": "mock", "model": "model-a", "serviceTier": "priority", "requestedServiceTier": "priority"}, "system": "Return prompts", "context": "Project README"}),
+            ("suggestions/result", {"items": ["Explain this project"]}),
+            ("assistant/chunk", {"turn": 0, "step": 0, "chunk": {"type": "finish", "reason": {"kind": "stop"}, "serviceTier": "default"}}),
+        ]
+        for event_type, data in auxiliary:
+            print(json.dumps({"jsonrpc": "2.0", "method": "session.event", "params": {"sessionId": params["sessionId"], "event": {"type": event_type, "data": data}}}), flush=True)
         print(json.dumps({
             "jsonrpc": "2.0",
             "method": "session.event",
@@ -100,6 +107,7 @@ for line in sys.stdin:
     )
 
     with HydraHarness(
+        provider="deepseek-official",
         model="deepseek-v4-flash",
         max_tokens=4096,
         cwd=str(tmp_path),
@@ -118,6 +126,9 @@ for line in sys.stdin:
     assert result.final_response == "hello from runtime"
     assert result.finish_reason == "max-tokens"
     assert result.events[-1]["type"] == "turn/end"
+    assert [event["data"] for event in result.events if event["type"] == "suggestions/result"] == [{"items": ["Explain this project"]}]
+    assert next(event["data"]["config"] for event in result.events if event["type"] == "suggestions/request")["requestedServiceTier"] == "priority"
+    assert next(event["data"]["chunk"] for event in result.events if event["type"] == "assistant/chunk")["serviceTier"] == "default"
     call_events = [event for event in result.events if event["type"].startswith("llm/call-")]
     assert [event["type"] for event in call_events] == ["llm/call-start", "llm/call-first-output", "llm/call-end"]
     assert call_events[-1]["data"] == {
@@ -136,6 +147,31 @@ for line in sys.stdin:
         "model": "deepseek-v4-flash",
         "maxTokens": 4096,
     }
+
+
+def test_high_level_sdk_omits_routes_to_select_runtime_defaults(tmp_path: Path) -> None:
+    script = tmp_path / "fake_default_runtime.py"
+    init_dump = tmp_path / "init.json"
+    script.write_text("""
+import json
+import os
+import sys
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg.get("method") == "initialize":
+        json.dump(msg["params"], open(os.environ["INIT_DUMP"], "w"))
+        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {"serverInfo": {"name": "fake-runtime"}}}), flush=True)
+    elif msg.get("method") == "shutdown":
+        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {}}), flush=True)
+        break
+""".strip())
+    with HydraHarness(
+        cwd=str(tmp_path),
+        launch_args_override=(sys.executable, str(script)),
+        env={"INIT_DUMP": str(init_dump)},
+    ):
+        pass
+    assert json.loads(init_dump.read_text()) == {"cwd": str(tmp_path)}
 
 
 def test_session_run_invokes_notification_callback_before_returning(tmp_path: Path) -> None:

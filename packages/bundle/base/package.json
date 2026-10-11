@@ -39,6 +39,8 @@
     }
   },
   "dependencies": {
+    "@hydraharness/harness-notifications": "workspace:^",
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/cordis-plugin-hmr": "workspace:^",
     "@hydraharness/cordis-plugin-timer": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
@@ -139,7 +141,11 @@
     "@hydraharness/harness-web-fetch-http": "workspace:^",
     "@hydraharness/harness-web-search-deepseek": "workspace:^",
     "@hydraharness/harness-web-search-http": "workspace:^",
-    "@hydraharness/harness-workflow-worker-thread": "workspace:^"
+    "@hydraharness/harness-workflow-worker-thread": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
+    "@hydraharness/harness-agent-presets": "workspace:^",
+    "@hydraharness/harness-suggested-prompts": "workspace:^",
+    "@hydraharness/harness-toys": "workspace:^"
   },
   "peerDependencies": {
     "@hydraharness/harness-invariants": "workspace:^",
@@ -147,6 +153,7 @@
   },
   "devDependencies": {
     "@hydraharness/harness-invariants": "workspace:^",
-    "@hydraharness/cordis": "workspace:^"
+    "@hydraharness/cordis": "workspace:^",
+    "@hydraharness/harness-toys": "workspace:^"
   }
 }

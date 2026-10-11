@@ -1,6 +1,7 @@
 /** Host BFF entry and Loader shell for the Remote contribution assembly. */
 
 import type { TypertForwardableEvent } from '@hydraharness/harness-typert-protocol'
+import type {} from '@hydraharness/harness-notifications/types'
 import { API_REMOTE_FORWARDED_EVENTS } from './remote-events.ts'
 
 // The owner packages' client-safe `./types` exports carry the cordis `Events`
@@ -14,6 +15,7 @@ import type {} from '@hydraharness/harness-authorization/types'
 import type {} from '@hydraharness/harness-llm/types'
 import type {} from '@hydraharness/harness-agent-presets/types'
 import type {} from '@hydraharness/harness-settings/types'
+import type {} from '@hydraharness/harness-workspace-config/types'
 import type {} from '@hydraharness/harness-skill/types'
 import type {} from '@hydraharness/harness-fs-review/client'
 

@@ -19,6 +19,8 @@ import css from './PluginsSettingsSection.module.css'
 export interface HooksSettingsFace {
   /** The user's own hook records; available only on a loopback connection. */
   userHooks?: UserHookControls
+  /** Imported bundle catalogs belong to global settings. */
+  workspace?: boolean
 }
 
 /** Props the renderer binds for the hooks tab. */
@@ -35,13 +37,13 @@ export type HooksSettingsTabProps =
  * the child catalog dispatch.
  * @returns the stacked catalogs, or the unavailable notice.
  */
-export function HooksSettingsTab({ active, userHooks, renderSlot, query, t }: HooksSettingsTabProps) {
+export function HooksSettingsTab({ active, userHooks, renderSlot, query, t, workspace }: HooksSettingsTabProps) {
   return (
     <>
       {userHooks === undefined
         ? <p className={css.empty}>{t('userHooksUnavailable')}</p>
         : <HookRecordCatalog active={active} controls={userHooks} query={query} t={t} />}
-      {renderSlot('settings.plugins.hooks.item', { query, active })}
+      {!workspace && renderSlot('settings.plugins.hooks.item', { query, active })}
     </>
   )
 }

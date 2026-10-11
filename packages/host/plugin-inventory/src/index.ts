@@ -1,6 +1,7 @@
 /** Runtime plugin inventory plus shared user-setting enablement controls. */
 
 import { execFile } from 'node:child_process'
+import type {} from '@hydraharness/harness-optional-plugins'
 import { lstat, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -11,7 +12,9 @@ import type { Entry } from '@hydraharness/cordis-plugin-loader'
 import type { Include } from '@hydraharness/cordis-plugin-include'
 import { profilePluginEnablement, readProfileManifest, resolveProfileDir } from '@hydraharness/harness-app-boot'
 import { withFileLock, writeFileAtomic } from '@hydraharness/harness-atomic-write'
-import { settingsNamespace, type SettingsScope } from '@hydraharness/harness-settings'
+import { settingsNamespace, type SettingsProvider, type SettingsScope } from '@hydraharness/harness-settings'
+import type {} from '@hydraharness/harness-workspace-config'
+import type { SettingsTarget } from '@hydraharness/harness-workspace-config/types'
 import { TypertRemoteService, Remote } from '@hydraharness/harness-typert-protocol'
 import type {
   ImportedPluginEntry, ImportedPluginRuntime, ImportedPluginSnapshot, PluginImportSource,
@@ -49,6 +52,8 @@ declare module '@hydraharness/cordis-plugin-loader' {
     application?: string
     /** Core plugins change only on restart; omitted means normal. */
     pluginType?: 'core' | 'normal'
+    /** Required functionality and dependencies remain mounted when optional plugins are suspended. */
+    pluginRequired?: boolean
     /** Entries that implement one feature and share one Settings switch. */
     pluginGroup?: string
   }
@@ -383,15 +388,16 @@ interface EntryState {
 
 /** Optional preset service shape; inventory must also run without a roster. */
 interface AgentPresetPluginControls {
-  listPluginEntries(): Promise<readonly {
+  listPluginEntries(settings?: SettingsProvider): Promise<readonly {
     entryId: string
     presetId: string
+    rowId?: string
     moduleName: string
     enabled: boolean
     description?: string
     application?: string
   }[]>
-  setPluginEnabled(entryId: string, enabled: boolean): Promise<void>
+  setPluginEnabled(entryId: string, enabled: boolean, settings?: SettingsProvider): Promise<void>
 }
 
 /** Remote-only service exposing the Loader's current non-group entry state. */
@@ -407,6 +413,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private readonly defaultEnabled = new Map<string, boolean>()
   private readonly initialEnabled = new Map<string, boolean>()
   private readonly originalConfigs = new Map<string, unknown>()
+  private readonly suspended = new Map<Entry, boolean>()
+  private readonly required = new Set<string>()
   private readonly appliedSettings = new Set<string>()
   private restartEnablement: Record<string, boolean> = {}
   private mutationTail: Promise<unknown> = Promise.resolve()
@@ -416,6 +424,18 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.compositionEntryIds = new Set(config.compositionEntryIds)
     this.settings = ctx.settings.register(PLUGIN_SETTINGS_NAMESPACE, PluginSettingsSchema)
     this.marketplaceSettings = ctx.settings.register(MARKETPLACE_SETTINGS_NAMESPACE, MarketplaceSettingsSchema)
+    ctx.inject(['optionalPlugins'], (pctx) => {
+      pctx.effect(() => pctx.optionalPlugins.subscribe((enabled) => {
+        void this.enqueue(() => this.applyOptionalGate(enabled)).catch((error: unknown) => { this.ctx.logger.error(error) })
+      }), 'pluginInventory: optional policy')
+      void this.enqueue(() => this.applyOptionalGate(pctx.optionalPlugins.enabled))
+        .catch((error: unknown) => { this.ctx.logger.error(error) })
+    })
+    ctx.on('loader/config-update', () => {
+      const policy = ctx.get('optionalPlugins')
+      if (policy !== undefined) void this.enqueue(() => this.applyOptionalGate(policy.enabled))
+        .catch((error: unknown) => { ctx.logger.error(error) })
+    })
   }
 
   protected async [Service.init](): Promise<void> {
@@ -437,6 +457,46 @@ export class PluginInventoryGateway extends TypertRemoteService {
       () => this.settings.watch(next => this.enqueue(() => this.applySettings(next.enabled))),
       'pluginInventory.settingsWatch',
     )
+  }
+
+  /** Protect required modules and their declared dependency closure before suspending root-owned features. */
+  private async applyOptionalGate(enabled: boolean): Promise<void> {
+    const policy = this.ctx.get('optionalPlugins')
+    if (policy === undefined) return
+    if (!enabled) await policy.drain()
+    if (policy.enabled !== enabled) return
+    const entries = [...this.representatives(this.rootInclude()).values()]
+    const byModule = new Map(entries.map(entry => [entry.options.name, entry]))
+    const pending = entries.filter(entry => entry.options.pluginRequired === true).map(entry => entry.options.name)
+    this.required.clear()
+    for (const name of pending) {
+      if (this.required.has(name)) continue
+      this.required.add(name)
+      const entry = byModule.get(name)
+      const baseUrl = entry?.parent.tree.ctx.baseUrl
+      if (baseUrl === undefined || !name.startsWith('@')) continue
+      const packageName = name.split('/').slice(0, 2).join('/')
+      const manifest = createRequire(baseUrl).resolve(`${packageName}/package.json`)
+      const metadata = zod.object({ dependencies: zod.record(zod.string(), zod.string()).optional(), peerDependencies: zod.record(zod.string(), zod.string()).optional(), hydra: zod.object({ bundle: zod.unknown().optional() }).optional() }).parse(JSON.parse(await readFile(manifest, 'utf8')) as unknown)
+      // Bundle manifests list optional composition rows; required runtime rows carry their own flags.
+      if (metadata.hydra?.bundle !== undefined) continue
+      for (const dependency of Object.keys({ ...metadata.dependencies, ...metadata.peerDependencies })) {
+        for (const candidate of entries) if (candidate.options.name === dependency || candidate.options.name.startsWith(`${dependency}/`)) pending.push(candidate.options.name)
+      }
+    }
+    for (const entry of entries) {
+      if (entry.subtree !== undefined || entry.subgroup !== undefined || this.required.has(entry.options.name)) continue
+      const previous = this.suspended.get(entry)
+      if (!enabled) {
+        if (!this.suspended.has(entry)) this.suspended.set(entry, !entry.disabled)
+        await entry.update({ disabled: true })
+      } else if (previous !== undefined) {
+        const nextEnabled = this.isRestartOnly(entry) ? previous
+          : this.settings.get().enabled[entry.options.name] ?? this.defaultEnabled.get(entry.options.name) ?? previous
+        this.suspended.delete(entry)
+        await entry.update({ disabled: !nextEnabled })
+      }
+    }
   }
 
   private rootInclude(): Include | undefined {
@@ -485,6 +545,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     for (const entry of this.ctx.loader.entries()) {
       if (entry.options.group || this.compositionEntryIds.has(entry.options.id)) continue
       this.isRestartOnly(entry)
+      if (entry.options.pluginRequired !== undefined && typeof entry.options.pluginRequired !== 'boolean') throw new Error(`pluginInventory: ${entry.id}.pluginRequired must be boolean`)
       const group: unknown = entry.options.pluginGroup
       if (group !== undefined && (typeof group !== 'string' || group.trim() === '')) {
         throw new Error(`pluginInventory: ${entry.id}.pluginGroup must be a non-empty string`)
@@ -514,10 +575,11 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private isToggleable(entry: Entry, rootInclude = this.rootInclude()): boolean {
     return rootInclude !== undefined
       && entry.parent.tree === rootInclude
+      && entry.options.pluginRequired !== true && !this.required.has(entry.options.name)
   }
 
   private enabled(entry: Entry): boolean {
-    if (this.isRestartOnly(entry) || !this.isToggleable(entry)) return !entry.disabled
+    if (this.isRestartOnly(entry) || !this.isToggleable(entry)) return this.suspended.get(entry) ?? !entry.disabled
     return this.settings.get().enabled[entry.options.name]
       ?? this.defaultEnabled.get(entry.options.name)
       ?? !entry.disabled
@@ -645,7 +707,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
         ?? this.defaultEnabled.get(moduleName)
         ?? !entry.disabled
       try {
-        await this.updateModule(entry, desired)
+        await this.updateModule(entry, this.ctx.get('optionalPlugins')?.enabled === false && !this.required.has(moduleName) ? false : desired)
       } catch (error) {
         failures.push(error)
       }
@@ -660,6 +722,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * so a second Host cache would only add another lifecycle truth to synchronize.
    * @returns Current Host entries followed by preset-owned leaf entries.
    */
+
   private async hostEntries(): Promise<PluginInventoryEntry[]> {
     const rootInclude = this.rootInclude()
     return Promise.all(this.inventoryGroups(rootInclude).map(async (group) => {
@@ -680,6 +743,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
         moduleName: entry.options.name,
         ...await pluginMetadata(entry.options.name, entry.parent.tree.ctx.baseUrl, entry.options),
         pluginType: group.some(candidate => this.isRestartOnly(candidate)) ? 'core' : 'normal',
+        ...entry.options.pluginRequired === true || this.required.has(entry.options.name) ? { required: true } : {},
         initialEnabled: initialStates.every(Boolean) ? true : initialStates.some(Boolean) ? null : false,
         changedSinceStart: controlled.some((candidate, index) => this.desiredEnabled(candidate) !== initialStates[index]),
         ...(desiredStates.some(Boolean) && !desiredStates.every(Boolean) ? { mixedEnabled: true } : {}),
@@ -693,17 +757,20 @@ export class PluginInventoryGateway extends TypertRemoteService {
     }))
   }
 
-  private async presetEntries(): Promise<PluginInventoryEntry[]> {
-    const presets = this.agentPresets()
+  private async presetEntries(
+    presets: AgentPresetPluginControls | undefined, settings?: SettingsProvider, target: SettingsTarget = {},
+  ): Promise<PluginInventoryEntry[]> {
     if (presets === undefined) return []
-    return Promise.all((await presets.listPluginEntries()).map(async entry => ({
+    const entries = settings === undefined ? await presets.listPluginEntries() : await presets.listPluginEntries(settings)
+    return Promise.all(entries.map(async entry => ({
       entryId: pluginEntryId(entry.entryId),
       moduleName: entry.moduleName,
       ...await pluginMetadata(entry.moduleName, this.ctx.baseUrl, entry),
       enabled: entry.enabled,
       presetId: entry.presetId,
+      ...entry.rowId === undefined ? {} : { presetRowId: entry.rowId },
       newSessionsOnly: true,
-      initialEnabled: this.initialEnabled.get(entry.entryId) ?? entry.enabled,
+      initialEnabled: this.initialEnabled.get(this.initialKey(entry.entryId, target)) ?? entry.enabled,
       restartRequired: false,
       toggleable: true,
       fiberPhase: null,
@@ -711,23 +778,37 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
-   * List Host entries and the optional preset-owned leaf entries.
+   * List Host entries and preset leaves, or only the selected workspace's preset leaves.
+   * @param request - Workspace and editable settings layer; omission selects global inventory.
    * @returns the current inventory projection.
    */
   @Remote('list')
-  async list(): Promise<PluginInventorySnapshot> {
-    const entries = [...await this.hostEntries(), ...await this.presetEntries()]
+  async list(request?: SettingsTarget): Promise<PluginInventorySnapshot> {
+    const target = request ?? {}
+    this.assertTarget(target)
+    const workspace = target.workspaceId === undefined ? undefined : await this.workspaceTarget(target.workspaceId, target.layer)
+    const selected = workspace?.target ?? {}
+    const entries = workspace === undefined
+      ? [...await this.hostEntries(), ...await this.presetEntries(this.agentPresets())]
+      : await this.presetEntries(workspace.presets, workspace.settings, selected)
     for (const entry of entries) {
-      if (!this.initialEnabled.has(entry.entryId)) this.initialEnabled.set(entry.entryId, entry.enabled)
+      const key = this.initialKey(entry.entryId, selected)
+      if (!this.initialEnabled.has(key)) this.initialEnabled.set(key, entry.enabled)
     }
-    return { entries }
+    return { entries, ...selected }
+  }
+
+  /** Keep initial preset states separate for global and workspace settings files. */
+  private initialKey(entryId: string, target: SettingsTarget): string {
+    return target.workspaceId === undefined ? entryId : `${target.workspaceId}:${target.layer ?? 'local'}:${entryId}`
   }
 
   /** Group only explicitly related entries, preferring a persistently editable owner. */
   private inventoryGroups(rootInclude: Include | undefined): Entry[][] {
     const groups = new Map<string, Entry[]>()
     for (const entry of this.representatives(rootInclude).values()) {
-      const key = entry.options.pluginGroup === undefined ? `module:${entry.options.name}` : `group:${entry.options.pluginGroup}`
+      const key = entry.options.pluginGroup === undefined ? `module:${entry.options.name}`
+        : `group:${entry.options.pluginGroup}:${entry.options.pluginRequired === true || this.required.has(entry.options.name) ? 'required' : 'optional'}`
       const group = groups.get(key) ?? []
       if (this.isToggleable(entry, rootInclude) && group[0] !== undefined && !this.isToggleable(group[0], rootInclude)) group.unshift(entry)
       else group.push(entry)
@@ -739,27 +820,35 @@ export class PluginInventoryGateway extends TypertRemoteService {
   /**
    * Persist a restart-only root state without live unload, or apply one normal
    * module-wide live state and persist it in the shared settings document.
-   * @param request - target entry and desired enablement.
+   * @param request - Target entry, desired enablement, and optional workspace settings file.
    * @returns The fresh snapshot and whether this mutation needs a restart.
    */
   @Remote('setEnabled')
   setEnabled(request: PluginEnablementRequest): Promise<PluginEnablementResult> {
+    this.assertTarget(request)
     return this.enqueue(async () => {
+      const workspace = request.workspaceId === undefined ? undefined : await this.workspaceTarget(request.workspaceId, request.layer)
+      if (workspace !== undefined && !request.entryId.startsWith(AGENT_PRESET_ENTRY_PREFIX)) {
+        throw new Error('pluginInventory: workspace settings can change only agent preset entries')
+      }
       if (request.entryId.startsWith(AGENT_PRESET_ENTRY_PREFIX)) {
-        const presets = this.agentPresets()
+        const presets = workspace === undefined ? this.agentPresets() : workspace.presets
         if (presets === undefined) {
           throw new Error('pluginInventory: agent preset controls are unavailable')
         }
-        const entry = (await presets.listPluginEntries())
+        const entries = workspace === undefined ? await presets.listPluginEntries() : await presets.listPluginEntries(workspace.settings)
+        const entry = entries
           .find(candidate => candidate.entryId === request.entryId)
         if (entry === undefined) {
           throw new Error(`pluginInventory: preset entry ${request.entryId} cannot be toggled in-app`)
         }
-        if (!this.initialEnabled.has(entry.entryId)) this.initialEnabled.set(entry.entryId, entry.enabled)
+        const key = this.initialKey(entry.entryId, workspace?.target ?? {})
+        if (!this.initialEnabled.has(key)) this.initialEnabled.set(key, entry.enabled)
         if (entry.enabled !== request.enabled) {
-          await presets.setPluginEnabled(entry.entryId, request.enabled)
+          if (workspace === undefined) await presets.setPluginEnabled(entry.entryId, request.enabled)
+          else await presets.setPluginEnabled(entry.entryId, request.enabled, workspace.settings)
         }
-        return { snapshot: await this.list(), restartRequired: false }
+        return { snapshot: await this.list(workspace?.target), restartRequired: false }
       }
       const resolved = this.ctx.loader.resolve(request.entryId)
       const rootInclude = this.rootInclude()
@@ -995,80 +1084,160 @@ export class PluginInventoryGateway extends TypertRemoteService {
 
   /**
    * List the user's own MCP server records with their live state.
-   * @returns Current MCP record projection.
+   * @param request - Workspace to inspect; omission selects the user's global records.
+   * @returns Selected settings records with runtime status and the workspace target.
    */
   @Remote('listMcpServers')
-  listMcpServers(): Promise<McpServerSnapshot> {
+  listMcpServers(request?: SettingsTarget): Promise<McpServerSnapshot & SettingsTarget> {
+    const target = request ?? {}
+    this.assertTarget(target)
+    if (target.workspaceId !== undefined) {
+      return this.workspaceTarget(target.workspaceId, target.layer)
+        .then(({ ctx, settings, target: selected }) => ({ ...this.mcpServers(ctx).list(settings), ...selected }))
+    }
     return Promise.resolve(this.mcpServers().list())
   }
 
   /**
    * Store one complete MCP server definition and converge its mount.
-   * @param request - Complete server definition.
+   * @param request - Complete server definition and optional workspace file to edit.
    * @returns Refreshed MCP record projection.
    */
   @Remote('defineMcpServer')
-  defineMcpServer(request: McpServerDefinitionRequest): Promise<McpServerSnapshot> {
+  defineMcpServer(request: McpServerDefinitionRequest & SettingsTarget): Promise<McpServerSnapshot & SettingsTarget> {
+    this.assertTarget(request)
+    if (request.workspaceId !== undefined) {
+      return this.workspaceTarget(request.workspaceId, request.layer).then(async ({ ctx, settings, target }) => {
+        const registry = this.mcpServers(ctx)
+        await registry.define(request, settings)
+        return { ...registry.list(settings), ...target }
+      })
+    }
     return this.mcpServers().define(request)
   }
 
   /**
    * Change one MCP record's desired state without touching its definition.
-   * @param request - Target record and desired state.
+   * @param request - Target record, desired state, and optional workspace file to edit.
    * @returns Refreshed MCP record projection.
    */
   @Remote('setMcpServerEnabled')
-  setMcpServerEnabled(request: McpServerEnablementRequest): Promise<McpServerSnapshot> {
+  setMcpServerEnabled(request: McpServerEnablementRequest & SettingsTarget): Promise<McpServerSnapshot & SettingsTarget> {
+    this.assertTarget(request)
+    if (request.workspaceId !== undefined) {
+      return this.workspaceTarget(request.workspaceId, request.layer).then(async ({ ctx, settings, target }) => {
+        const registry = this.mcpServers(ctx)
+        await registry.setEnabled(request, settings)
+        return { ...registry.list(settings), ...target }
+      })
+    }
     return this.mcpServers().setEnabled(request)
   }
 
   /**
    * Remove one MCP record and unmount its server.
-   * @param name - Stored record name.
+   * @param request - Stored record name and optional workspace file to edit; a string selects global records.
    * @returns Refreshed MCP record projection.
    */
   @Remote('removeMcpServer')
-  removeMcpServer(name: string): Promise<McpServerSnapshot> {
-    return this.mcpServers().remove(name)
+  removeMcpServer(request: string | ({ name: string } & SettingsTarget)): Promise<McpServerSnapshot & SettingsTarget> {
+    if (typeof request !== 'string') this.assertTarget(request)
+    if (typeof request !== 'string' && request.workspaceId !== undefined) {
+      return this.workspaceTarget(request.workspaceId, request.layer).then(async ({ ctx, settings, target }) => {
+        const registry = this.mcpServers(ctx)
+        await registry.remove(request.name, settings)
+        return { ...registry.list(settings), ...target }
+      })
+    }
+    return this.mcpServers().remove(typeof request === 'string' ? request : request.name)
   }
 
   /**
    * List the user's own hook records with their live state.
-   * @returns Current hook record projection.
+   * @param request - Workspace to inspect; omission selects the user's global records.
+   * @returns Selected settings records with runtime status and the workspace target.
    */
   @Remote('listHookRecords')
-  listHookRecords(): Promise<HookRecordSnapshot> {
+  listHookRecords(request?: SettingsTarget): Promise<HookRecordSnapshot & SettingsTarget> {
+    const target = request ?? {}
+    this.assertTarget(target)
+    if (target.workspaceId !== undefined) {
+      return this.workspaceTarget(target.workspaceId, target.layer)
+        .then(({ ctx, settings, target: selected }) => ({ ...this.hookRecords(ctx).list(settings), ...selected }))
+    }
     return Promise.resolve(this.hookRecords().list())
   }
 
   /**
    * Store one complete hook record definition and converge its bridge mount.
-   * @param request - Complete record definition.
+   * @param request - Complete record definition and optional workspace file to edit.
    * @returns Refreshed hook record projection.
    */
   @Remote('defineHookRecord')
-  defineHookRecord(request: HookRecordDefinitionRequest): Promise<HookRecordSnapshot> {
+  defineHookRecord(request: HookRecordDefinitionRequest & SettingsTarget): Promise<HookRecordSnapshot & SettingsTarget> {
+    this.assertTarget(request)
+    if (request.workspaceId !== undefined) {
+      return this.workspaceTarget(request.workspaceId, request.layer).then(async ({ ctx, settings, target }) => {
+        const registry = this.hookRecords(ctx)
+        await registry.define(request, settings)
+        return { ...registry.list(settings), ...target }
+      })
+    }
     return this.hookRecords().define(request)
   }
 
   /**
    * Change one hook record's desired state without touching its definition.
-   * @param request - Target record and desired state.
+   * @param request - Target record, desired state, and optional workspace file to edit.
    * @returns Refreshed hook record projection.
    */
   @Remote('setHookRecordEnabled')
-  setHookRecordEnabled(request: HookRecordEnablementRequest): Promise<HookRecordSnapshot> {
+  setHookRecordEnabled(request: HookRecordEnablementRequest & SettingsTarget): Promise<HookRecordSnapshot & SettingsTarget> {
+    this.assertTarget(request)
+    if (request.workspaceId !== undefined) {
+      return this.workspaceTarget(request.workspaceId, request.layer).then(async ({ ctx, settings, target }) => {
+        const registry = this.hookRecords(ctx)
+        await registry.setEnabled(request, settings)
+        return { ...registry.list(settings), ...target }
+      })
+    }
     return this.hookRecords().setEnabled(request)
   }
 
   /**
    * Remove one hook record and unmount its bridge.
-   * @param name - Stored record name.
+   * @param request - Stored record name and optional workspace file to edit; a string selects global records.
    * @returns Refreshed hook record projection.
    */
   @Remote('removeHookRecord')
-  removeHookRecord(name: string): Promise<HookRecordSnapshot> {
-    return this.hookRecords().remove(name)
+  removeHookRecord(request: string | ({ name: string } & SettingsTarget)): Promise<HookRecordSnapshot & SettingsTarget> {
+    if (typeof request !== 'string') this.assertTarget(request)
+    if (typeof request !== 'string' && request.workspaceId !== undefined) {
+      return this.workspaceTarget(request.workspaceId, request.layer).then(async ({ ctx, settings, target }) => {
+        const registry = this.hookRecords(ctx)
+        await registry.remove(request.name, settings)
+        return { ...registry.list(settings), ...target }
+      })
+    }
+    return this.hookRecords().remove(typeof request === 'string' ? request : request.name)
+  }
+
+  /** Reject a workspace file selector that cannot identify a workspace. */
+  private assertTarget(target: SettingsTarget): void {
+    if (target.workspaceId === undefined && target.layer !== undefined) {
+      throw new Error('pluginInventory: layer requires workspaceId')
+    }
+  }
+
+  /** Resolve one workspace's runtime services and selected editable settings file. */
+  private async workspaceTarget(
+    workspaceId: NonNullable<SettingsTarget['workspaceId']>, layer: SettingsTarget['layer'] = 'local',
+  ): Promise<{ ctx: Context; presets: AgentPresetPluginControls | undefined; settings: SettingsProvider; target: SettingsTarget }> {
+    const service = this.ctx.get('workspaceConfig')
+    if (service === undefined) throw new Error('pluginInventory: workspace configuration is unavailable')
+    const environment = await service.environmentFor(workspaceId)
+    const settings = await service.settingsFor(workspaceId, layer)
+    return { ctx: environment.ctx, presets: environment.presets, settings, target: { workspaceId, layer } }
   }
 
   private importedPlugins(): ImportedPluginRuntime {
@@ -1078,15 +1247,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /** The MCP record registry is optional in compositions without user MCP servers. */
-  private mcpServers(): McpServerRegistry {
-    const registry = this.ctx.get('mcpServers')
+  private mcpServers(ctx = this.ctx): McpServerRegistry {
+    const registry = ctx.get('mcpServers')
     if (registry === undefined) throw new Error('pluginInventory: MCP server registry is unavailable')
     return registry
   }
 
   /** The hook record registry is optional in compositions without user hooks. */
-  private hookRecords(): HookRecordRegistry {
-    const registry = this.ctx.get('hookRecords')
+  private hookRecords(ctx = this.ctx): HookRecordRegistry {
+    const registry = ctx.get('hookRecords')
     if (registry === undefined) throw new Error('pluginInventory: hook record registry is unavailable')
     return registry
   }

@@ -1,0 +1,4 @@
+.overlay { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 1000; }
+.particle { position: absolute; left: var(--x); top: -12px; width: 8px; height: 12px; background: var(--color); animation: fall var(--duration) linear forwards; }
+@keyframes fall { to { transform: translate(var(--drift), 110vh) rotate(var(--spin)); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .overlay { display: none; } }

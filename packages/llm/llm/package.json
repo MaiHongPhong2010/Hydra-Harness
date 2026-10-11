@@ -63,7 +63,8 @@
     "@hydraharness/harness-brand": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-timeout": "workspace:^",
-    "@hydraharness/cordis": "workspace:^"
+    "@hydraharness/cordis": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^"
   },
   "dependencies": {
     "@hydraharness/schemastery": "workspace:^",
@@ -74,6 +75,7 @@
     "@hydraharness/harness-brand": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-timeout": "workspace:^",
-    "@hydraharness/cordis": "workspace:^"
+    "@hydraharness/cordis": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^"
   }
 }

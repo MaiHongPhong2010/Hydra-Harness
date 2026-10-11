@@ -169,6 +169,31 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the preset id, or undefined when the agent joined none.',
       },
       {
+        signature: 'async setProjectRoot(path: string, enabled: boolean): Promise<void>',
+        description: 'Enable or revoke one workspace project root. Revocation disposes its generations, including pending mounts; generations from other roots remain live.',
+        parameters: [{ name: 'path', description: 'project directory containing preset subdirectories.' }, { name: 'enabled', description: 'whether the project root may supply compositions.' }],
+        returns: 'completion after revoked project generations have stopped.',
+      },
+      {
+        signature: 'isProjectContext(agentCtx: Context, root: string): boolean',
+        description: 'Whether an agent joined a generation supplied below a project directory, including a generation disposed after trust was revoked.',
+        parameters: [{ name: 'agentCtx', description: 'the agent\'s registration context.' }, { name: 'root', description: 'project directory whose preset origins to recognize.' }],
+        returns: 'whether the joined generation originates inside that directory.',
+      },
+      {
+        signature: 'isRetiredProjectContext(agentCtx: Context, root: string): boolean',
+        description: 'Whether an agent retains a project generation stopped by trust revocation. Re-trusting a workspace permits fresh generations, without restoring stopped ones.',
+        parameters: [{ name: 'agentCtx', description: 'the agent\'s registration context.' }, { name: 'root', description: 'project directory whose stopped generations to recognize.' }],
+        returns: 'whether continuing this agent requires a fresh composition.',
+      },
+      {
+        signature: 'async authoringDirectory(id: string): Promise<string>',
+        description: 'Resolve a locally writable preset directory for an editor.',
+        parameters: [{ name: 'id', description: 'the preset to edit.' }],
+        returns: 'its directory after checking authoring ownership and canonical containment.',
+        throws: ['when the preset is inherited, read-only, or escapes through a link.'],
+      },
+      {
         signature: 'async read(id: string): Promise<string>',
         description: 'Read one preset\'s composition text.',
         parameters: [{ name: 'id', description: 'the preset id.' }],
@@ -176,15 +201,15 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['when no configured root supplies that id.'],
       },
       {
-        signature: 'async listPluginEntries(): Promise<AgentPresetPluginEntry[]>',
+        signature: 'async listPluginEntries(settings?: SettingsProvider): Promise<AgentPresetPluginEntry[]>',
         description: 'List the explicit leaf rows every preset can switch for future sessions.',
-        parameters: [],
+        parameters: [{ name: 'settings', description: 'optional selected layer whose desired enablement to read.' }],
         returns: 'every leaf with its persisted desired state.',
       },
       {
-        signature: 'async setPluginEnabled(entryId: string, enabled: boolean): Promise<void>',
+        signature: 'async setPluginEnabled(entryId: string, enabled: boolean, settings?: SettingsProvider): Promise<void>',
         description: 'Persist one preset leaf state and let only later sessions mount a new generation.',
-        parameters: [{ name: 'entryId', description: 'preset-qualified leaf entry id.' }, { name: 'enabled', description: 'desired state for later sessions.' }],
+        parameters: [{ name: 'entryId', description: 'preset-qualified leaf entry id.' }, { name: 'enabled', description: 'desired state for later sessions.' }, { name: 'settings', description: 'selected write layer; omitted uses this roster\'s provider.' }],
       },
       {
         signature: 'async copy(from: string, id: string, name?: string): Promise<void>',
@@ -196,7 +221,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'async remove(id: string): Promise<void>',
         description: 'Delete a locally authored preset.',
         parameters: [{ name: 'id', description: 'the preset id.' }],
-        throws: ['when the preset is unknown or ships with the deployment.'],
+        throws: ['when the preset is unknown, ships with the deployment, or remains a workspace\'s inherited default.'],
       },
       {
         signature: 'serviceFor<K extends string & keyof Context>(agent: { ctx: Context }, name: K): Context[K] | undefined',
@@ -1049,28 +1074,34 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Settings-backed hook records with their live bridge mounts. Reconciliation is idempotent and runs on one serialized chain, so a document commit from any source — this service\'s own write, another process, or a hand edit — converges the mounted set on the stored one. Mutations reject with `SettingsConflictError` if another writer changes the stored section after the read; retry uses the refreshed projection.',
     methods: [
       {
-        signature: 'list(): HookRecordSnapshot',
+        signature: 'list(settings?: SettingsProvider): HookRecordSnapshot',
         description: 'Project every stored record with its live state.',
-        parameters: [],
+        parameters: [{ name: 'settings', description: 'optional layer whose desired records to project.' }],
         returns: 'the current record projection, in stored order.',
       },
       {
-        signature: 'define(request: HookRecordDefinitionRequest): Promise<HookRecordSnapshot>',
+        signature: 'settle(): Promise<void>',
+        description: 'Reconcile the current effective settings after a layer or trust change.',
+        parameters: [],
+        returns: 'completion after earlier queued work and the current mounts settle.',
+      },
+      {
+        signature: 'define(request: HookRecordDefinitionRequest, settings: SettingsProvider = this.owner.settings): Promise<HookRecordSnapshot>',
         description: 'Create or replace one complete definition as requested, then converge the mounted set. A definition this registry could not mount is refused before anything persists.',
-        parameters: [{ name: 'request', description: 'complete record definition.' }],
+        parameters: [{ name: 'request', description: 'complete record definition.' }, { name: 'settings', description: 'selected write layer; omitted uses this registry\'s provider.' }],
         returns: 'the refreshed projection.',
         throws: ['If create names an existing record or replace names a missing record.'],
       },
       {
-        signature: 'setEnabled(request: HookRecordEnablementRequest): Promise<HookRecordSnapshot>',
+        signature: 'setEnabled(request: HookRecordEnablementRequest, settings: SettingsProvider = this.owner.settings): Promise<HookRecordSnapshot>',
         description: 'Change one stored record\'s desired state.',
-        parameters: [{ name: 'request', description: 'target record and desired state.' }],
+        parameters: [{ name: 'request', description: 'target record and desired state.' }, { name: 'settings', description: 'selected write layer; omitted uses this registry\'s provider.' }],
         returns: 'the refreshed projection.',
       },
       {
-        signature: 'remove(name: string): Promise<HookRecordSnapshot>',
+        signature: 'remove(name: string, settings: SettingsProvider = this.owner.settings): Promise<HookRecordSnapshot>',
         description: 'Remove one stored record, unmount it, and delete any document this registry materialized for it.',
-        parameters: [{ name: 'name', description: 'stored record name.' }],
+        parameters: [{ name: 'name', description: 'stored record name.' }, { name: 'settings', description: 'selected write layer; omitted uses this registry\'s provider.' }],
         returns: 'the refreshed projection.',
       },
     ],
@@ -1397,28 +1428,34 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Settings-backed MCP server records with their live `mcp-client` mounts. Reconciliation is idempotent and runs on one serialized chain, so a document commit from any source — this service\'s own write, another process, or a hand edit — converges the mounted set on the stored one. Mutations reject with `SettingsConflictError` if another writer changes the stored section after the read; retry uses the refreshed projection.',
     methods: [
       {
-        signature: 'list(): McpServerSnapshot',
+        signature: 'list(settings?: SettingsProvider): McpServerSnapshot',
         description: 'Project every stored record with its live state.',
-        parameters: [],
+        parameters: [{ name: 'settings', description: 'optional layer whose desired records to project.' }],
         returns: 'the current record projection, in stored order.',
       },
       {
-        signature: 'define(request: McpServerDefinitionRequest): Promise<McpServerSnapshot>',
+        signature: 'settle(): Promise<void>',
+        description: 'Reconcile the current effective settings after a layer or trust change.',
+        parameters: [],
+        returns: 'completion after earlier queued work and the current mounts settle.',
+      },
+      {
+        signature: 'define(request: McpServerDefinitionRequest, settings: SettingsProvider = this.owner.settings): Promise<McpServerSnapshot>',
         description: 'Create or replace one complete definition as requested, then converge the mounted set. A definition this registry could not mount is refused before anything persists.',
-        parameters: [{ name: 'request', description: 'complete server definition.' }],
+        parameters: [{ name: 'request', description: 'complete server definition.' }, { name: 'settings', description: 'selected write layer; omitted uses this registry\'s provider.' }],
         returns: 'the refreshed projection.',
         throws: ['If create names an existing record or replace names a missing record.'],
       },
       {
-        signature: 'setEnabled(request: McpServerEnablementRequest): Promise<McpServerSnapshot>',
+        signature: 'setEnabled(request: McpServerEnablementRequest, settings: SettingsProvider = this.owner.settings): Promise<McpServerSnapshot>',
         description: 'Change one stored record\'s desired state.',
-        parameters: [{ name: 'request', description: 'target record and desired state.' }],
+        parameters: [{ name: 'request', description: 'target record and desired state.' }, { name: 'settings', description: 'selected write layer; omitted uses this registry\'s provider.' }],
         returns: 'the refreshed projection.',
       },
       {
-        signature: 'remove(name: string): Promise<McpServerSnapshot>',
+        signature: 'remove(name: string, settings: SettingsProvider = this.owner.settings): Promise<McpServerSnapshot>',
         description: 'Remove one stored record and unmount it.',
-        parameters: [{ name: 'name', description: 'stored record name.' }],
+        parameters: [{ name: 'name', description: 'stored record name.' }, { name: 'settings', description: 'selected write layer; omitted uses this registry\'s provider.' }],
         returns: 'the refreshed projection.',
       },
     ],
@@ -1445,6 +1482,31 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Delete one feedback item. Absence is successful regardless of the supplied version; an existing item requires an exact version match.',
         parameters: [{ name: 'request', description: 'Session, message, and observed item version.' }],
         returns: 'the stable absent postcondition, or an explicit failure.',
+      },
+    ],
+  },
+  {
+    key: 'optionalPlugins',
+    summary: 'Immediate disablement and leases for operations that may already be running.',
+    description: 'Immediate disablement and leases for operations that may already be running.',
+    methods: [
+      {
+        signature: 'acquire(): () => void',
+        description: 'Rejects new optional work while disabled and tracks work already admitted.',
+        parameters: [],
+        returns: 'an idempotent completion lease; rejects a new operation immediately while disabled.',
+      },
+      {
+        signature: 'drain(): Promise<void>',
+        description: 'Waits for owned work before a contribution can be removed.',
+        parameters: [],
+        returns: 'settlement when existing optional operations finish, or the user enables plugins again.',
+      },
+      {
+        signature: 'subscribe(listener: (enabled: boolean) => void): () => void',
+        description: 'Observes accepted common-policy changes.',
+        parameters: [{ name: 'listener', description: 'callback after an accepted policy change.' }],
+        returns: 'subscription disposer.',
       },
     ],
   },
@@ -1488,6 +1550,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'set(session: Session, name: string): void',
         description: 'Record a changed preset, then update each changed knob through its own setter. Selecting the effective preset again appends nothing.',
         parameters: [{ name: 'session', description: 'the session the switch belongs to.' }, { name: 'name', description: 'the preset to switch to; unknown names throw.' }],
+      },
+      {
+        signature: 'setLive(agent: Agent, name: string): void',
+        description: 'Apply a user selection to a live agent, including the approval policy\'s logged model update.',
+        parameters: [{ name: 'agent', description: 'currently served agent in this permission service\'s realm.' }, { name: 'name', description: 'configured preset; validation precedes all writes.' }],
       },
     ],
   },
@@ -2004,8 +2071,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the absolute local document path, or undefined for non-file storage.',
       },
       {
+        signature: 'inherit(parent: SettingsProvider, namespaces: readonly SettingsNamespace[]): () => void | Promise<void>',
+        description: 'Mirror selected parent namespaces, using their resolved values beneath this provider\'s raw sections. Schemas, validators, timing, registrations, and parent commits stay synchronized without exposing owner callbacks in descriptors. One consumer may claim each inherited namespace with register().',
+        parameters: [{ name: 'parent', description: 'provider of the lower settings layer; cycles are refused.' }, { name: 'namespaces', description: 'namespaces allowed to inherit into this provider.' }],
+        returns: 'awaitable disposer removing the inherited registrations and subscription.',
+      },
+      {
+        signature: 'setLayerEnabled(enabled: boolean): void',
+        description: 'Enable or suppress this provider\'s raw layer without changing stored data. Descriptors and writes retain the raw section while resolved reads inherit.',
+        parameters: [{ name: 'enabled', description: 'whether raw sections participate in effective resolution.' }],
+      },
+      {
+        signature: 'observe(callback: () => void): () => void | Promise<void>',
+        description: 'Observe this provider\'s committed raw, resolved, registry, or inherited descriptor changes. Callbacks run synchronously after the relevant state changes; failures are contained. The calling fiber owns the subscription.',
+        parameters: [{ name: 'callback', description: 're-read descriptors after a provider change.' }],
+        returns: 'awaitable disposer preventing further callback invocations.',
+      },
+      {
         signature: 'register<T>(ns: SettingsNamespace, schema: z<T>, options?: SettingsRegisterOptions<T>): SettingsScope<T>',
-        description: 'Register a namespace schema and receive its owner scope. The registration is an effect on the calling plugin\'s fiber: disposing that fiber removes the namespace and its observers. An invalid stored section fails the registration itself — the earliest point where the schema can judge it.',
+        description: 'Register a namespace schema and receive its owner scope. Disposing the calling plugin removes its observers and its non-inherited registration. An inherited namespace accepts one owner while keeping its parent\'s schema, validation, timing, and lower value. An invalid effective section fails initial registration; suppressed raw sections are validated on writes.',
         parameters: [{ name: 'ns', description: 'unique namespace; duplicate registration fails loud.' }, { name: 'schema', description: 'schemastery schema resolving this namespace\'s value.' }, { name: 'options', description: 'composition `base` layer and effect timing.' }],
         returns: 'the owner scope for reads, observation, and updates.',
       },
@@ -2301,6 +2385,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Allocate a real terminal and start one owned process session. This is the only non-pipe process primitive: implementations own terminal byte I/O, foreground groups, signals, and complete session-tree cleanup.',
         parameters: [{ name: 'spec', description: 'fully specified argv, cwd, environment, dimensions, grace, and allocation cancellation.' }],
         returns: 'the live terminal handle after allocation succeeds.',
+      },
+    ],
+  },
+  {
+    key: 'suggestedPrompts',
+    summary: 'Reads sources once per empty chat or explicit refresh and owns all model input logs.',
+    description: 'Reads sources once per empty chat or explicit refresh and owns all model input logs.',
+    methods: [
+      {
+        signature: 'registerSource(source: PromptSuggestionSource): () => Promise<void>',
+        description: 'Attaches an effect-scoped, permission-scoped resource reader.',
+        parameters: [{ name: 'source', description: 'one owning plugin\'s permitted resource reader.' }],
+        returns: 'effect-scoped removal.',
+      },
+      {
+        signature: 'batch(agent: Agent, refresh: boolean): Promise<SuggestedPromptBatch>',
+        description: 'Reuses the empty chat\'s bounded batch unless the caller requests a refresh.',
+        parameters: [{ name: 'agent', description: 'empty chat.' }, { name: 'refresh', description: 'replace its cached batch.' }],
+        returns: 'bounded draft choices; failures preserve composer use.',
       },
     ],
   },
@@ -2751,13 +2854,98 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'workspaceConfig',
+    summary: 'Workspace-local settings and runtime services retained until the Host unloads.',
+    description: 'Workspace-local settings and runtime services retained until the Host unloads.',
+    methods: [
+      {
+        signature: 'async initialize(cwd: string): Promise<string>',
+        description: 'Initialize a canonical workspace directory without overwriting existing files.',
+        parameters: [{ name: 'cwd', description: 'Existing directory to prepare as a workspace root.' }],
+        returns: 'the canonical directory after every required file exists.',
+      },
+      {
+        signature: 'async resolveRoot(cwd: string): Promise<string>',
+        description: 'Resolve the nearest registered canonical ancestor, otherwise the cwd itself.',
+        parameters: [{ name: 'cwd', description: 'Existing session or workspace directory.' }],
+        returns: 'the canonical workspace root.',
+      },
+      {
+        signature: 'async environment(cwd: string): Promise<WorkspaceEnvironment>',
+        description: 'Resolve or construct the directory\'s isolated settings and runtime composition. A failed construction is removed so corrected files can be retried.',
+        parameters: [{ name: 'cwd', description: 'Existing workspace or session directory.' }],
+        returns: 'the standing environment for its canonical workspace root.',
+      },
+      {
+        signature: 'currentEnvironment(cwd: string): WorkspaceEnvironment | undefined',
+        description: 'Read an already prepared environment without filesystem work.',
+        parameters: [{ name: 'cwd', description: 'Previously resolved directory spelling or canonical descendant.' }],
+        returns: 'its cached environment, or undefined before preparation.',
+      },
+      {
+        signature: 'userEnvironment(): WorkspaceEnvironment',
+        description: 'Read the user-only runtime environment for consumers without a directory.',
+        parameters: [],
+        returns: 'the initialized user environment.',
+      },
+      {
+        signature: 'async environmentFor(workspaceId: WorkspaceId): Promise<WorkspaceEnvironment>',
+        description: 'Resolve an exact registered workspace without accepting browser-supplied paths.',
+        parameters: [{ name: 'workspaceId', description: 'Existing workspace registration.' }],
+        returns: 'its isolated environment.',
+        throws: ['If the workspace identity is not registered or its directory cannot be initialized.'],
+      },
+      {
+        signature: 'async settingsFor(workspaceId: WorkspaceId, layer: WorkspaceConfigLayer = \'local\'): Promise<SettingsProvider>',
+        description: 'Select a registered workspace\'s editable settings document.',
+        parameters: [{ name: 'workspaceId', description: 'Existing workspace registration.' }, { name: 'layer', description: 'Shared or personal document; omitted selects personal settings.' }],
+        returns: 'the provider retaining that document\'s raw overrides.',
+        throws: ['If the workspace identity is not registered or its directory cannot be initialized.'],
+      },
+      {
+        signature: 'isTrusted(workspaceId: WorkspaceId): boolean',
+        description: 'Read a Host-owned trust decision without loading project code.',
+        parameters: [{ name: 'workspaceId', description: 'Existing workspace registration.' }],
+        returns: 'whether its canonical root is trusted.',
+        throws: ['If the workspace identity is not registered.'],
+      },
+      {
+        signature: 'hasTrustDecision(workspaceId: WorkspaceId): boolean',
+        description: 'Distinguish an unanswered trust prompt from an explicit denial or revocation.',
+        parameters: [{ name: 'workspaceId', description: 'Existing workspace registration.' }],
+        returns: 'whether the Host stores a decision for its canonical root.',
+        throws: ['If the workspace identity is not registered.'],
+      },
+      {
+        signature: 'async setTrusted(workspaceId: WorkspaceId, trusted: boolean): Promise<void>',
+        description: 'Commit trust on the Host and converge the workspace runtime before returning.',
+        parameters: [{ name: 'workspaceId', description: 'Existing workspace registration.' }, { name: 'trusted', description: 'Apply project settings and presets until explicitly revoked.' }],
+        returns: 'completion after the Host decision persists and runtime reconciliation settles.',
+        throws: ['If the workspace is unknown, persistence fails, or its runtime cannot reconcile.'],
+      },
+      {
+        signature: 'async hasProjectConfig(workspaceId: WorkspaceId): Promise<boolean>',
+        description: 'Detect project overrides or preset compositions that require a trust decision.',
+        parameters: [{ name: 'workspaceId', description: 'Existing workspace registration.' }],
+        returns: 'whether shared/personal settings or a preset composition is present.',
+        throws: ['If the workspace is unknown or a configuration path cannot be read.'],
+      },
+    ],
+  },
+  {
     key: 'workspaceRegistry',
     summary: 'Durable workspace registry.',
     description: 'Durable workspace registry. Startup waits for `sessionPersistence`, builds one canonical-cwd header index, and completes the one-time history bootstrap before the service becomes active. The persistence dependency is mandatory so an unavailable peer can never be mistaken for an empty history and commit the initialized marker.',
     methods: [
       {
+        signature: 'async createTask(): Promise<Workspace>',
+        description: 'Create a distinct validated directory for a chat outside projects; later root changes affect only new tasks.',
+        parameters: [],
+        returns: 'the task workspace, retained for Files and Terminal ownership.',
+      },
+      {
         signature: 'async create(path: string, title?: string): Promise<Workspace>',
-        description: 'Create or reuse a workspace for an existing directory. The path is canonicalized through `fs.realpath`; a nonexistent path rejects with the original error and a non-directory rejects. Repeated calls for the same canonical path return the existing entity without changing its title. A newly created workspace is prepended to the durable registry order. Different canonical paths may share a display title.',
+        description: 'Create or reuse a workspace for an existing directory. The path is canonicalized through `fs.realpath`; a nonexistent path rejects with the original error and a non-directory rejects. Repeated calls for the same canonical path return the existing entity without changing its title. A newly created workspace is prepended to the durable registry order. Different canonical paths may share a display title. Workspace preparation listeners run before registration writes, including when the canonical path already has a record; a rejected listener aborts creation.',
         parameters: [{ name: 'path', description: 'Existing directory to own, in any path spelling.' }, { name: 'title', description: 'Display title used only when a new record is created.' }],
         returns: 'the existing or newly durable workspace.',
       },
@@ -3111,6 +3299,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'snapshot', description: 'the projection as of this reconciliation.' }],
   },
   {
+    name: 'notifications/requested',
+    mode: 'parallel',
+    signature: '\'notifications/requested\'(request: NotificationRequest): void',
+    summary: 'A live turn ended or a new question awaits an answer; connected providers may deliver it.',
+    description: 'A live turn ended or a new question awaits an answer; connected providers may deliver it.',
+    parameters: [{ name: 'request', description: 'stable delivery identity and destination chat.' }],
+  },
+  {
     name: 'session-persistence/deleted',
     mode: 'serial',
     signature: '\'session-persistence/deleted\'(id: SessionId): Promise<void> | void',
@@ -3171,7 +3367,7 @@ export const EVENT_API: readonly EventApiEntry[] = [
     mode: 'emit',
     signature: '\'settings/document-updated\'(ns: SettingsNamespace, revision: number): void',
     summary: 'One registered namespace\'s RAW user section changed, whether or not the resolved value did.',
-    description: 'One registered namespace\'s RAW user section changed, whether or not the resolved value did. `settings/updated` is the consumer-facing event and stays deep-equal-gated; this one exists for configuration surfaces, which must learn that a field went from inherited to overridden (same resolved value, different meaning) and that their held revision is stale. Listener containment matches `settings/updated`.',
+    description: 'One registered namespace\'s RAW user section changed, whether or not the resolved value did. `settings/updated` is the consumer-facing event and stays deep-equal-gated; this one exists for configuration surfaces, which must learn that a field went from inherited to overridden (same resolved value, different meaning) and that their held revision is stale. Listener containment matches `settings/updated`. The emitting provider is the Cordis receiver for service-realm routing.',
     parameters: [{ name: 'ns', description: 'the namespace whose stored section changed.' }, { name: 'revision', description: 'the namespace\'s new revision.' }],
   },
   {
@@ -3179,15 +3375,15 @@ export const EVENT_API: readonly EventApiEntry[] = [
     mode: 'emit',
     signature: '\'settings/registry-updated\'(ns: SettingsNamespace): void',
     summary: 'A settings namespace was registered or removed with its owning plugin.',
-    description: 'A settings namespace was registered or removed with its owning plugin. Configuration surfaces use this to refresh their served-namespace list after plugin lifecycle changes that do not modify the settings file.',
+    description: 'A settings namespace was registered or removed with its owning plugin. Configuration surfaces use this to refresh their served-namespace list after plugin lifecycle changes that do not modify the settings file. The emitting provider is the Cordis receiver for service-realm routing.',
     parameters: [{ name: 'ns', description: 'the namespace whose registration changed.' }],
   },
   {
     name: 'settings/updated',
     mode: 'emit',
     signature: '\'settings/updated\'(ns: SettingsNamespace, next: unknown, prev: unknown, source: SettingsUpdateSource): void',
-    summary: 'Committed change to one registered namespace\'s resolved value.',
-    description: 'Committed change to one registered namespace\'s resolved value. Emitted after the provider persisted (for `update`) or published (`provider`) the change; never emitted when the resolved value is deep-equal. Listener failures are contained and logged — a sync throw and an async rejection alike — except `INVARIANT`-coded failures, which rethrow after every listener ran; that rethrow reaches the emitter only from synchronous listeners, so invariant checks on this event must not be async functions.',
+    summary: 'Committed change to one registered namespace\'s resolved value, after the provider persisted (for `update`) or published (`provider`) the change; never emitted when the resolved value is deep-equal.',
+    description: 'Committed change to one registered namespace\'s resolved value, after the provider persisted (for `update`) or published (`provider`) the change; never emitted when the resolved value is deep-equal. The committing provider is the Cordis receiver, so ordinary listeners receive only their settings service\'s isolation realm. Listener failures are contained and logged — a sync throw and an async rejection alike — except `INVARIANT`-coded failures, which rethrow after every listener ran; that rethrow reaches the emitter only from synchronous listeners, so invariant checks on this event must not be async functions.',
     parameters: [{ name: 'ns', description: 'the namespace whose resolved value changed.' }, { name: 'next', description: 'the new resolved value.' }, { name: 'prev', description: 'the previous resolved value.' }, { name: 'source', description: 'whether the change entered through `update()` or the provider.' }],
   },
   {
@@ -3295,6 +3491,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'exec', description: 'the execution object that traversed the pipeline.' }, { name: 'result', description: 'a deep-frozen snapshot of the final returned result.' }],
   },
   {
+    name: 'toys/confetti',
+    mode: 'parallel',
+    signature: '\'toys/confetti\'(request: ConfettiRequest): void',
+    summary: 'A human requested one transient effect; renderers may display it unless reduced motion is active.',
+    description: 'A human requested one transient effect; renderers may display it unless reduced motion is active.',
+    parameters: [{ name: 'request', description: 'bounded effect and destination chat; never emitted from history.' }],
+  },
+  {
     name: 'webserver/index-inject',
     mode: 'emit',
     signature: '\'webserver/index-inject\'(table: IndexInjection[]): void',
@@ -3350,6 +3554,30 @@ export const EVENT_API: readonly EventApiEntry[] = [
     description: 'A workflow run started — the script\'s meta block validated, the body about to execute. Paired with Events[\'workflow/end\'].',
     parameters: [{ name: 'info', description: 'the run\'s identity snapshot (id + meta).' }],
   },
+  {
+    name: 'workspace-config/trust-updated',
+    mode: 'emit',
+    signature: '\'workspace-config/trust-updated\'(workspaceId: WorkspaceId, trusted: boolean): void',
+    summary: 'The Host committed a workspace trust decision.',
+    description: 'The Host committed a workspace trust decision.',
+    parameters: [{ name: 'workspaceId', description: 'Registered workspace owning the canonical root.' }, { name: 'trusted', description: 'Whether project execution is permitted.' }],
+  },
+  {
+    name: 'workspace-config/updated',
+    mode: 'emit',
+    signature: '\'workspace-config/updated\'(workspaceId: WorkspaceId, layer: WorkspaceConfigLayer): void',
+    summary: 'A workspace settings document or its inherited value changed.',
+    description: 'A workspace settings document or its inherited value changed.',
+    parameters: [{ name: 'workspaceId', description: 'Registered workspace owning the configuration.' }, { name: 'layer', description: 'Shared or personal document affected by the update.' }],
+  },
+  {
+    name: 'workspace/pre-create',
+    mode: 'parallel',
+    signature: '\'workspace/pre-create\'(path: string): Promise<void>',
+    summary: 'Prepare workspace-owned resources before creating or reusing a registration.',
+    description: 'Prepare workspace-owned resources before creating or reusing a registration. A rejected listener prevents durable registration and entity publication.',
+    parameters: [{ name: 'path', description: 'Canonical existing workspace directory.' }],
+  },
 ]
 
 /** Shapes of every exported type the Service and Event signatures reference (transitively), sorted by name. */
@@ -3389,6 +3617,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AgentPresetPluginEntry',
     declaration: 'export interface AgentPresetPluginEntry {\n    readonly entryId: string;\n    readonly presetId: string;\n    readonly rowId: string;\n    readonly moduleName: string;\n    readonly enabled: boolean;\n}',
+  },
+  {
+    name: 'AgentPresets',
+    declaration: 'export class AgentPresets extends Service {\n    static inject;\n    static Config;\n    constructor(ctx: Context, public config: Config);\n    get defaultId(): string;\n    async list(): Promise<AgentPreset[]>;\n    async resolve(id?: string): Promise<AgentPreset>;\n    async mount(agentCtx: Context, id?: string): Promise<AgentPreset>;\n    composeFrom(agentCtx: Context, parentCtx: Context): string | undefined;\n    composedPreset(agentCtx: Context): string | undefined;\n    get roots(): readonly PresetRoot[];\n    async setProjectRoot(path: string, enabled: boolean): Promise<void>;\n    isProjectContext(agentCtx: Context, root: string): boolean;\n    isRetiredProjectContext(agentCtx: Context, root: string): boolean;\n    get authorable(): boolean;\n    async authoringDirectory(id: string): Promise<string>;\n    async read(id: string): Promise<string>;\n    async listPluginEntries(settings?: SettingsProvider): Promise<AgentPresetPluginEntry[]>;\n    async setPluginEnabled(entryId: string, enabled: boolean, settings?: SettingsProvider): Promise<void>;\n    async copy(from: string, id: string, name?: string): Promise<void>;\n    async remove(id: string): Promise<void>;\n    serviceFor<K extends string & keyof Context>(agent: {\n        ctx: Context;\n    }, name: K): Context[K] | undefined;\n    async recompose(agentCtx: Context, id: string): Promise<AgentPreset>;\n    async standingKeyFor(id?: string): Promise<ScopeKey>;\n}',
   },
   {
     name: 'AgentSetup',
@@ -3723,6 +3955,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type CompactionTrigger = \'pressure\' | \'context-overflow\';',
   },
   {
+    name: 'ConfettiId',
+    declaration: 'export type ConfettiId = Branded<\'ConfettiId\'>;',
+  },
+  {
+    name: 'ConfettiRequest',
+    declaration: 'export interface ConfettiRequest {\n    id: ConfettiId;\n    sessionId: SessionId;\n    particles: number;\n    durationMs: number;\n}',
+  },
+  {
     name: 'ConfinedArgv',
     declaration: 'export interface ConfinedArgv {\n    argv: string[];\n    enforcement: SandboxEnforcement;\n    denialSignatures: readonly string[];\n    runnerFailureRules: readonly RunnerFailureRule[];\n}',
   },
@@ -4028,7 +4268,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GenerateOptions',
-    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
+    declaration: 'export interface GenerateOptions {\n    serviceTier?: \'standard\' | \'priority\';\n    requestedServiceTier?: \'standard\' | \'priority\';\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
   },
   {
     name: 'GenerationEndpoint',
@@ -4316,11 +4556,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmCallConfig',
-    declaration: 'export interface LlmCallConfig {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n}',
+    declaration: 'export interface LlmCallConfig {\n    serviceTier?: \'standard\' | \'priority\';\n    requestedServiceTier?: \'standard\' | \'priority\';\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n}',
   },
   {
     name: 'LlmCallConfigAdapterDefaults',
-    declaration: 'export interface LlmCallConfigAdapterDefaults {\n    reasoningEffort?: true;\n    maxTokens?: true;\n}',
+    declaration: 'export interface LlmCallConfigAdapterDefaults {\n    serviceTier?: true;\n    reasoningEffort?: true;\n    maxTokens?: true;\n}',
   },
   {
     name: 'LlmConfigurableProvider',
@@ -4328,7 +4568,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmDiscoveredModel',
-    declaration: 'export interface LlmDiscoveredModel {\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n    endpoints?: string[];\n}',
+    declaration: 'export interface LlmDiscoveredModel {\n    serviceTiers?: readonly (\'standard\' | \'priority\')[];\n    id: string;\n    name?: string;\n    contextWindow?: number;\n    maxTokens?: number;\n    endpoints?: string[];\n}',
   },
   {
     name: 'LlmFailure',
@@ -4344,7 +4584,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmModelInfo',
-    declaration: 'export interface LlmModelInfo {\n    provider: string;\n    id: string;\n    name: string;\n    description?: string;\n    inputModalities?: readonly ModelModality[];\n    endpoints?: readonly string[];\n}',
+    declaration: 'export interface LlmModelInfo {\n    serviceTiers?: readonly (\'standard\' | \'priority\')[];\n    provider: string;\n    id: string;\n    name: string;\n    description?: string;\n    inputModalities?: readonly ModelModality[];\n    endpoints?: readonly string[];\n}',
   },
   {
     name: 'LlmModelReasoningInfo',
@@ -4559,6 +4799,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ModelModalityMap {\n    text: \'text\';\n    image: \'image\';\n}',
   },
   {
+    name: 'NotificationId',
+    declaration: 'export type NotificationId = Branded<\'NotificationId\'>;',
+  },
+  {
+    name: 'NotificationRequest',
+    declaration: 'export interface NotificationRequest {\n    id: NotificationId;\n    sessionId: SessionId;\n    kind: \'completion\' | \'question\';\n    title: string;\n    body: string;\n}',
+  },
+  {
     name: 'ObjectJsonSchema',
     declaration: 'export type ObjectJsonSchema = JsonSchemaNode & {\n    type: \'object\';\n};',
   },
@@ -4611,6 +4859,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PresetOption {\n    value: string;\n    name: string;\n    description?: string;\n}',
   },
   {
+    name: 'PresetRoot',
+    declaration: 'export interface PresetRoot {\n    path: string;\n    trust: PresetTrust;\n}',
+  },
+  {
     name: 'PresetSpec',
     declaration: 'export interface PresetSpec {\n    sandbox: SandboxMode;\n    approval: ApprovalPolicy;\n    name?: string;\n    description?: string;\n}',
   },
@@ -4657,6 +4909,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PromptSection',
     declaration: 'export interface PromptSection {\n    readonly name: string;\n    readonly order: number;\n    readonly text: string | ((context: AssembleContext) => string);\n    readonly complete?: boolean;\n}',
+  },
+  {
+    name: 'PromptSuggestionSource',
+    declaration: 'export interface PromptSuggestionSource {\n    name: string;\n    scope?: ScopeKey | undefined;\n    read(agent: Agent, signal: AbortSignal, maxBytes: number, maxResources: number): Promise<string>;\n}',
   },
   {
     name: 'ProviderRequestId',
@@ -5159,6 +5415,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SettingsPathOp = {\n    op: \'set\';\n    path: readonly string[];\n    value: unknown;\n} | {\n    op: \'unset\';\n    path: readonly string[];\n};',
   },
   {
+    name: 'SettingsProvider',
+    declaration: 'export abstract class SettingsProvider extends Service {\n    constructor(ctx: Context);\n    async *[Service.init](): AsyncGenerator<() => Promise<void> | void, void, void>;\n    abstract readonly writable: boolean;\n    get documentPath(): string | undefined;\n    prepareDocument(): Promise<string | undefined>;\n    inherit(parent: SettingsProvider, namespaces: readonly SettingsNamespace[]): () => void | Promise<void>;\n    setLayerEnabled(enabled: boolean): void;\n    observe(callback: () => void): () => void | Promise<void>;\n    register<T>(ns: SettingsNamespace, schema: z<T>, options?: SettingsRegisterOptions<T>): SettingsScope<T>;\n    describe(options?: SettingsDescribeOptions): SettingsDescriptor[];\n    get(ns: SettingsNamespace): unknown;\n    async update(ns: SettingsNamespace, patch: object, expectedRevision?: number): Promise<void>;\n    async replace(ns: SettingsNamespace, section: object, expectedRevision?: number): Promise<void>;\n    async mutate(ns: SettingsNamespace, ops: readonly SettingsPathOp[], expectedRevision?: number): Promise<void>;\n}',
+  },
+  {
     name: 'SettingsRegisterOptions',
     declaration: 'export interface SettingsRegisterOptions<T> {\n    base?: Partial<T>;\n    applies?: SettingsApplies;\n    validate?: (value: T) => void;\n}',
   },
@@ -5284,7 +5544,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'StreamChunk',
-    declaration: 'export type StreamChunk = {\n    type: \'block-start\';\n    index: number;\n    blockType: ContentBlockType;\n} | {\n    type: \'text-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'reasoning-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'tool-call-delta\';\n    index: number;\n    id: CallId;\n    name?: string;\n    argumentsDelta: string;\n} | {\n    type: \'block-end\';\n    index: number;\n    block: ContentBlock;\n} | {\n    type: \'usage\';\n    usage: TokenUsage;\n} | {\n    type: \'finish\';\n    reason: FinishReason;\n    replayState?: ReplayEnvelope;\n};',
+    declaration: 'export type StreamChunk = {\n    type: \'block-start\';\n    index: number;\n    blockType: ContentBlockType;\n} | {\n    type: \'text-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'reasoning-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'tool-call-delta\';\n    index: number;\n    id: CallId;\n    name?: string;\n    argumentsDelta: string;\n} | {\n    type: \'block-end\';\n    index: number;\n    block: ContentBlock;\n} | {\n    type: \'usage\';\n    usage: TokenUsage;\n} | {\n    type: \'finish\';\n    reason: FinishReason;\n    replayState?: ReplayEnvelope;\n    serviceTier?: string;\n};',
   },
   {
     name: 'SubagentCapabilities',
@@ -5409,6 +5669,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SubprocessTerminalSpawnSpec',
     declaration: 'export interface SubprocessTerminalSpawnSpec {\n    argv: readonly string[];\n    cwd: string;\n    env?: Record<string, string> | undefined;\n    rows: number;\n    cols: number;\n    graceMs: number;\n    signal?: AbortSignal | undefined;\n}',
+  },
+  {
+    name: 'SuggestedPromptBatch',
+    declaration: 'export interface SuggestedPromptBatch {\n    items: string[];\n    error?: string;\n}',
   },
   {
     name: 'SurfaceEvent',
@@ -5889,6 +6153,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkflowStopReason',
     declaration: 'export type WorkflowStopReason = \'completed\' | \'cancelled\' | \'error\';',
+  },
+  {
+    name: 'WorkspaceConfigLayer',
+    declaration: 'export type WorkspaceConfigLayer = \'shared\' | \'local\';',
+  },
+  {
+    name: 'WorkspaceEnvironment',
+    declaration: 'export interface WorkspaceEnvironment {\n    readonly root: string;\n    readonly ctx: Context;\n    readonly scopeKey: ScopeKey;\n    readonly settings: SettingsProvider;\n    readonly presets: AgentPresets | undefined;\n    readonly trusted: boolean;\n}',
   },
 ]
 

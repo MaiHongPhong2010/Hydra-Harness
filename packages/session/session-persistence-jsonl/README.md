@@ -67,7 +67,7 @@ JSONL storage does not mutate live request prefixes. A resumed loop can reuse pr
 
 ## Known Limitations and Deferred Work
 
-- **Only the configured encoding and current `SESSION_FORMAT_VERSION` (v0) load** — changing compression requires a separate/fresh root or selecting the legacy raw mode; the pre-release format has no migration.
+- **Each artifact retains its encoding.** The reader accepts raw `.jsonl` and Zstandard `.jsonl.zstd` logs in one root. Resume and repair keep the discovered encoding; only new sessions use the restart-selected `session-history.compression` preference. Two artifacts for one session reject as ambiguous. The current `SESSION_FORMAT_VERSION` remains v0; no history is transcoded.
 - **The flat-file storage layout does not load** — use a separate root or move pre-release artifacts into the project/session directory layout before loading.
 - **Compressed files are not directly line-readable** — use the backend to load them, or select `compression: 'none'` before writing a fresh root when external line readers are required.
 - **Nothing deletes session files** — logs accumulate under `root` until removed externally (the seam has no deletion API).

@@ -14,7 +14,7 @@ import { LOCALE_SETTINGS_NAMESPACE, LocaleSettingsSchema } from '../src/locale-s
 import { LanguageRow } from '../src/client/LanguageRow.tsx'
 import type { createLanguageRowStore } from '../src/client/settings-store.ts'
 
-const SLOT = 'settings.general.item'
+const SLOT = 'settings.general.general.item'
 
 async function bench() {
   const ctx = new Context()
@@ -110,17 +110,17 @@ describe('locale apply', () => {
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const locale = b.ctx.get('locale') as LocaleRuntime
     // An event ahead of any inject hits the unbound-actions arm.
-    locale.setLocale('en')
+    await locale.setLocale('en')
 
     const { entry, instance, face } = faceOf(b.slots)
     // The inject-time re-sync sealed the init window: the mirror is current.
     expect(instance.getSnapshot().active).toBe('en')
-    expect(instance.getSnapshot().options.map(o => o.id)).toEqual(['en'])
+    expect(instance.getSnapshot().options.map(o => o.id)).toEqual(['auto', 'en'])
     // Copy rides the standard locale seat: the entry declares the namespace.
     expect(entry.locale).toBe(SETTINGS_NS)
     expect(locale.bind(SETTINGS_NS)('language.title')).toBe('Language')
 
-    face.setLocale('en')
+    await face.setLocale('en')
     expect(locale.getLocale().active).toBe('en')
     expect(instance.getSnapshot().active).toBe('en')
     expect(locale.bind(SETTINGS_NS)('language.title')).toBe('Language')

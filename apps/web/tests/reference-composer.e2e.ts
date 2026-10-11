@@ -1,7 +1,7 @@
 // Web e2e scenario: the shipped composition discovers local files and cold
 // sessions through the real Host, groups both domains in the shared @ menu,
 // and projects each pick as a complete inline range without issuing a model call.
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
@@ -144,6 +144,9 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     scaffold = await launchWebScaffold({})
     await seedSession(scaffold, sourceSessionFixture(), SOURCE_SESSION_ID)
     await seedSession(scaffold, targetSessionFixture(), TARGET_SESSION_ID)
+    const projectRoot = join(scaffold.workspaceCwd, 'workspace')
+    await mkdir(projectRoot)
+    await scaffold.ctx.workspaceRegistry.create(projectRoot)
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
@@ -165,7 +168,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
 
     await input.fill('@')
     await expect.poll(() => menu.getByRole('option').count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(2)
-    const snapshot = await captureStableAria(page, '[role="listbox"]', scaffold.workspaceCwd)
+    const snapshot = await captureStableAria(page, '[role="listbox"]', scaffold.workspaceCwd.replaceAll('\\', '\\\\'))
     await compareOrRefreshGolden(MENU_EXPECTED, snapshot, MODE)
     expect(snapshot).toContain('Files & folders')
     expect(snapshot).toContain('Session conversations')

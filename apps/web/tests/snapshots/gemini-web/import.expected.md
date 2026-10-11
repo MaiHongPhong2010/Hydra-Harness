@@ -1,6 +1,7 @@
 - dialog "Settings":
   - navigation:
     - text: Settings
+    - searchbox "Search settings"
     - button "General":
       - img
       - text: General
@@ -10,6 +11,9 @@
     - button "Models":
       - img
       - text: Models
+    - button "Accounts":
+      - img
+      - text: Accounts
     - button "Web Search":
       - img
       - text: Web Search
@@ -27,69 +31,45 @@
   - button "Close":
     - img
     - text: Close
-  - heading "Models" [level=2]
-  - paragraph: Sign in with your accounts or enter API keys to use models from these providers.
-  - region "Image and video generation":
-    - heading "Image and video generation" [level=3]
-    - button "Refresh models"
-    - paragraph: Choose models marked Image or Video, grouped by provider. Fetch and save a provider's models to add them here. Generation requires a connected provider that supports the selected task.
-    - text: Image model
-    - combobox "Image model":
-      - option "Automatic fallback" [selected]
-    - text: Video model
-    - combobox "Video model":
-      - option "Automatic fallback" [selected]
-  - region "API keys":
-    - heading "API keys" [level=3]
-    - paragraph: Configure provider API keys and optional fallback keys.
-    - list
-    - button "Add provider":
-      - img
-      - text: Add provider
-    - button "Add a custom provider":
-      - img
-      - text: Add a custom provider
-  - region "Account sign-in":
-    - heading "Account sign-in" [level=3]
-    - paragraph: Connect provider accounts independently of your API keys.
+  - heading "Accounts" [level=2]
+  - paragraph: Connect provider accounts and view their reported usage. Accounts are saved immediately. Configure providers and models separately in Models.
+  - button "Manage models"
+  - text: Provider
+  - combobox "Provider":
+    - option "ChatGPT"
+    - option "Google"
+    - option "Claude"
+    - option "xAI"
+    - option "Kimi Code"
+    - option "Cursor"
+    - option "Kiro"
+    - option "Gemini Web" [selected]
+  - paragraph:
+    - link "Read the full cookie-copy guide":
+      - /url: https://maihongphong1902.github.io/Hydra-Harness/guide/providers#import-gemini-web-cookies
+  - text: Sign-in method
+  - combobox "Sign-in method" [disabled]:
+    - option "Connect Gemini Web"
+    - option "Import Cookies" [selected]
+  - button "Import Cookies" [disabled]
+  - button "Cancel sign-in"
+  - status
+  - text: Gemini cookies JSON
+  - paragraph: Choose a Google cookie export or paste its JSON below. Include HttpOnly cookies and domain, path, expiry and security metadata. Hydra validates the session before saving. Failed imports keep the connected account. Partitioned cookies are unsupported.
+  - group:
+    - text: How to copy cookies
     - list:
       - listitem:
-        - text: Gemini Web
-        - img "Sign-in required"
-        - button "Edit Gemini Web (gemini-web)": Edit
-        - text: Gemini Web gemini-web
-        - paragraph:
-          - link "Read the full cookie-copy guide":
-            - /url: https://maihongphong1902.github.io/Hydra-Harness/guide/providers#import-gemini-web-cookies
-        - text: Sign-in method
-        - combobox "Sign-in method" [disabled]:
-          - option "Connect Gemini Web"
-          - option "Import Cookies" [selected]
-        - button "Import Cookies" [disabled]
-        - button "Cancel sign-in"
-        - status
-        - text: Gemini cookies JSON
-        - paragraph: Choose a Google cookie export or paste its JSON below. Include HttpOnly cookies and domain, path, expiry and security metadata. Hydra validates the session before saving. Failed imports keep the connected account. Partitioned cookies are unsupported.
-        - group:
-          - text: How to copy cookies
-          - list:
-            - listitem:
-              - text: "In the Edge or Chrome profile where you use Gemini, install the extension from its official website:"
-              - link "Cookie-Editor":
-                - /url: https://cookie-editor.com/
-              - text: .
-            - listitem: Open gemini.google.com, sign in to the intended account, and keep that tab active. Open Cookie-Editor and allow access to this site if requested.
-            - listitem: Choose Export → JSON to copy all cookies for that tab. Keep the complete JSON array and its metadata.
-            - listitem: Paste the JSON into the masked field below, or save it as cookies.json and select the file. Choose Continue and wait for session validation.
-          - paragraph: Cookies grant access to your account. Paste them only into Hydra; do not share them in chats or screenshots. Console document.cookie omits HttpOnly cookies; Cookie headers and Netscape exports are unsupported.
-        - text: Cookies JSON file
-        - button "Cookies JSON file"
-        - textbox "Gemini cookies JSON":
-          - /placeholder: Paste exported Google cookies JSON
-        - button "Continue" [disabled]
-        - group: Customized settings
-        - button "Cancel"
-        - button "Apply" [disabled]
-    - button "Add sign-in provider":
-      - img
-      - text: Add sign-in provider
+        - text: "In the Edge or Chrome profile where you use Gemini, install the extension from its official website:"
+        - link "Cookie-Editor":
+          - /url: https://cookie-editor.com/
+        - text: .
+      - listitem: Open gemini.google.com, sign in to the intended account, and keep that tab active. Open Cookie-Editor and allow access to this site if requested.
+      - listitem: Choose Export → JSON to copy all cookies for that tab. Keep the complete JSON array and its metadata.
+      - listitem: Paste the JSON into the masked field below, or save it as cookies.json and select the file. Choose Continue and wait for session validation.
+    - paragraph: Cookies grant access to your account. Paste them only into Hydra; do not share them in chats or screenshots. Console document.cookie omits HttpOnly cookies; Cookie headers and Netscape exports are unsupported.
+  - text: Cookies JSON file
+  - button "Cookies JSON file"
+  - textbox "Gemini cookies JSON":
+    - /placeholder: Paste exported Google cookies JSON
+  - button "Continue" [disabled]

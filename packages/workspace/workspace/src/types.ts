@@ -6,13 +6,25 @@
  */
 
 import type { Branded } from '@hydraharness/harness-brand'
-import type { SessionId } from '@hydraharness/harness-session'
+import type { SessionId } from '@hydraharness/harness-session/types'
 
 /**
  * Identifies one workspace record. A generated uuid, never the path: path
  * normalization rewrites paths, and a reference anchor must stay stable.
  */
 export type WorkspaceId = Branded<'WorkspaceId'>
+
+declare module '@hydraharness/cordis' {
+  interface Events {
+    /**
+     * Prepare workspace-owned resources before creating or reusing a registration.
+     * A rejected listener prevents durable registration and entity publication.
+     * @param path - Canonical existing workspace directory.
+     * @mode parallel
+     */
+    'workspace/pre-create'(path: string): Promise<void>
+  }
+}
 
 /**
  * One workspace: a stable id over an existing directory, a display title, and
@@ -21,6 +33,8 @@ export type WorkspaceId = Branded<'WorkspaceId'>
  * path. Consumers only see this interface; the implementation stays private.
  */
 export interface Workspace {
+  /** A task owns a real directory but is displayed outside project groups; omitted means project. */
+  readonly kind?: 'project' | 'task' | undefined
   /** Stable record id (generated uuid). */
   readonly id: WorkspaceId
 

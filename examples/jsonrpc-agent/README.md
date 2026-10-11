@@ -9,7 +9,7 @@ The model-facing tools are:
 - `subagent`, using one foreground in-process spawn provider
 - `todo_write`
 
-The surrounding runtime also loads JSONL session persistence and automatic context compaction. `maxTokensAsSuccess` keeps a token-limited model turn as an accepted evaluation result while preserving its `max-tokens` reason.
+The surrounding runtime also loads user settings, [workspace configuration](../../packages/workspace/workspace-config/README.md), JSONL session persistence, and automatic context compaction. An SDK caller omitting both provider and model uses the effective workspace default, then the composed DeepSeek Flash default; an explicit pair overrides it. `maxTokensAsSuccess` keeps a token-limited model turn as an accepted evaluation result while preserving its `max-tokens` reason.
 
 ## Runtime environment
 

@@ -22,6 +22,22 @@ import type { DesktopBrowserApi } from './DesktopBrowserPanel.tsx'
 import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import { ThemePresenter } from './theme-presenter.ts'
+import { DESKTOP_PREFERENCES_NAMESPACE, type DesktopPreferences } from '../preferences.ts'
+import { DesktopPreferencesController } from './DesktopPreferencesController.ts'
+import { DesktopPreferenceRow, type DesktopPreferenceRowInjected } from './DesktopPreferenceRow.tsx'
+import { HistoryPreferenceRow } from './HistoryPreferenceRow.tsx'
+import { en as desktopEn, type DesktopSettingsKey } from './desktop-locales.ts'
+import type { NativePreferencesApi } from './desktop-preferences.ts'
+import type {} from '@hydraharness/harness-api-remotes/client'
+import type { NotificationSettings } from '@hydraharness/harness-notifications/types'
+import { NotificationsController } from './NotificationsController.ts'
+import { NotificationPreferenceRow, type NotificationRowInjected } from './NotificationPreferenceRow.tsx'
+import { EnvironmentPreferenceRow, type EnvironmentApi } from './EnvironmentPreferenceRow.tsx'
+import { createSnapshotStore } from '@hydraharness/harness-client-runtime/client'
+import type { ConfettiRequest } from '@hydraharness/harness-toys/types'
+import { ConfettiOverlay } from './ConfettiOverlay.tsx'
+import { ToysPreferenceRow } from './ToysPreferenceRow.tsx'
+import { LicensesRow } from './LicensesRow.tsx'
 
 type BrowserManagementApi = DesktopBrowserApi & Required<Pick<
   DesktopBrowserApi,
@@ -78,6 +94,8 @@ declare module '@hydraharness/harness-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** Desktop Browser settings copy. */
     'settings.browser': BrowserKey
+    /** General preferences owned by layout and local history. */
+    'settings.desktop': DesktopSettingsKey
   }
 
   interface SlotMap {
@@ -176,7 +194,102 @@ export const inject = ['slots', 'theme', 'sessions', 'workspaces', 'locale', 'se
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  const desktop = globalThis as typeof globalThis & { hydraDesktop?: { browser?: DesktopBrowserApi } }
+  const desktop = globalThis as typeof globalThis & {
+    hydraDesktop?: { browser?: DesktopBrowserApi; preferences?: NativePreferencesApi; environment?: EnvironmentApi }
+  }
+  const desktopScope = ctx.settingsScope.bind<DesktopPreferences>({ namespace: DESKTOP_PREFERENCES_NAMESPACE })
+  const preferences = new DesktopPreferencesController(desktopScope, desktop.hydraDesktop?.preferences)
+  ctx.effect(() => preferences.start(), 'ui-layout: native preferences')
+  ctx.effect(() => ctx.locale.register('settings.desktop', { en: desktopEn }), 'ui-layout: General preferences copy')
+  const dt = ctx.locale.bind('settings.desktop')
+  const toys = ctx.settingsScope.bind<{ confetti: boolean }>({ namespace: 'toys' })
+  const effect = createSnapshotStore<ConfettiRequest | undefined>(undefined)
+  let effectTimer: ReturnType<typeof setTimeout> | undefined
+  ctx.effect(() => () => { clearTimeout(effectTimer) }, 'ui-layout: transient effect lifetime')
+  ctx.inject(['remote'], (rctx) => {
+    rctx.effect(() => rctx.remote.$on('toys/confetti', (request) => {
+      if (request.sessionId !== ctx.sessions.list.getSnapshot().current || toys.getSnapshot().value?.confetti !== true
+        || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      clearTimeout(effectTimer)
+      effect.set(request)
+      effectTimer = setTimeout(() => { effect.set(undefined) }, request.durationMs)
+    }), 'ui-layout: live requested effects')
+  })
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'confetti', inject: () => ({ hooks: { effect } }) }, ConfettiOverlay))
+  ctx.slots.inject('settings.general.toys.item', () => ctx.slots.register({
+    name: 'settings.general.toys.item', id: 'confetti', label: () => dt('toys.title'), locale: 'settings.desktop',
+    inject: () => ({ hooks: { toys }, save: async (enabled: boolean) => {
+      if (!toys.getSnapshot().writable) throw new Error('Settings are read only')
+      await toys.set('confetti', enabled)
+      if (toys.getSnapshot().value?.confetti !== enabled) throw new Error('Could not save confetti setting')
+    } }),
+  }, ToysPreferenceRow))
+  ctx.slots.inject('settings.general.general.item', () => ctx.slots.register({
+    name: 'settings.general.general.item', id: 'licenses', order: 85, label: () => dt('licenses.title'), locale: 'settings.desktop',
+  }, LicensesRow))
+  const environment = desktop.hydraDesktop?.environment
+  if (environment !== undefined) ctx.slots.inject('settings.general.general.item', () => ctx.slots.register({
+    name: 'settings.general.general.item', id: 'environment', order: 21, label: () => dt('environment.title'), locale: 'settings.desktop',
+    inject: () => ({ api: environment }),
+  }, EnvironmentPreferenceRow))
+  const notificationScope = ctx.settingsScope.bind<NotificationSettings>({ namespace: 'notifications' })
+  const notifications = new NotificationsController(notificationScope, ctx.sessions, desktop.hydraDesktop?.preferences)
+  ctx.inject(['remote'], (nctx) => {
+    nctx.effect(() => nctx.remote.$on('notifications/requested', (request) => { void notifications.deliver(request) }), 'ui-layout: live notifications')
+  })
+  ctx.effect(() => {
+    const refresh = () => { notifications.refreshPermission() }
+    window.addEventListener('focus', refresh)
+    return () => { window.removeEventListener('focus', refresh) }
+  }, 'ui-layout: notification permission status')
+  if (desktop.hydraDesktop?.preferences !== undefined || typeof Notification !== 'undefined') {
+    const fields: readonly (keyof NotificationSettings)[] = ['completion', 'permissionPrompts', 'questions', 'sound']
+    fields.forEach((field, order) => ctx.slots.inject('settings.general.notifications.item', () => ctx.slots.register({
+      name: 'settings.general.notifications.item', id: field, order, label: () => dt(`notification.${field}.title`), locale: 'settings.desktop',
+      inject: (): NotificationRowInjected => ({ field, save: value => notifications.save(field, value),
+        requestPermission: () => notifications.requestPermission(),
+        preview: () => notifications.preview(), hooks: { preferences: notificationScope, permission: notifications.permission } }),
+    }, NotificationPreferenceRow)))
+  }
+  if (desktop.hydraDesktop?.preferences !== undefined) {
+    const rows: readonly Omit<DesktopPreferenceRowInjected, 'hooks' | 'save' | 'openStartup'>[] = [
+      { field: 'fileOpenDestination', title: 'destination.title', description: 'destination.description', applies: 'applied', choices: [
+        { value: 'editor', label: 'destination.editor' }, { value: 'terminal', label: 'destination.terminal' }, { value: 'system', label: 'destination.system' },
+      ] },
+      { field: 'terminalShell', title: 'shell.title', description: 'shell.description', applies: 'shell.applies' },
+      { field: 'closeConfirmation', title: 'close.title', description: 'close.description', applies: 'applied', choices: [
+        { value: 'never', label: 'close.never' }, { value: 'shortcut', label: 'close.shortcut' }, { value: 'always', label: 'close.always' },
+      ] },
+      { field: 'fullView', title: 'full.title', description: 'full.description', applies: 'full.applies' },
+      { field: 'startup', title: 'startup.title', description: 'startup.description', applies: 'applied' },
+      { field: 'bottomPanelControl', title: 'bottom.title', description: 'bottom.description', applies: 'applied' },
+      { field: 'terminalLocation', title: 'location.title', description: 'location.description', applies: 'shell.applies', choices: [
+        { value: 'bottom', label: 'location.bottom' }, { value: 'right', label: 'location.right' },
+      ] },
+      { field: 'popoutHotkey', title: 'hotkey.title', description: 'hotkey.description', applies: 'applied' },
+      { field: 'popoutStandalone', title: 'standalone.title', description: 'standalone.description', applies: 'applied' },
+    ]
+    rows.forEach((row, order) => {
+      const slot = row.field.startsWith('popout') ? 'settings.general.popout.item' : 'settings.general.general.item'
+      ctx.slots.inject(slot, () => ctx.slots.register({
+        name: slot, id: row.field, order: order + 20, label: () => dt(row.title), locale: 'settings.desktop',
+        inject: (): DesktopPreferenceRowInjected => ({ ...row, save: (value: string | boolean) => {
+          if (row.field === 'startup') throw new Error('Startup settings are managed by the OS')
+          return preferences.save(row.field, value)
+        }, openStartup: () => preferences.openStartup(), hooks: { preferences: desktopScope, native: preferences.native } }),
+      }, DesktopPreferenceRow))
+    })
+  }
+  const history = ctx.settingsScope.bind<{ compression: 'none' | 'zstd' }>({ namespace: 'session-history' })
+  ctx.slots.inject('settings.general.general.item', () => ctx.slots.register({
+    name: 'settings.general.general.item', id: 'compression', order: 50, label: () => dt('history.title'), locale: 'settings.desktop',
+    inject: () => ({ save: async (enabled: boolean) => {
+      const value = enabled ? 'zstd' : 'none'
+      if (!history.getSnapshot().writable) throw new Error('Settings are read only')
+      await history.set('compression', value)
+      if (history.getSnapshot().value?.compression !== value) throw new Error('Could not save this setting. Try again.')
+    }, hooks: { history } }),
+  }, HistoryPreferenceRow))
   const browser = desktop.hydraDesktop?.browser
   if (hasBrowserManagement(browser)) {
     const autofill = hasAutofillManagement(browser) ? browser : undefined
@@ -248,6 +361,7 @@ export function apply(ctx: ClientContext): void {
       inject: (actions: PanelActions) => {
         layout.attachPanels(actions)
         return {
+          hooks: { desktopPreferences: desktopScope },
           startSession: () => { ctx.workspaces.startSession() },
           openFolder: async () => {
             const path = await ctx.workspaces.pickDirectory()
@@ -261,14 +375,14 @@ export function apply(ctx: ClientContext): void {
             const current = sessions.current === undefined ? undefined : sessions.byId[sessions.current]
             const currentWorkspace = current === undefined
               ? undefined
-              : workspaces.items.find(item => item.sessionIds.includes(current.id))
+              : workspaces.items.find(item => item.kind !== 'task' && item.sessionIds.includes(current.id))
             if (currentWorkspace !== undefined) {
               return await ctx.sessions.create({ workspaceId: currentWorkspace.workspaceId })
             }
-            if (current?.cwd !== undefined) return await ctx.sessions.create({ cwd: current.cwd })
-            const recent = workspaces.items.find(item => item.workspaceId === workspaces.recentWorkspaceId)
+            if (current !== undefined) return await ctx.sessions.create({ projectless: true })
+            const recent = workspaces.items.find(item => item.kind !== 'task' && item.workspaceId === workspaces.recentWorkspaceId)
             if (recent !== undefined) return await ctx.sessions.create({ workspaceId: recent.workspaceId })
-            throw new Error('Open a workspace before creating a side chat.')
+            return await ctx.sessions.create({ projectless: true })
           },
         }
       },

@@ -6,7 +6,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@hydraharness/cordis'
 import SystemPrompt from '@hydraharness/harness-system-prompt'
 import ToolRuntime from '@hydraharness/harness-tools'
+import { createScope, scopeOf } from '@hydraharness/harness-scope'
 import type { Config } from '@hydraharness/harness-mcp-client'
+import type { PromptSuggestionSource } from '@hydraharness/harness-suggested-prompts'
 
 // ---- Mock MCP SDK ----
 
@@ -181,6 +183,18 @@ describe('apply (plugin lifecycle)', () => {
     expect(ctx.tools.get('remote')).toBeUndefined()
   })
 
+  it('removes its suggestion resource reader when the owning client unloads', async () => {
+    const unregister = vi.fn(async () => {})
+    const registerSource = vi.fn((_source: PromptSuggestionSource) => unregister)
+    ctx.provide('suggestedPrompts', { registerSource })
+    const fiber = ctx.plugin({ name: 'mcp-suggestion-lifecycle', inject, apply }, stdioConfig)
+    await fiber.await()
+    expect(registerSource).toHaveBeenCalledOnce()
+    await fiber.dispose()
+    expect(unregister).toHaveBeenCalledOnce()
+    await ctx.fiber.dispose()
+  })
+
   it('keeps the Cordis plugin loading until initial discovery publishes its tools', async () => {
     const connection: PromiseWithResolvers<void> = Promise.withResolvers()
     mockConnect.mockImplementation(async () => {
@@ -236,6 +250,26 @@ describe('apply (plugin lifecycle)', () => {
 
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
     expect(other.tools.get('mcp__srv__remote')).toBeDefined()
+  })
+
+  it('isolates identical server names and disposal within sibling workspace scopes', async () => {
+    const first = createScope(ctx, { workspace: 'first' })
+    const second = createScope(ctx, { workspace: 'second' })
+    const firstClient = await first.ctx.plugin({ name: 'scoped-mcp', inject, apply }, stdioConfig)
+    await second.ctx.plugin({ name: 'scoped-mcp', inject, apply }, stdioConfig)
+
+    expect(ctx.tools.get('mcp__srv__remote')).toBeUndefined()
+    expect(ctx.tools.get('mcp__srv__remote', scopeOf(first.ctx))).toBeDefined()
+    expect(ctx.tools.get('mcp__srv__remote', scopeOf(second.ctx))).toBeDefined()
+    await expect(apply(first.ctx, stdioConfig)).rejects.toThrow(/already in use/)
+
+    await firstClient.dispose()
+    expect(ctx.tools.get('mcp__srv__remote', scopeOf(first.ctx))).toBeUndefined()
+    expect(ctx.tools.get('mcp__srv__remote', scopeOf(second.ctx))).toBeDefined()
+
+    await first.ctx.plugin({ name: 'scoped-mcp-replacement', inject, apply }, stdioConfig)
+    await first.dispose()
+    await second.dispose()
   })
 
   it('logs error and registers no tools when connect fails; dispose closes the client', async () => {

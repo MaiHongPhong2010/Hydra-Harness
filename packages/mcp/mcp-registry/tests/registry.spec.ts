@@ -12,8 +12,9 @@ import SystemPrompt from '@hydraharness/harness-system-prompt'
 import ToolRuntime from '@hydraharness/harness-tools'
 import FileSettingsProvider from '@hydraharness/harness-settings-file'
 import { SettingsConflictError } from '@hydraharness/harness-settings'
+import { createScope, scopeOf } from '@hydraharness/harness-scope'
 
-const { mockConnect, mockClose, mockListTools, MockClient } = vi.hoisted(() => {
+const { mockConnect, mockClose, mockListTools, MockClient, mockStdioTransport } = vi.hoisted(() => {
   const mockConnect = vi.fn<() => Promise<void>>()
   const mockClose = vi.fn<() => Promise<void>>()
   const mockListTools = vi.fn<(_params?: Record<string, unknown>) => Promise<unknown>>()
@@ -28,11 +29,11 @@ const { mockConnect, mockClose, mockListTools, MockClient } = vi.hoisted(() => {
     request = mockRequest
     setNotificationHandler = vi.fn()
   }
-  return { mockConnect, mockClose, mockListTools, MockClient }
+  return { mockConnect, mockClose, mockListTools, MockClient, mockStdioTransport: vi.fn() }
 })
 
 vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({ Client: MockClient }))
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({ StdioClientTransport: vi.fn() }))
+vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({ StdioClientTransport: mockStdioTransport }))
 vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({ StreamableHTTPClientTransport: vi.fn() }))
 
 import McpServerRegistry, { MCP_SERVERS_SETTINGS_NAMESPACE } from '@hydraharness/harness-mcp-registry/src/index.ts'
@@ -47,6 +48,7 @@ afterEach(async () => {
   mockConnect.mockReset()
   mockClose.mockReset()
   mockListTools.mockReset()
+  mockStdioTransport.mockClear()
 })
 
 const STDIO = {
@@ -109,6 +111,124 @@ function nextReconciliation(ctx: Context): Promise<McpServerSnapshot> {
 }
 
 describe('stored records', () => {
+  it('reports selected shared definitions as stopped when a different local definition runs', async () => {
+    const { ctx, registry, settingsPath } = await harness()
+    await registry.define({ ...STDIO, command: 'shared-a', enabled: true })
+    const sharedCtx = createScope(ctx, { layer: 'shared-view' }).ctx.isolate('settings')
+    const localCtx = createScope(ctx, { layer: 'local-view' }).ctx.isolate('settings').isolate('mcpServers')
+    await sharedCtx.plugin(FileSettingsProvider, { path: `${settingsPath}.shared-view.yaml`, watch: false })
+    await localCtx.plugin(FileSettingsProvider, { path: `${settingsPath}.local-view.yaml`, watch: false })
+    const shared = sharedCtx.get('settings')!
+    const local = localCtx.get('settings')!
+    shared.inherit(ctx.get('settings')!, [MCP_SERVERS_SETTINGS_NAMESPACE])
+    local.inherit(shared, [MCP_SERVERS_SETTINGS_NAMESPACE])
+    await localCtx.plugin(McpServerRegistry)
+    const runtime = localCtx.get('mcpServers')!
+    await runtime.define({ ...STDIO, mode: 'replace', command: 'local-b', enabled: true }, local)
+    expect(runtime.list().servers[0]).toMatchObject({ command: 'local-b', status: 'started', tools: ['mcp__notes__read'] })
+    expect(runtime.list(shared).servers[0]).toMatchObject({ command: 'shared-a', status: 'stopped', tools: [] })
+    await runtime.define({ ...STDIO, mode: 'replace', command: 'local-b', enabled: false }, shared)
+    expect(runtime.list(shared).servers[0]).toMatchObject({ enabled: false, status: 'stopped', tools: [] })
+  })
+
+  it('resolves omitted and relative server working directories from the registry workspace', async () => {
+    const { ctx, settingsPath } = await harness()
+    const root = join(settingsPath, '..')
+    const workspace = createScope(ctx, { workspace: 'cwd' })
+    const owner = workspace.ctx.isolate('settings').isolate('mcpServers')
+    await owner.plugin(FileSettingsProvider, { path: `${settingsPath}.workspace.yaml`, watch: false })
+    await owner.plugin(McpServerRegistry, { cwd: root })
+    const registry = owner.get('mcpServers')!
+    await registry.define({ ...STDIO, enabled: true })
+    expect(mockStdioTransport.mock.calls.at(-1)?.[0]).toMatchObject({ cwd: root })
+    await registry.define({ ...STDIO, mode: 'replace', cwd: 'scripts', enabled: true })
+    expect(mockStdioTransport.mock.calls.at(-1)?.[0]).toMatchObject({ cwd: join(root, 'scripts') })
+    await expect(owner.isolate('mcpServers').plugin(McpServerRegistry, { cwd: 'relative' })).rejects.toThrow('cwd must be absolute')
+  })
+
+  it('withholds URL query and fragment values while preserving an omitted URL on replacement', async () => {
+    const { registry, settingsPath } = await harness()
+    const url = 'https://mcp.example.test/v1?token=private-query#private-fragment'
+    await registry.define({ mode: 'create', name: 'remote', transport: 'streamable-http', url })
+    expect(registry.list().servers[0]?.url).toBe('https://mcp.example.test/v1')
+    expect(JSON.stringify(registry.list())).not.toContain('private-')
+    mockConnect.mockRejectedValueOnce(new Error(`cannot reach ${url}`))
+    await registry.define({ mode: 'replace', name: 'remote', transport: 'streamable-http', enabled: true })
+    expect(registry.list().servers[0]?.status).toBe('failed')
+    expect(JSON.stringify(registry.list())).not.toContain('private-')
+    expect(await readFile(settingsPath, 'utf8')).toContain(url)
+    await registry.define({ mode: 'replace', name: 'remote', transport: 'streamable-http', url: 'https://mcp.example.test/new' })
+    expect(await readFile(settingsPath, 'utf8')).not.toContain('private-query')
+  })
+  it('writes the selected layer without copying local secrets and preserves edits when trust is off', async () => {
+    const { ctx, registry, settingsPath } = await harness()
+    await registry.define({ ...STDIO, command: 'global', env: { TOKEN: 'global-secret' } })
+    const sharedScope = createScope(ctx, { layer: 'shared' })
+    const localScope = createScope(ctx, { layer: 'local' })
+    const sharedCtx = sharedScope.ctx.isolate('settings')
+    const localCtx = localScope.ctx.isolate('settings')
+    const sharedPath = `${settingsPath}.shared.yaml`
+    const localPath = `${settingsPath}.local.yaml`
+    await sharedCtx.plugin(FileSettingsProvider, { path: sharedPath, watch: false })
+    await localCtx.plugin(FileSettingsProvider, { path: localPath, watch: false })
+    const shared = sharedCtx.get('settings')!
+    const local = localCtx.get('settings')!
+    shared.inherit(ctx.get('settings')!, [MCP_SERVERS_SETTINGS_NAMESPACE])
+    local.inherit(shared, [MCP_SERVERS_SETTINGS_NAMESPACE])
+    await registry.define({ ...STDIO, mode: 'replace', command: 'shared', env: { TOKEN: 'shared-secret' } }, shared)
+    await registry.define({ ...STDIO, mode: 'replace', command: 'local', env: { TOKEN: 'local-secret' } }, local)
+    const localBefore = await readFile(localPath, 'utf8')
+    await registry.define({ mode: 'replace', name: 'notes', transport: 'stdio', command: 'shared-new' }, shared)
+    expect(await readFile(sharedPath, 'utf8')).toContain('shared-secret')
+    expect(await readFile(sharedPath, 'utf8')).not.toContain('local-secret')
+    expect(await readFile(localPath, 'utf8')).toBe(localBefore)
+
+    shared.setLayerEnabled(false)
+    await registry.setEnabled({ name: 'notes', enabled: true }, shared)
+    expect(registry.list(shared).servers[0]).toMatchObject({ command: 'shared-new', enabled: true })
+    expect(registry.list(local).servers[0]?.command).toBe('local')
+    await registry.remove('notes', shared)
+    await registry.settle()
+    expect(registry.list(shared).servers).toEqual([])
+    expect(registry.list(local).servers[0]?.command).toBe('local')
+    expect(registry.list().servers[0]?.command).toBe('global')
+  })
+
+  it('keeps same-name workspace servers, writes, snapshots, and disposal independent', async () => {
+    const { ctx, registry: globalRegistry, settingsPath } = await harness()
+    await ctx.settings.replace(MCP_SERVERS_SETTINGS_NAMESPACE, { servers: [] })
+    const before = await readFile(settingsPath, 'utf8')
+    const first = createScope(ctx, { workspace: 'first' })
+    const second = createScope(ctx, { workspace: 'second' })
+    const owners = [first, second].map(scope => scope.ctx.isolate('settings').isolate('mcpServers'))
+    for (const [index, owner] of owners.entries()) {
+      await owner.plugin(FileSettingsProvider, { path: `${settingsPath}.${String(index)}.yaml`, watch: false })
+      await owner.plugin(McpServerRegistry)
+      await owner.get('mcpServers')!.define({ ...STDIO, command: `node-${String(index)}`, enabled: true })
+    }
+    const [ownerA, ownerB] = owners as [Context, Context]
+    const registryA = ownerA.get('mcpServers')!
+    const registryB = ownerB.get('mcpServers')!
+    expect(registryA.list().servers[0]).toMatchObject({ command: 'node-0', status: 'started', tools: ['mcp__notes__read'] })
+    expect(registryB.list().servers[0]).toMatchObject({ command: 'node-1', status: 'started', tools: ['mcp__notes__read'] })
+    expect(globalRegistry.list().servers).toEqual([])
+    expect(ctx.tools.schemas()).toEqual([])
+
+    const caller = ctx.isolate('mcpServers', ownerA[Context.isolate].mcpServers)
+    await caller.plugin({
+      inject: ['mcpServers'],
+      async apply(apiCtx) { await apiCtx.mcpServers.setEnabled({ name: 'notes', enabled: false }) },
+    })
+    expect(await readFile(settingsPath, 'utf8')).toBe(before)
+    expect(registryA.list().servers[0]?.status).toBe('stopped')
+    expect(registryB.list().servers[0]?.status).toBe('started')
+
+    await first.dispose()
+    expect(ctx.tools.get('mcp__notes__read', scopeOf(second.ctx))).toBeDefined()
+    await second.dispose()
+    expect(ctx.tools.get('mcp__notes__read', scopeOf(second.ctx))).toBeUndefined()
+  })
+
   it.each(['create', 'replace', 'setEnabled', 'remove'] as const)(
     'refuses a stale %s without restoring another deleted server, then accepts a refreshed retry', async (mode) => {
       const { registry, settingsPath } = await harness()
@@ -241,6 +361,7 @@ describe('stored records', () => {
     ['//user:password@mcp.example.test/v1', '//mcp.example.test/v1'],
     ['user:password@mcp.example.test/v1', 'mcp.example.test/v1'],
     ['not-a-url', 'not-a-url'],
+    ['not-a-url?token=private#private', 'not-a-url'],
   ])('projects malformed HTTP URLs safely: %s', async (url, projected) => {
     const root = await mkdtemp(join(tmpdir(), 'hydra-mcp-registry-malformed-url-'))
     directories.push(root)

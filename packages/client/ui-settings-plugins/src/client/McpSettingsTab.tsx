@@ -65,6 +65,8 @@ export interface ImportedMcpSettingsFace {
 /** The user's own MCP server records; available only in the local desktop app. */
 export interface UserMcpSettingsFace {
   userMcp?: UserMcpControls
+  /** Hide Host provider credentials on a workspace form. */
+  workspace?: boolean
 }
 
 /** Local controls for the native Obsidian MCP plugin. */
@@ -167,8 +169,8 @@ export function McpSettingsTab(props: McpSettingsTabProps) {
       ) : null}
       {props.userMcp === undefined
         ? null
-        : <McpServerCatalog active={active} controls={props.userMcp} query={props.query} t={t} />}
-      {(state.available || nativeEntry !== undefined) && nativeMatchesQuery ? <PluginCard
+        : <McpServerCatalog active={active} controls={props.userMcp} query={props.query} t={t} workspace={props.workspace ?? false} />}
+      {!props.workspace && (state.available || nativeEntry !== undefined) && nativeMatchesQuery ? <PluginCard
         t={t}
         titleKey="mcpTitle"
         descriptionKey="mcpDescription"

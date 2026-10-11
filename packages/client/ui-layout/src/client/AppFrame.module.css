@@ -199,6 +199,17 @@
   width: 100%;
 }
 
+.desktopShell[data-full-view] > [data-desktop-panel='browser'] {
+  grid-area: 2 / 1;
+  margin-left: var(--desktop-sidebar-width);
+  z-index: 5;
+}
+
+.desktopShell[data-full-view] .centerCol,
+.desktopShell[data-full-view] .detailsCol {
+  visibility: hidden;
+}
+
 /* Keep both hit strips fully on the renderer side of the seams: native
    WebContentsViews paint above renderer content and would consume overlap. */
 .desktopResizeHandle {

@@ -9,7 +9,7 @@ overrides:
   '@hydraharness/schemastery': link:vendor/schemastery
 
 patchedDependencies:
-  '@earendil-works/pi-ai@0.82.1': 1fbcde43a40aad09a2849be88b5ca0616783c0288010ec448a897a3febe52b27
+  '@earendil-works/pi-ai@0.82.1': 0c382a47d04bb9b91ffc8269e7900218139700eb0b1395a3646a835471cd3928
   node-pty@1.2.0-beta.15: 1137a730175ec9a8151d001a9576e1f133a35985504946f3280bcbf94834595e
 
 importers:
@@ -214,6 +214,9 @@ importers:
       '@hydraharness/harness-mcp-client':
         specifier: workspace:^
         version: link:../../packages/mcp/mcp-client
+      '@hydraharness/harness-native-command':
+        specifier: workspace:^
+        version: link:../../packages/util/native-command
       '@hydraharness/harness-persona':
         specifier: workspace:^
         version: link:../../packages/preset/persona
@@ -353,6 +356,9 @@ importers:
       '@hydraharness/harness-loader-smoke':
         specifier: workspace:^
         version: link:../../packages/test-support/loader-smoke
+      '@hydraharness/harness-scope':
+        specifier: workspace:^
+        version: link:../../packages/core/scope
       '@hydraharness/harness-session':
         specifier: workspace:^
         version: link:../../packages/core/session
@@ -368,6 +374,9 @@ importers:
       '@hydraharness/harness-tools':
         specifier: workspace:^
         version: link:../../packages/core/tools
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../packages/workspace/workspace-config
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
@@ -410,6 +419,9 @@ importers:
       '@hydraharness/cordis-plugin-group':
         specifier: workspace:^
         version: link:../../vendor/group
+      '@hydraharness/harness-atomic-write':
+        specifier: workspace:^
+        version: link:../../packages/util/atomic-write
       '@hydraharness/harness-attachment':
         specifier: workspace:^
         version: link:../../packages/attachment/attachment
@@ -512,12 +524,18 @@ importers:
       '@hydraharness/harness-agent':
         specifier: workspace:*
         version: link:../packages/core/agent
+      '@hydraharness/harness-agent-default-model':
+        specifier: workspace:*
+        version: link:../packages/core/agent-default-model
       '@hydraharness/harness-agent-instructions':
         specifier: workspace:*
         version: link:../packages/context/agent-instructions
       '@hydraharness/harness-agent-loop':
         specifier: workspace:*
         version: link:../packages/core/agent-loop
+      '@hydraharness/harness-agent-presets':
+        specifier: workspace:*
+        version: link:../packages/preset/agent-presets
       '@hydraharness/harness-agent-spine-demo':
         specifier: workspace:*
         version: link:../packages/examples/agent-spine-demo
@@ -710,6 +728,15 @@ importers:
       '@hydraharness/harness-spill-policy':
         specifier: workspace:*
         version: link:../packages/spill/spill-policy
+      '@hydraharness/harness-storage':
+        specifier: workspace:*
+        version: link:../packages/storage/storage
+      '@hydraharness/harness-storage-domain':
+        specifier: workspace:*
+        version: link:../packages/storage/storage-domain
+      '@hydraharness/harness-storage-json':
+        specifier: workspace:*
+        version: link:../packages/storage/storage-json
       '@hydraharness/harness-subagent':
         specifier: workspace:*
         version: link:../packages/subagent/subagent
@@ -842,6 +869,25 @@ importers:
       '@hydraharness/harness-workflow-worker-thread':
         specifier: workspace:*
         version: link:../packages/workflow/workflow-worker-thread
+      '@hydraharness/harness-workspace':
+        specifier: workspace:*
+        version: link:../packages/workspace/workspace
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:*
+        version: link:../packages/workspace/workspace-config
+    devDependencies:
+      '@hydraharness/cordis':
+        specifier: workspace:*
+        version: link:../vendor/cordis
+      '@hydraharness/harness-hooks-registry':
+        specifier: workspace:*
+        version: link:../packages/hooks/hooks-registry
+      '@hydraharness/harness-mcp-registry':
+        specifier: workspace:*
+        version: link:../packages/mcp/mcp-registry
+      '@hydraharness/harness-settings':
+        specifier: workspace:*
+        version: link:../packages/settings/settings
 
   native/landlock-run:
     devDependencies:
@@ -886,12 +932,18 @@ importers:
       '@hydraharness/harness-agent':
         specifier: workspace:^
         version: link:../../core/agent
+      '@hydraharness/harness-agent-default-model':
+        specifier: workspace:^
+        version: link:../../core/agent-default-model
       '@hydraharness/harness-agent-loop':
         specifier: workspace:^
         version: link:../../core/agent-loop
       '@hydraharness/harness-agent-loop-testkit':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-testkit
+      '@hydraharness/harness-agent-presets':
+        specifier: workspace:^
+        version: link:../../preset/agent-presets
       '@hydraharness/harness-attachment':
         specifier: workspace:^
         version: link:../../attachment/attachment
@@ -901,6 +953,9 @@ importers:
       '@hydraharness/harness-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@hydraharness/harness-scope':
+        specifier: workspace:^
+        version: link:../../core/scope
       '@hydraharness/harness-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -910,6 +965,9 @@ importers:
       '@hydraharness/harness-user-approval':
         specifier: workspace:^
         version: link:../../interaction/user-approval
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-config
 
   packages/api/gateway:
     dependencies:
@@ -993,6 +1051,9 @@ importers:
       '@hydraharness/harness-message-feedback':
         specifier: workspace:^
         version: link:../../feedback/message-feedback
+      '@hydraharness/harness-notifications':
+        specifier: workspace:^
+        version: link:../../interaction/notifications
       '@hydraharness/harness-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -1008,9 +1069,15 @@ importers:
       '@hydraharness/harness-skill':
         specifier: workspace:^
         version: link:../../skill/skill
+      '@hydraharness/harness-toys':
+        specifier: workspace:^
+        version: link:../../interaction/toys
       '@hydraharness/harness-typert-registry':
         specifier: workspace:^
         version: link:../../typert/registry
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-config
 
   packages/attachment/attachment:
     devDependencies:
@@ -1105,6 +1172,10 @@ importers:
         version: 15.0.0
 
   packages/browser/browser-decisions:
+    dependencies:
+      '@hydraharness/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
     devDependencies:
       '@hydraharness/cordis':
         specifier: workspace:^
@@ -1115,6 +1186,9 @@ importers:
       '@hydraharness/harness-jev':
         specifier: workspace:^
         version: link:../../llm/jev
+      '@hydraharness/harness-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
       '@hydraharness/harness-tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -1149,6 +1223,9 @@ importers:
       '@hydraharness/harness-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@hydraharness/harness-native-command':
+        specifier: workspace:^
+        version: link:../../util/native-command
       '@hydraharness/harness-settings':
         specifier: workspace:^
         version: link:../../settings/settings
@@ -1255,6 +1332,9 @@ importers:
       '@hydraharness/harness-agent-loop':
         specifier: workspace:^
         version: link:../../core/agent-loop
+      '@hydraharness/harness-agent-presets':
+        specifier: workspace:^
+        version: link:../../preset/agent-presets
       '@hydraharness/harness-api-gateway':
         specifier: workspace:^
         version: link:../../api/gateway
@@ -1357,9 +1437,15 @@ importers:
       '@hydraharness/harness-mcp-registry':
         specifier: workspace:^
         version: link:../../mcp/mcp-registry
+      '@hydraharness/harness-notifications':
+        specifier: workspace:^
+        version: link:../../interaction/notifications
       '@hydraharness/harness-obsidian-knowledge':
         specifier: workspace:^
         version: link:../../knowledge/obsidian-knowledge
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../../host/optional-plugins
       '@hydraharness/harness-page-memory':
         specifier: workspace:^
         version: link:../../knowledge/page-memory
@@ -1447,6 +1533,9 @@ importers:
       '@hydraharness/harness-subprocess-local':
         specifier: workspace:^
         version: link:../../subprocess/subprocess-local
+      '@hydraharness/harness-suggested-prompts':
+        specifier: workspace:^
+        version: link:../../interaction/suggested-prompts
       '@hydraharness/harness-system-prompt':
         specifier: workspace:^
         version: link:../../core/system-prompt
@@ -1513,6 +1602,9 @@ importers:
       '@hydraharness/harness-tools':
         specifier: workspace:^
         version: link:../../core/tools
+      '@hydraharness/harness-toys':
+        specifier: workspace:^
+        version: link:../../interaction/toys
       '@hydraharness/harness-typert-loader':
         specifier: workspace:^
         version: link:../../typert/loader
@@ -1540,6 +1632,9 @@ importers:
       '@hydraharness/harness-workflow-worker-thread':
         specifier: workspace:^
         version: link:../../workflow/workflow-worker-thread
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-config
     devDependencies:
       '@hydraharness/cordis':
         specifier: workspace:^
@@ -1575,15 +1670,24 @@ importers:
       '@hydraharness/harness-agent-default-model':
         specifier: workspace:^
         version: link:../../core/agent-default-model
+      '@hydraharness/harness-agent-presets':
+        specifier: workspace:^
+        version: link:../../preset/agent-presets
       '@hydraharness/harness-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
       '@hydraharness/harness-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@hydraharness/harness-scope':
+        specifier: workspace:^
+        version: link:../../core/scope
       '@hydraharness/harness-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-config
 
   packages/bundle/web-app:
     dependencies:
@@ -1704,6 +1808,9 @@ importers:
       '@hydraharness/harness-client-ui-subagent':
         specifier: workspace:^
         version: link:../../client/ui-subagent
+      '@hydraharness/harness-client-ui-suggested-prompts':
+        specifier: workspace:^
+        version: link:../../client/ui-suggested-prompts
       '@hydraharness/harness-client-ui-theme':
         specifier: workspace:^
         version: link:../../client/ui-theme
@@ -2506,6 +2613,9 @@ importers:
       '@hydraharness/harness-client-runtime':
         specifier: workspace:^
         version: link:../runtime
+      '@hydraharness/harness-client-ui-primitives':
+        specifier: workspace:^
+        version: link:../ui-primitives
       '@hydraharness/harness-client-ui-settings':
         specifier: workspace:^
         version: link:../ui-settings
@@ -2560,6 +2670,9 @@ importers:
 
   packages/client/ui-layout:
     dependencies:
+      '@hydraharness/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -2570,6 +2683,9 @@ importers:
       '@hydraharness/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@hydraharness/harness-api-remotes':
+        specifier: workspace:^
+        version: link:../../api/remotes
       '@hydraharness/harness-client-locale':
         specifier: workspace:^
         version: link:../locale
@@ -2594,6 +2710,15 @@ importers:
       '@hydraharness/harness-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+      '@hydraharness/harness-notifications':
+        specifier: workspace:^
+        version: link:../../interaction/notifications
+      '@hydraharness/harness-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
+      '@hydraharness/harness-toys':
+        specifier: workspace:^
+        version: link:../../interaction/toys
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
@@ -3397,6 +3522,45 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
 
+  packages/client/ui-suggested-prompts:
+    devDependencies:
+      '@hydraharness/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@hydraharness/harness-api-remotes':
+        specifier: workspace:^
+        version: link:../../api/remotes
+      '@hydraharness/harness-client-locale':
+        specifier: workspace:^
+        version: link:../locale
+      '@hydraharness/harness-client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@hydraharness/harness-client-ui-conversation':
+        specifier: workspace:^
+        version: link:../ui-conversation
+      '@hydraharness/harness-client-ui-primitives':
+        specifier: workspace:^
+        version: link:../ui-primitives
+      '@hydraharness/harness-client-ui-settings':
+        specifier: workspace:^
+        version: link:../ui-settings
+      '@hydraharness/harness-client-ui-slots':
+        specifier: workspace:^
+        version: link:../ui-slots
+      '@hydraharness/harness-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@hydraharness/harness-suggested-prompts':
+        specifier: workspace:^
+        version: link:../../interaction/suggested-prompts
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
   packages/client/ui-theme:
     dependencies:
       '@hydraharness/schemastery':
@@ -3954,6 +4118,9 @@ importers:
       '@hydraharness/harness-tools':
         specifier: workspace:^
         version: link:../../core/tools
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-config
 
   packages/context/file-reference:
     dependencies:
@@ -4340,6 +4507,9 @@ importers:
       '@hydraharness/harness-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../../host/optional-plugins
       '@hydraharness/harness-scope':
         specifier: workspace:^
         version: link:../scope
@@ -5521,6 +5691,9 @@ importers:
       '@hydraharness/harness-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../../host/optional-plugins
       '@hydraharness/harness-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -5573,6 +5746,9 @@ importers:
       '@hydraharness/harness-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../../host/optional-plugins
       '@hydraharness/harness-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -5613,6 +5789,9 @@ importers:
       '@hydraharness/cordis-plugin-loader':
         specifier: workspace:^
         version: link:../../../vendor/loader
+      '@hydraharness/harness-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
       '@hydraharness/harness-hooks-claude-code':
         specifier: workspace:^
         version: link:../hooks-claude-code
@@ -5622,6 +5801,12 @@ importers:
       '@hydraharness/harness-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../../host/optional-plugins
+      '@hydraharness/harness-scope':
+        specifier: workspace:^
+        version: link:../../core/scope
       '@hydraharness/harness-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -5631,6 +5816,9 @@ importers:
       '@hydraharness/harness-settings-file':
         specifier: workspace:^
         version: link:../../settings/settings-file
+      '@hydraharness/harness-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/host/apiproxy:
     dependencies:
@@ -5682,6 +5870,12 @@ importers:
       '@hydraharness/harness-native-command':
         specifier: workspace:^
         version: link:../../util/native-command
+      '@hydraharness/harness-notifications':
+        specifier: workspace:^
+        version: link:../../interaction/notifications
+      '@hydraharness/harness-scope':
+        specifier: workspace:^
+        version: link:../../core/scope
       '@hydraharness/harness-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -5743,6 +5937,9 @@ importers:
       '@hydraharness/harness-cordis-host-runner':
         specifier: workspace:^
         version: link:../../extensions/cordis-host-runner
+      '@hydraharness/harness-fs-local':
+        specifier: workspace:^
+        version: link:../../fs/fs-local
       '@hydraharness/harness-fs-review':
         specifier: workspace:^
         version: link:../../fs/fs-review
@@ -5758,12 +5955,21 @@ importers:
       '@hydraharness/harness-storage-domain':
         specifier: workspace:^
         version: link:../../storage/storage-domain
+      '@hydraharness/harness-suggested-prompts':
+        specifier: workspace:^
+        version: link:../../interaction/suggested-prompts
+      '@hydraharness/harness-toys':
+        specifier: workspace:^
+        version: link:../../interaction/toys
       '@hydraharness/harness-typert-protocol':
         specifier: workspace:^
         version: link:../../typert/protocol
       '@hydraharness/harness-typert-registry':
         specifier: workspace:^
         version: link:../../typert/registry
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-config
 
   packages/host/directory-picker:
     devDependencies:
@@ -5864,6 +6070,22 @@ importers:
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
 
+  packages/host/optional-plugins:
+    dependencies:
+      '@hydraharness/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@hydraharness/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@hydraharness/harness-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@hydraharness/harness-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
+
   packages/host/plugin-inventory:
     dependencies:
       '@hydraharness/schemastery':
@@ -5882,6 +6104,9 @@ importers:
       '@hydraharness/cordis-plugin-loader':
         specifier: workspace:^
         version: link:../../../vendor/loader
+      '@hydraharness/harness-agent-presets':
+        specifier: workspace:^
+        version: link:../../preset/agent-presets
       '@hydraharness/harness-app-boot':
         specifier: workspace:^
         version: link:../../boot/app-boot
@@ -5900,6 +6125,9 @@ importers:
       '@hydraharness/harness-mcp-registry':
         specifier: workspace:^
         version: link:../../mcp/mcp-registry
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../optional-plugins
       '@hydraharness/harness-plugin-runtime':
         specifier: workspace:^
         version: link:../plugin-runtime
@@ -5912,6 +6140,9 @@ importers:
       '@hydraharness/harness-typert-protocol':
         specifier: workspace:^
         version: link:../../typert/protocol
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-config
 
   packages/host/plugin-runtime:
     dependencies:
@@ -5949,6 +6180,9 @@ importers:
       '@hydraharness/harness-mcp-client':
         specifier: workspace:^
         version: link:../../mcp/mcp-client
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../optional-plugins
       '@hydraharness/harness-skill':
         specifier: workspace:^
         version: link:../../skill/skill
@@ -6021,6 +6255,28 @@ importers:
         specifier: workspace:^
         version: link:../../typert/protocol
 
+  packages/interaction/notifications:
+    dependencies:
+      '@hydraharness/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@hydraharness/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@hydraharness/harness-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+      '@hydraharness/harness-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@hydraharness/harness-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@hydraharness/harness-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
+
   packages/interaction/permission-presets:
     dependencies:
       '@hydraharness/schemastery':
@@ -6033,6 +6289,9 @@ importers:
       '@hydraharness/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@hydraharness/harness-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
       '@hydraharness/harness-commands':
         specifier: workspace:^
         version: link:../commands
@@ -6060,6 +6319,46 @@ importers:
       '@hydraharness/harness-user-approval':
         specifier: workspace:^
         version: link:../user-approval
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-config
+
+  packages/interaction/suggested-prompts:
+    dependencies:
+      '@hydraharness/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      zod:
+        specifier: ^4.1.5
+        version: 4.6.4
+    devDependencies:
+      '@hydraharness/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@hydraharness/harness-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@hydraharness/harness-fs':
+        specifier: workspace:^
+        version: link:../../fs/fs
+      '@hydraharness/harness-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@hydraharness/harness-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../../host/optional-plugins
+      '@hydraharness/harness-scope':
+        specifier: workspace:^
+        version: link:../../core/scope
+      '@hydraharness/harness-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@hydraharness/harness-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
 
   packages/interaction/tool-ask-user:
     devDependencies:
@@ -6084,6 +6383,34 @@ importers:
       '@hydraharness/harness-user-questions':
         specifier: workspace:^
         version: link:../user-questions
+
+  packages/interaction/toys:
+    dependencies:
+      '@hydraharness/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@hydraharness/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@hydraharness/harness-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+      '@hydraharness/harness-commands':
+        specifier: workspace:^
+        version: link:../commands
+      '@hydraharness/harness-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../../host/optional-plugins
+      '@hydraharness/harness-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@hydraharness/harness-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
 
   packages/interaction/user-approval:
     dependencies:
@@ -6348,6 +6675,9 @@ importers:
       '@hydraharness/harness-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+      '@hydraharness/harness-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
       '@hydraharness/harness-timeout':
         specifier: workspace:^
         version: link:../../util/timeout
@@ -6356,7 +6686,7 @@ importers:
     dependencies:
       '@earendil-works/pi-ai':
         specifier: ^0.82.1
-        version: 0.82.1(patch_hash=1fbcde43a40aad09a2849be88b5ca0616783c0288010ec448a897a3febe52b27)(@modelcontextprotocol/sdk@1.29.0(zod@4.6.4))(ws@8.21.0)(zod@4.6.4)
+        version: 0.82.1(patch_hash=0c382a47d04bb9b91ffc8269e7900218139700eb0b1395a3646a835471cd3928)(@modelcontextprotocol/sdk@1.29.0(zod@4.6.4))(ws@8.21.0)(zod@4.6.4)
       '@hydraharness/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -6472,7 +6802,7 @@ importers:
     dependencies:
       '@earendil-works/pi-ai':
         specifier: ^0.82.1
-        version: 0.82.1(patch_hash=1fbcde43a40aad09a2849be88b5ca0616783c0288010ec448a897a3febe52b27)(@modelcontextprotocol/sdk@1.29.0(zod@4.6.4))(ws@8.21.3)(zod@4.6.4)
+        version: 0.82.1(patch_hash=0c382a47d04bb9b91ffc8269e7900218139700eb0b1395a3646a835471cd3928)(@modelcontextprotocol/sdk@1.29.0(zod@4.6.4))(ws@8.21.3)(zod@4.6.4)
       '@hydraharness/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -6725,9 +7055,15 @@ importers:
       '@hydraharness/harness-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@hydraharness/harness-scope':
+        specifier: workspace:^
+        version: link:../../core/scope
       '@hydraharness/harness-subprocess':
         specifier: workspace:^
         version: link:../../subprocess/subprocess
+      '@hydraharness/harness-suggested-prompts':
+        specifier: workspace:^
+        version: link:../../interaction/suggested-prompts
       '@hydraharness/harness-timeout':
         specifier: workspace:^
         version: link:../../util/timeout
@@ -6759,6 +7095,12 @@ importers:
       '@hydraharness/harness-mcp-client':
         specifier: workspace:^
         version: link:../mcp-client
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../../host/optional-plugins
+      '@hydraharness/harness-scope':
+        specifier: workspace:^
+        version: link:../../core/scope
       '@hydraharness/harness-settings':
         specifier: workspace:^
         version: link:../../settings/settings
@@ -7119,6 +7461,12 @@ importers:
       '@hydraharness/harness-agent':
         specifier: workspace:^
         version: link:../../core/agent
+      '@hydraharness/harness-agent-default-model':
+        specifier: workspace:^
+        version: link:../../core/agent-default-model
+      '@hydraharness/harness-agent-presets':
+        specifier: workspace:^
+        version: link:../../preset/agent-presets
       '@hydraharness/harness-agent-spine-demo':
         specifier: workspace:^
         version: link:../../examples/agent-spine-demo
@@ -7146,6 +7494,9 @@ importers:
       '@hydraharness/harness-subagent':
         specifier: workspace:^
         version: link:../../subagent/subagent
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-config
 
   packages/session-query/session-log-export:
     devDependencies:
@@ -7374,6 +7725,9 @@ importers:
       '@hydraharness/harness-session-persistence':
         specifier: workspace:^
         version: link:../session-persistence
+      '@hydraharness/harness-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
 
   packages/session/session-persistence-sqlite:
     dependencies:
@@ -8141,6 +8495,9 @@ importers:
       '@hydraharness/harness-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../../host/optional-plugins
       '@hydraharness/harness-scope':
         specifier: workspace:^
         version: link:../../core/scope
@@ -8181,6 +8538,9 @@ importers:
       '@hydraharness/harness-skill':
         specifier: workspace:^
         version: link:../skill
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-config
 
   packages/skill/tool-skill:
     dependencies:
@@ -9707,6 +10067,9 @@ importers:
 
   packages/workspace/workspace:
     dependencies:
+      '@hydraharness/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -9717,6 +10080,9 @@ importers:
       '@hydraharness/harness-brand':
         specifier: workspace:^
         version: link:../../util/brand
+      '@hydraharness/harness-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
       '@hydraharness/harness-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
@@ -9726,12 +10092,88 @@ importers:
       '@hydraharness/harness-session-persistence':
         specifier: workspace:^
         version: link:../../session/session-persistence
+      '@hydraharness/harness-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
       '@hydraharness/harness-storage':
         specifier: workspace:^
         version: link:../../storage/storage
       '@hydraharness/harness-storage-domain':
         specifier: workspace:^
         version: link:../../storage/storage-domain
+
+  packages/workspace/workspace-config:
+    dependencies:
+      '@hydraharness/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@hydraharness/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@hydraharness/cordis-plugin-include':
+        specifier: workspace:^
+        version: link:../../../vendor/include
+      '@hydraharness/cordis-plugin-loader':
+        specifier: workspace:^
+        version: link:../../../vendor/loader
+      '@hydraharness/harness-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@hydraharness/harness-agent-default-model':
+        specifier: workspace:^
+        version: link:../../core/agent-default-model
+      '@hydraharness/harness-agent-loop':
+        specifier: workspace:^
+        version: link:../../core/agent-loop
+      '@hydraharness/harness-agent-presets':
+        specifier: workspace:^
+        version: link:../../preset/agent-presets
+      '@hydraharness/harness-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
+      '@hydraharness/harness-hooks-registry':
+        specifier: workspace:^
+        version: link:../../hooks/hooks-registry
+      '@hydraharness/harness-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@hydraharness/harness-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@hydraharness/harness-mcp-registry':
+        specifier: workspace:^
+        version: link:../../mcp/mcp-registry
+      '@hydraharness/harness-scope':
+        specifier: workspace:^
+        version: link:../../core/scope
+      '@hydraharness/harness-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@hydraharness/harness-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
+      '@hydraharness/harness-settings-file':
+        specifier: workspace:^
+        version: link:../../settings/settings-file
+      '@hydraharness/harness-shell':
+        specifier: workspace:^
+        version: link:../../shell/shell
+      '@hydraharness/harness-storage':
+        specifier: workspace:^
+        version: link:../../storage/storage
+      '@hydraharness/harness-storage-domain':
+        specifier: workspace:^
+        version: link:../../storage/storage-domain
+      '@hydraharness/harness-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
+      '@hydraharness/harness-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+      '@hydraharness/harness-workspace':
+        specifier: workspace:^
+        version: link:../workspace
 
   python/sdk-runtime:
     dependencies:
@@ -9759,12 +10201,18 @@ importers:
       '@hydraharness/harness-agent':
         specifier: workspace:^
         version: link:../../packages/core/agent
+      '@hydraharness/harness-agent-default-model':
+        specifier: workspace:^
+        version: link:../../packages/core/agent-default-model
       '@hydraharness/harness-agent-instructions':
         specifier: workspace:^
         version: link:../../packages/context/agent-instructions
       '@hydraharness/harness-agent-loop':
         specifier: workspace:^
         version: link:../../packages/core/agent-loop
+      '@hydraharness/harness-agent-presets':
+        specifier: workspace:^
+        version: link:../../packages/preset/agent-presets
       '@hydraharness/harness-agent-spine-demo':
         specifier: workspace:^
         version: link:../../packages/examples/agent-spine-demo
@@ -9777,6 +10225,9 @@ importers:
       '@hydraharness/harness-app-boot':
         specifier: workspace:^
         version: link:../../packages/boot/app-boot
+      '@hydraharness/harness-atomic-write':
+        specifier: workspace:^
+        version: link:../../packages/util/atomic-write
       '@hydraharness/harness-attachment':
         specifier: workspace:^
         version: link:../../packages/attachment/attachment
@@ -9852,6 +10303,9 @@ importers:
       '@hydraharness/harness-hooks-codex':
         specifier: workspace:^
         version: link:../../packages/hooks/hooks-codex
+      '@hydraharness/harness-hooks-registry':
+        specifier: workspace:^
+        version: link:../../packages/hooks/hooks-registry
       '@hydraharness/harness-invariants':
         specifier: workspace:^
         version: link:../../packages/runtime-diagnostics/invariants
@@ -9885,6 +10339,15 @@ importers:
       '@hydraharness/harness-mcp-client':
         specifier: workspace:^
         version: link:../../packages/mcp/mcp-client
+      '@hydraharness/harness-mcp-registry':
+        specifier: workspace:^
+        version: link:../../packages/mcp/mcp-registry
+      '@hydraharness/harness-native-command':
+        specifier: workspace:^
+        version: link:../../packages/util/native-command
+      '@hydraharness/harness-optional-plugins':
+        specifier: workspace:^
+        version: link:../../packages/host/optional-plugins
       '@hydraharness/harness-output-retention':
         specifier: workspace:^
         version: link:../../packages/util/output-retention
@@ -9957,6 +10420,9 @@ importers:
       '@hydraharness/harness-settings':
         specifier: workspace:^
         version: link:../../packages/settings/settings
+      '@hydraharness/harness-settings-file':
+        specifier: workspace:^
+        version: link:../../packages/settings/settings-file
       '@hydraharness/harness-shell':
         specifier: workspace:^
         version: link:../../packages/shell/shell
@@ -9972,6 +10438,12 @@ importers:
       '@hydraharness/harness-spill':
         specifier: workspace:^
         version: link:../../packages/spill/spill
+      '@hydraharness/harness-storage':
+        specifier: workspace:^
+        version: link:../../packages/storage/storage
+      '@hydraharness/harness-storage-domain':
+        specifier: workspace:^
+        version: link:../../packages/storage/storage-domain
       '@hydraharness/harness-subagent':
         specifier: workspace:^
         version: link:../../packages/subagent/subagent
@@ -9993,6 +10465,9 @@ importers:
       '@hydraharness/harness-subprocess-local':
         specifier: workspace:^
         version: link:../../packages/subprocess/subprocess-local
+      '@hydraharness/harness-suggested-prompts':
+        specifier: workspace:^
+        version: link:../../packages/interaction/suggested-prompts
       '@hydraharness/harness-system-prompt':
         specifier: workspace:^
         version: link:../../packages/core/system-prompt
@@ -10098,6 +10573,12 @@ importers:
       '@hydraharness/harness-workflow-worker-thread':
         specifier: workspace:^
         version: link:../../packages/workflow/workflow-worker-thread
+      '@hydraharness/harness-workspace':
+        specifier: workspace:^
+        version: link:../../packages/workspace/workspace
+      '@hydraharness/harness-workspace-config':
+        specifier: workspace:^
+        version: link:../../packages/workspace/workspace-config
       '@hydraharness/schemastery':
         specifier: link:../../vendor/schemastery
         version: link:../../vendor/schemastery
@@ -11588,10 +12069,12 @@ packages:
 
   '@modelcontextprotocol/server-everything@2026.7.4':
     resolution: {integrity: sha512-ydMW/M6rk9tK23b+U38trsNLHhd5eF+ntiv2Vr+RPMDhbiKY/IKrZU25ukvSXVPUBvy7TxTPWpeV4KcYcXg72w==}
+    deprecated: 'Date-based versions are no longer published. This package has resumed semantic versioning at 1.0.0: install the latest version.'
     hasBin: true
 
   '@modelcontextprotocol/server-filesystem@2026.7.10':
     resolution: {integrity: sha512-Mmjg4anFBD5OzbPnGJOA0jPPN8645ERhQk38HQLpSenx1ox9bfdPkmAzUnNjeQtqQGFLtKe13J20RtLBmUKMZA==}
+    deprecated: 'Date-based versions are no longer published. This package has resumed semantic versioning at 1.0.0: install the latest version.'
     hasBin: true
 
   '@napi-rs/wasm-runtime@1.1.5':
@@ -16666,7 +17149,7 @@ snapshots:
     transitivePeerDependencies:
       - '@algolia/client-search'
 
-  '@earendil-works/pi-ai@0.82.1(patch_hash=1fbcde43a40aad09a2849be88b5ca0616783c0288010ec448a897a3febe52b27)(@modelcontextprotocol/sdk@1.29.0(zod@4.6.4))(ws@8.21.0)(zod@4.6.4)':
+  '@earendil-works/pi-ai@0.82.1(patch_hash=0c382a47d04bb9b91ffc8269e7900218139700eb0b1395a3646a835471cd3928)(@modelcontextprotocol/sdk@1.29.0(zod@4.6.4))(ws@8.21.0)(zod@4.6.4)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@4.6.4)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0
@@ -16687,7 +17170,7 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.82.1(patch_hash=1fbcde43a40aad09a2849be88b5ca0616783c0288010ec448a897a3febe52b27)(@modelcontextprotocol/sdk@1.29.0(zod@4.6.4))(ws@8.21.3)(zod@4.6.4)':
+  '@earendil-works/pi-ai@0.82.1(patch_hash=0c382a47d04bb9b91ffc8269e7900218139700eb0b1395a3646a835471cd3928)(@modelcontextprotocol/sdk@1.29.0(zod@4.6.4))(ws@8.21.3)(zod@4.6.4)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@4.6.4)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0

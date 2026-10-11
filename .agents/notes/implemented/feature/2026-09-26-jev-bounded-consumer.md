@@ -10,6 +10,8 @@ The Jev capability could be enabled with its Models card while no model-facing c
 
 The base bundle assigns `@hydraharness/harness-browser-decisions` to the `jev` plugin group. Enabling Jev therefore mounts the provider, the Models contribution, and the `browser_decide` tool together after the normal restart. The tool asks Jev to choose among caller-supplied browser-action labels and returns advice only; the browser executor and permission policy remain authoritative.
 
+The independently saved `browser-decisions.enabled` preference defaults to true for this mounted group. Off abstains before a new Jev call while allowing pending requests to complete. It preserves credentials and does not dispose the provider, tool, or UI; the Plugins group remains responsible for mounting and disposal. Its unavailable result is logged by the ordinary tool path, without adding a session event or wire API.
+
 This is the first default consumer for the capability. The main conversation model decides when to call it through the ordinary tool schema, so JEV is used for bounded choices without adding a second request to every model step or changing the `ctx.llm` route.
 
 ## Alternatives considered

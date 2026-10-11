@@ -29,6 +29,8 @@ The registry is process memory and the only source of truth. The session log car
 
 The vm sandbox isolates globals but is not a security boundary: Node globals are absent or redirect to Cordis services (`ctx.fs`, `ctx.web`, `ctx.bash`, the timer helpers), and a host half receives a façade without framework internals, yet the services it declares reach the live runtime. Treat a dynamic package like bash access — see the [self-referential toolset Agent Note](../../../.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.md).
 
+The façade withholds Host control services (`workspaceConfig`, `apiProxy`, `connection`, `remote`, and `settingsScope`). Settings exposes its public namespace APIs, with primitive string namespace names required and the Host-owned `workspace-config` namespace and provider internals withheld. Workspace trust belongs to the user in Settings; a dynamic package cannot grant it through those APIs. These checks do not contain already authorized filesystem or shell execution.
+
 ## Config
 
 | Field | Default | Meaning |

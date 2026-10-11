@@ -19,6 +19,10 @@
   - img
   - img
   - text: Context injection goal
+- button "Context injection .hydra/AGENTS.md":
+  - img
+  - img
+  - text: Context injection .hydra/AGENTS.md
 - button "Context injection @hydraharness/harness-system-prompt":
   - img
   - img

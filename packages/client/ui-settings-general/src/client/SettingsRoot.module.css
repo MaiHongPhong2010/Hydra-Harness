@@ -101,7 +101,16 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
 }
+
+.nav input {
+  box-sizing: border-box; width: 100%; min-width: 0; padding: 8px;
+  border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-control);
+  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit;
+}
+.nav input:focus-visible { outline: 2px solid var(--dsw-alias-focus-ring); outline-offset: 2px; }
 
 /* Nav cell (figma .Setting-nav-cell 501:29962): 164x40, r12, pad
    (12,9,16,9), gap 8; label 14/400 lh22; selected fill #EBEEF2. */
@@ -189,7 +198,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  height: 54px;
+  min-height: 54px;
   padding: 20px 14px 8px 10px;
   box-sizing: border-box;
 }
@@ -198,7 +207,8 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  flex: 1;
   gap: 8px;
   margin-left: auto;
 }
@@ -238,4 +248,10 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .nav { width: 140px; padding: 12px 8px; gap: 12px; }
+  .navCell { padding: 8px; height: auto; min-height: 40px; }
+  .options { padding: 0 12px 12px; }
 }

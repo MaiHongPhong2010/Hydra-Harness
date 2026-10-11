@@ -11,7 +11,7 @@
  * before-the-fact, while the header only reports what a session already runs.
  */
 
-import type { ConnectionHandle } from '@hydraharness/harness-api-remotes/client'
+import type { ConnectionHandle, SessionId } from '@hydraharness/harness-api-remotes/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@hydraharness/harness-client-locale/client'
 // Type-only: pulls the ctx.remote merge and the forwarded-event key face
@@ -20,6 +20,7 @@ import type {} from '@hydraharness/harness-api-remotes/client'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@hydraharness/harness-client-ui-settings/client'
 import type { ClientContext } from '@hydraharness/harness-client-runtime/client'
+import { createSnapshotStore } from '@hydraharness/harness-client-runtime/client'
 import { AgentPresetLabel } from './AgentPresetLabel.tsx'
 import type { AgentPresetLabelInjected } from './AgentPresetLabel.tsx'
 import { AgentPresetRow } from './AgentPresetRow.tsx'
@@ -58,17 +59,57 @@ export function apply(ctx: ClientContext): void {
   // One roster, four surfaces. The chip is registered in a later scope, so it
   // subscribes here rather than being reached from this one.
   const rosterReaders = new Set<() => void>()
-  const section = new AgentPresetSectionController(api, () => {
+  const rosterChanged = () => {
     void controller.load()
     for (const read of rosterReaders) read()
-  })
+  }
+  const selection = ctx.settingsScope.selection()
+  const groups = new Map<string, { row: AgentPresetSettingsController; section: AgentPresetSectionController }>()
+  const addressed = () => {
+    const { target } = selection.getSnapshot()
+    const key = `${target.workspaceId ?? 'global'}:${target.layer ?? ''}`
+    let group = groups.get(key)
+    if (group === undefined) {
+      group = { row: target.workspaceId === undefined
+        ? controller : new AgentPresetSettingsController(api, ctx.settingsScope.describe(target)),
+      section: new AgentPresetSectionController(api, rosterChanged, target, ctx.settingsScope.describe(target)) }
+      groups.set(key, group)
+    }
+    return group
+  }
+  let group = addressed()
+  let section = group.section
+  const rowView = createSnapshotStore(group.row.store.getSnapshot())
+  const sectionView = createSnapshotStore(section.store.getSnapshot())
+  const follow = () => {
+    const row = group.row
+    const activeSection = section
+    rowView.set(row.store.getSnapshot())
+    sectionView.set(activeSection.store.getSnapshot())
+    const disposers = [row.store.subscribe(() => { rowView.set(row.store.getSnapshot()) }),
+      activeSection.store.subscribe(() => { sectionView.set(activeSection.store.getSnapshot()) })]
+    return () => { for (const dispose of disposers) dispose() }
+  }
+  let stopGroup = follow()
+  ctx.effect(() => {
+    const stopSelection = selection.subscribe(() => {
+      const next = addressed()
+      if (next === group) return
+      stopGroup()
+      group = next
+      section = next.section
+      stopGroup = follow()
+    })
+    return () => { stopGroup(); stopSelection() }
+  }, 'ui-agent-preset: addressed settings forms')
 
   ctx.effect(() => ctx.locale.register('settings.agentPreset', { en }), 'ui-agent-preset: settings row dictionaries')
 
   const injected = (): AgentPresetRowInjected => ({
-    hooks: { agentPreset: controller.store },
-    load: () => controller.load(),
-    select: (id: string) => controller.select(id),
+    hooks: { agentPreset: rowView },
+    load: () => group.row.load(),
+    select: (id: string) => group.row.select(id),
+    reset: () => group.row.reset(),
   })
 
   ctx.effect(() => {
@@ -76,6 +117,7 @@ export function apply(ctx: ClientContext): void {
     // both an external settings edit and a reconnect can move this row.
     const refresh = (): void => {
       void controller.load()
+      if (group.row !== controller) void group.row.load()
       // The section reads the same roster and marks the same default, so a
       // change made from either surface converges both.
       if (section.store.getSnapshot().status !== 'idle') void section.load()
@@ -101,6 +143,17 @@ export function apply(ctx: ClientContext): void {
   // staged choice belongs to the flow rather than to any one session.
   ctx.inject(['slots', 'conversation', 'sessions', 'workspaces'], (scope: ClientContext) => {
     const api = (scope.get('connection') as ConnectionHandle).api
+    const workspaceTarget = (sessionId?: SessionId) => {
+      const state = scope.workspaces.list.getSnapshot()
+      const workspaceId = state.items.find(row => sessionId !== undefined && row.sessionIds.includes(sessionId))?.workspaceId
+        ?? (sessionId === undefined ? state.recentWorkspaceId : undefined)
+      return workspaceId === undefined ? {} : { workspaceId, layer: 'local' as const }
+    }
+    const currentWorkspaceTarget = () => {
+      const sessionId = scope.sessions.list.getSnapshot().current
+      const target = workspaceTarget(sessionId)
+      return target.workspaceId === undefined ? workspaceTarget() : target
+    }
     const seat = new AgentPresetSeatController(api, (): SeatSessionSummary | undefined => {
       const state = scope.sessions.list.getSnapshot()
       const summary = state.current === undefined ? undefined : state.byId[state.current]
@@ -113,7 +166,7 @@ export function apply(ctx: ClientContext): void {
         }
     }, (sessionId, agentPreset) => {
       scope.sessions.noteAgentPreset(sessionId as never, agentPreset)
-    })
+    }, currentWorkspaceTarget)
 
     const seatInjected = (): AgentPresetSeatInjected => ({
       hooks: { agentPresetSeat: seat.store },
@@ -122,16 +175,30 @@ export function apply(ctx: ClientContext): void {
       introduced: () => { seat.introduced() },
     })
 
-    const labelInjected = (): AgentPresetLabelInjected => ({
-      hooks: { agentPresets: controller.store },
-      load: () => controller.load(),
-    })
+    const labels = new Map<string, AgentPresetSettingsController>()
+    const labelInjected = (sessionId: SessionId): AgentPresetLabelInjected => {
+      const target = workspaceTarget(sessionId)
+      const key = target.workspaceId ?? 'global'
+      let roster = labels.get(key)
+      if (roster === undefined) {
+        roster = target.workspaceId === undefined ? controller : new AgentPresetSettingsController(api, ctx.settingsScope.describe(target))
+        labels.set(key, roster)
+      }
+      return { hooks: { agentPresets: roster.store }, load: () => roster.load() }
+    }
 
     scope.effect(() => {
       // Connecting a workspace either creates a blank session or reuses one,
       // and either way the chip's pick predates it — so the stage is applied
       // when the session arrives, not when it was made.
-      const stop = scope.sessions.list.subscribe(() => { void seat.apply() })
+      let activeWorkspace = currentWorkspaceTarget().workspaceId
+      const followWorkspace = (): void => {
+        const workspaceId = currentWorkspaceTarget().workspaceId
+        if (workspaceId !== activeWorkspace) { activeWorkspace = workspaceId; void seat.load() }
+        void seat.apply()
+      }
+      const stop = scope.sessions.list.subscribe(followWorkspace)
+      const stopWorkspace = scope.workspaces.list.subscribe(followWorkspace)
       // The chip opens on the deployment default, so a default changed from
       // the settings surface moves it too — otherwise the screen that starts
       // the next session keeps offering the previous default until a reload,
@@ -140,6 +207,16 @@ export function apply(ctx: ClientContext): void {
       const settingsMoved = scope.remote.$on('settings/document-updated', (ns) => {
         if (ns !== AGENT_PRESET_SETTINGS_NS) return
         void seat.load()
+      })
+      const workspaceSettingsMoved = scope.remote.$on('workspace-config/updated', (workspaceId) => {
+        if (workspaceId === currentWorkspaceTarget().workspaceId) void seat.load()
+        const roster = labels.get(workspaceId)
+        if (roster !== undefined) void roster.load()
+      })
+      const workspaceTrustMoved = scope.remote.$on('workspace-config/trust-updated', (workspaceId) => {
+        if (workspaceId === currentWorkspaceTarget().workspaceId) void seat.load()
+        const roster = labels.get(workspaceId)
+        if (roster !== undefined) void roster.load()
       })
       // Every tab folds the committed preset into the shared session row; the
       // initiating tab may already have applied the RPC echo, which is idempotent.
@@ -177,7 +254,10 @@ export function apply(ctx: ClientContext): void {
       }, AgentPresetLabel)
       return () => {
         stop()
+        stopWorkspace()
         settingsMoved()
+        workspaceSettingsMoved()
+        workspaceTrustMoved()
         presetSelected()
         rosterReaders.delete(readRoster)
         creatorDraft = undefined
@@ -188,7 +268,7 @@ export function apply(ctx: ClientContext): void {
   })
 
   const sectionInjected = (): AgentPresetSectionInjected => ({
-    hooks: { agentPresetSection: section.store },
+    hooks: { agentPresetSection: sectionView },
     load: () => section.load(),
     view: (id: string) => section.view(id),
     closeView: () => { section.closeView() },
@@ -204,9 +284,10 @@ export function apply(ctx: ClientContext): void {
     makeDefault: (id: string) => section.makeDefault(id),
   })
 
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
+  ctx.slots.inject('settings.general.general.item', () => ctx.slots.register({
+    name: 'settings.general.general.item',
     id: 'agent-preset',
+    label: () => ctx.locale.bind('settings.agentPreset')('title'),
     order: -25,
     locale: 'settings.agentPreset',
     inject: injected,

@@ -4,7 +4,7 @@
  * so a person can change which preset new sessions get without a restart.
  */
 
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -19,6 +19,7 @@ import AgentRegistry from '@hydraharness/harness-agent'
 import AgentLoop from '@hydraharness/harness-agent-loop'
 import FileSettingsProvider from '@hydraharness/harness-settings-file'
 import { settingsNamespace } from '@hydraharness/harness-settings'
+import { createScope } from '@hydraharness/harness-scope'
 import { describe, expect, it, vi } from 'vitest'
 import AgentPresets, { COMPOSITION_FILE, SETTINGS_NAMESPACE } from '@hydraharness/harness-agent-presets'
 
@@ -57,6 +58,36 @@ const toolNames = (ctx: Context, agent?: unknown): string[] =>
   ctx.tools.schemas(agent as never).map(schema => schema.name).sort()
 
 describe('the default preset as a user setting', () => {
+  it('writes only the selected shared preset leaf without copying local overrides', async () => {
+    const { ctx, settingsFile } = await harness()
+    const sharedScope = createScope(ctx, { settings: 'shared' })
+    const localScope = createScope(ctx, { settings: 'local' })
+    const sharedCtx = sharedScope.ctx.isolate('settings')
+    const localCtx = localScope.ctx.isolate('settings')
+    await sharedCtx.plugin(FileSettingsProvider, { path: `${settingsFile}.shared.yaml`, watch: false })
+    await localCtx.plugin(FileSettingsProvider, { path: `${settingsFile}.local.yaml`, watch: false })
+    const shared = sharedCtx.get('settings')!
+    const local = localCtx.get('settings')!
+    shared.inherit(ctx.get('settings')!, [NS])
+    local.inherit(shared, [NS])
+    try {
+      await ctx.agentPresets.setPluginEnabled('agent-preset:standard:alpha', false, shared)
+      await ctx.agentPresets.setPluginEnabled('agent-preset:standard:alpha', true, local)
+      await ctx.agentPresets.setPluginEnabled('agent-preset:minimal:beta', false, local)
+      const before = await readFile(`${settingsFile}.local.yaml`, 'utf8')
+      expect((await ctx.agentPresets.listPluginEntries(shared)).find(entry => entry.rowId === 'alpha')?.enabled).toBe(false)
+      expect((await ctx.agentPresets.listPluginEntries(local)).find(entry => entry.rowId === 'alpha')?.enabled).toBe(true)
+      shared.setLayerEnabled(false)
+      await ctx.agentPresets.setPluginEnabled('agent-preset:standard:alpha', true, shared)
+      expect(await readFile(`${settingsFile}.shared.yaml`, 'utf8')).toContain('alpha: true')
+      expect(await readFile(`${settingsFile}.shared.yaml`, 'utf8')).not.toContain('beta:')
+      expect(await readFile(`${settingsFile}.local.yaml`, 'utf8')).toBe(before)
+      expect(ctx.settings.get(NS)).toMatchObject({ pluginEnablement: {} })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('lists nested leaves, skips broken presets, and restores inherited enablement', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hydra-preset-leaves-'))
     await mkdir(join(root, 'grouped'))

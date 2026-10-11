@@ -1,7 +1,7 @@
 - listitem:
-  - button "session-stats @hydraharness/harness-session-stats Extension Running":
-    - strong: session-stats
-    - code: "@hydraharness/harness-session-stats"
+  - button "command-feedback @hydraharness/harness-command-feedback Extension Running":
+    - strong: command-feedback
+    - code: "@hydraharness/harness-command-feedback"
     - text: Extension Running
   - text: Enabled
-  - switch "Disable plugin session-stats" [checked]
+  - switch "Disable plugin command-feedback" [checked]

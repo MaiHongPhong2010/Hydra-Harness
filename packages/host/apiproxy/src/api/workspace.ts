@@ -19,6 +19,8 @@ export type WorkspaceId = Branded<'WorkspaceId'>
 
 /** One workspace row: the record projection every workspace.* value carries. */
 export interface WorkspaceView {
+  /** Task directories support Files/Terminal while their chats remain outside projects. Omitted means project. */
+  kind?: 'project' | 'task'
   workspaceId: WorkspaceId
   /** Canonical directory path (host-side realpath canon). */
   path: string

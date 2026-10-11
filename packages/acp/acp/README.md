@@ -13,7 +13,7 @@ This package is a transport adapter, not a UI integration or a capability seam. 
 | `provider` | — | Initial provider route for every created agent. |
 | `model` | — | Initial model for every created agent. |
 
-Both fields are optional so another agent/request listener may supply the target. The runnable ACP composition requires both.
+Both fields are optional. When both are absent, the global `agentDefaultModel` supplies the target if composed. Other compositions may leave the target to an agent/request listener. The runnable ACP composition specifies both.
 
 ## Protocol contract
 
@@ -27,7 +27,7 @@ Both fields are optional so another agent/request listener may supply the target
 | `session/update` | Emits one `agent_message_chunk` per non-empty text or image block in a committed `assistant/message`, preserving order. Images are re-read and integrity-verified before inline base64 delivery. Raw deltas and non-message events are omitted. |
 | `session/request_permission` | Offers one-shot allow/reject choices for bridge-owned approval requests carrying a tool call id. Clients may answer automatically. |
 
-One connection may own several sessions. The bridge keys records by branded session id and checks exact agent identity before routing events or permission requests. Each session has an independent prompt slot, workspace, cancellation path, and disposer.
+One connection may own several sessions. The bridge keys records by branded session id and checks exact agent identity before routing events or permission requests. Each session has an independent prompt slot, workspace, cancellation path, and disposer. When [`workspace-config`](../../workspace/workspace-config/README.md) is composed, `session/new.cwd` resolves that workspace's MCP/hooks and optional preset, which are joined before publication; the bridge's configured provider/model remain authoritative. A composition without workspace configuration keeps its own capabilities and joins any configured preset roster.
 
 Committed-message output intentionally trades token-by-token latency for a clean automation result. Uncommitted provider chunks and retry attempts cannot leak partial text or images; reasoning and tool activity remain in the session log for observability through other interfaces. Per-session delivery is serialized because attachment reads are asynchronous, and a missing or corrupt committed image fails the prompt response instead of emitting a placeholder.
 

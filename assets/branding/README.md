@@ -11,3 +11,5 @@ uv run --with pillow python scripts/gen-brand-assets.py
 ```
 
 The generator crops transparent padding and scales the supplied artwork without changing its colors. React consumers share `HydraLogo` through `@hydraharness/harness-client-ui-primitives`; the PNG and hover WebP travel as files next to that module. Electron packages publish their icon assets. Rebuild the apps and documentation site after regeneration.
+
+On Windows, Desktop main and popout windows share the `org.hydraharness.desktop.window` AppUserModelID and set the taskbar icon to the published `hydra.ico`. The window ID is separate from Electron's notification registration, whose generated shortcut uses the executable's icon.

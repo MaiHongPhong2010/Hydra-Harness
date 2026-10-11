@@ -16,6 +16,7 @@ import type { Agent, PreStepDecision } from '@hydraharness/harness-agent'
 import { createUserMessage } from '@hydraharness/harness-llm'
 import type { Session, UserMessage } from '@hydraharness/harness-session'
 import type { ToolExecution, ToolExecutionResult, ToolExecutionToken } from '@hydraharness/harness-tools'
+import type {} from '@hydraharness/harness-workspace-config'
 import { Config, resolveConfig, workspaceBaselineIdentity, type ResolvedConfig } from './config.ts'
 import { findProjectRoot, loadBaselineInstructionSet } from './files.ts'
 import {
@@ -140,8 +141,19 @@ export function apply(ctx: Context, config: Config): void {
     let desiredBaseline = false
     const authorityMessages = [...claimed]
     /* v8 ignore next -- normal agents carry an absolute session cwd. */
-    const cwd = agent.session.header.cwd ?? process.cwd()
-    const projectRoot = await findProjectRoot(cwd, resolved.projectRootMarkers, fileSystem, signal)
+    const sessionCwd = agent.session.header.cwd ?? process.cwd()
+    const workspaceConfig = ctx.get('workspaceConfig')
+    const cwd = workspaceConfig === undefined
+      ? sessionCwd
+      : fileSystem.processPath(await fileSystem.resolve(sessionCwd, { signal }))
+    const projectRoot = workspaceConfig === undefined
+      ? await findProjectRoot(cwd, resolved.projectRootMarkers, fileSystem, signal)
+      : await workspaceConfig.resolveRoot(cwd)
+    const canonicalTouchedPaths = workspaceConfig === undefined
+      ? touchedPaths
+      : await Promise.all(touchedPaths.map(async path => fileSystem.processPath(
+        await fileSystem.resolve(path, { cwd: sessionCwd, signal }),
+      )))
     const identity = workspaceBaselineIdentity(resolved, cwd, projectRoot)
     const visibleBaseline = visibleBaselineSource(agent, authorityMessages)
     const baselinePresent = visibleBaseline !== undefined
@@ -213,7 +225,8 @@ export function apply(ctx: Context, config: Config): void {
         scopeMessages: pending,
         includeBaselineScopes: keepVisibleBaseline,
         ...keepVisibleBaseline ? { excludedBaselineScopes } : {},
-        touchedPaths,
+        touchedPaths: canonicalTouchedPaths,
+        cwd,
         projectRoot,
         signal,
       },

@@ -8,4 +8,4 @@ export type { BusyEnterBehavior } from '../../submission-settings.ts'
 export type InputSubmitMode = BusyEnterBehavior
 
 /** Keyboard gesture whose delivery mode the submission policy resolves. */
-export type ComposerSubmitGesture = 'enter' | 'accelerated'
+export type ComposerSubmitGesture = 'enter' | 'accelerated' | 'alternate' | 'send'

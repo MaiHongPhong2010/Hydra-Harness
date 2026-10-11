@@ -206,6 +206,8 @@ type StreamChunk =
     reason: FinishReason
     /** Replay metadata for a successful response; see {@link ReplayEnvelope}. */
     replayState?: ReplayEnvelope
+    /** Processing tier reported by the provider response; absent means unknown. */
+    serviceTier?: string
   }
 ```
 
@@ -434,6 +436,8 @@ interface LlmConfigurableProvider {
 ```ts type-equiv
 /** One adapter-discovered model; catalog membership is advisory, not request validation. */
 interface LlmModelInfo {
+  /** Adapter-advertised processing tiers; absence means no selectable Priority support. */
+  serviceTiers?: readonly ('standard' | 'priority')[]
   /** Provider route that owns this model entry. */
   provider: string
   /** Model id passed to {@link GenerateOptions.model}. */
@@ -506,6 +510,10 @@ interface LlmResolvedModelInfo extends LlmModelInfo {
 ```ts type-equiv
 /** A single model request, fully assembled. */
 interface GenerateOptions {
+  /** Transport processing tier, independent of model and reasoning effort. */
+  serviceTier?: 'standard' | 'priority'
+  /** User-requested tier when the owning runtime selects an effective supported tier. */
+  requestedServiceTier?: 'standard' | 'priority'
   /** Registered provider route selecting the adapter instance. */
   provider: string
   model: string
@@ -622,6 +630,8 @@ interface LlmModelDiscoveryRequest {
  * a surface adopting one of these still owes the capacities its adapter needs.
  */
 interface LlmDiscoveredModel {
+  /** Processing tiers explicitly disclosed by the endpoint; absent means unknown. */
+  serviceTiers?: readonly ('standard' | 'priority')[]
   /** Model id the endpoint accepts. */
   id: string
   /** Human-readable name when the endpoint supplies one. */
@@ -694,6 +704,10 @@ FIXME(call-config-shape): revisit which remaining fields are genuinely epoch-lev
  * per call.
  */
 interface LlmCallConfig {
+  /** Adapter-supported processing tier. */
+  serviceTier?: 'standard' | 'priority'
+  /** Global user choice, retained when a provider cannot offer Priority. */
+  requestedServiceTier?: 'standard' | 'priority'
   provider: string
   model: string
   reasoningEffort?: ReasoningEffortId
@@ -709,6 +723,8 @@ interface LlmCallConfig {
  * than by the caller's request proposal.
  */
 interface LlmCallConfigAdapterDefaults {
+  /** Processing tier derived from the accepted global preference. */
+  serviceTier?: true
   reasoningEffort?: true
   maxTokens?: true
 }

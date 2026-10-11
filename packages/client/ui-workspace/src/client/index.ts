@@ -23,6 +23,7 @@ import { ArchivedSessionsSection } from './ArchivedSessionsSection.tsx'
 import type { ArchivedSessionsSectionInjected } from './ArchivedSessionsSection.tsx'
 import { en, type WorkspaceKey } from './locales.ts'
 import { sessionMarkdown } from './session-markdown.ts'
+import { ProjectlessFolderRow, type ProjectlessFolderInjected } from './ProjectlessFolderRow.tsx'
 
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
@@ -61,6 +62,21 @@ export function apply(ctx: ClientContext): void {
   const hostDescription = connection.hostDescription
   ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-workspace: dictionaries')
   const t = ctx.locale.bind(NS)
+  ctx.inject(['settingsScope'], (sctx) => {
+    const tasks = sctx.settingsScope.bind<{ root: string }>({ namespace: 'projectless-tasks' })
+    const save = async (root: string): Promise<void> => {
+      if (!tasks.getSnapshot().writable) throw new Error('Settings are read only')
+      await tasks.set('root', root)
+      if (tasks.getSnapshot().value?.root !== root) throw new Error('Could not save the task root. Enter an absolute Host directory.')
+    }
+    sctx.slots.inject('settings.general.general.item', () => sctx.slots.register({
+      name: 'settings.general.general.item', id: 'task-root', order: 10, locale: NS, label: () => t('tasks.title'),
+      inject: (): ProjectlessFolderInjected => ({ save, pick: async () => {
+        const path = await sctx.workspaces.pickDirectory()
+        if (path !== null) await save(path)
+      }, hooks: { tasks } }),
+    }, ProjectlessFolderRow))
+  })
 
   const searchSessions: WorkspaceBrowserInjected['searchSessions'] = async (query, signal) => {
     const result = await ctx.sessions.search(query, signal)

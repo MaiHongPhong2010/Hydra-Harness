@@ -97,13 +97,17 @@ export const USER_GLOBAL_DIRECTORY = 'user-global'
  */
 export const USER_GLOBAL_FILE = 'AGENTS.md'
 
+/** Fixed workspace instruction files, applied to the workspace root after its ordinary candidates. */
+export const WORKSPACE_INSTRUCTION_PATHS: readonly string[] = ['.hydra/AGENTS.md', '.hydra/AGENTS.local.md']
+
 /**
  * Derive the logical instruction scope from a model-facing path.
  * @param displayPath - project-relative or user-global instruction path.
- * @returns `user-global`, `.`, or the containing project-relative directory.
+ * @returns `user-global`, root `.` for fixed workspace files, or the containing project-relative directory.
  */
 export function scopeForDisplayPath(displayPath: string): string {
   if (displayPath === '~/.hydra/AGENTS.md' || displayPath === '$HYDRA_HOME/AGENTS.md') return USER_GLOBAL_DIRECTORY
+  if (WORKSPACE_INSTRUCTION_PATHS.includes(displayPath.replaceAll('\\', '/'))) return '.'
   return dirname(displayPath)
 }
 
@@ -112,12 +116,12 @@ const SCOPE_SEPARATOR = '\u0000'
 /**
  * Compose the reconciliation key for one instruction candidate file.
  * Each loaded candidate is tracked independently, so the key pairs the logical
- * directory with the exact candidate file name behind a NUL separator that no
+ * directory with the exact candidate path behind a NUL separator that no
  * directory path or file name can contain. Distinct candidates in one directory
  * (`AGENTS.md` vs `CLAUDE.md`, a base file vs its `.local` overlay) therefore
  * never collide in the scope-keyed state maps.
  * @param directory - `user-global`, `.`, or a project-relative directory.
- * @param candidateName - instruction file name within that directory.
+ * @param candidateName - instruction path within that directory, including fixed `.hydra/` root files.
  * @returns the per-candidate logical scope key.
  */
 export function candidateScopeKey(directory: string, candidateName: string): string {
@@ -127,16 +131,18 @@ export function candidateScopeKey(directory: string, candidateName: string): str
 /**
  * Derive the per-candidate scope key for a loaded instruction file.
  * @param displayPath - project-relative or user-global instruction path.
- * @returns the scope key pairing the file's directory with its name.
+ * @returns the logical directory paired with the candidate path; fixed `.hydra/` files use the root directory.
  */
 export function instructionScopeKey(displayPath: string): string {
-  return candidateScopeKey(scopeForDisplayPath(displayPath), basename(displayPath))
+  const normalizedPath = displayPath.replaceAll('\\', '/')
+  return candidateScopeKey(scopeForDisplayPath(displayPath),
+    WORKSPACE_INSTRUCTION_PATHS.includes(normalizedPath) ? normalizedPath : basename(displayPath))
 }
 
 /**
  * Recover the directory and candidate name that {@link candidateScopeKey} encoded.
  * @param scope - a per-candidate scope key.
- * @returns the directory scope and the candidate file name within it.
+ * @returns the directory scope and the candidate path within it.
  */
 export function decodeScopeKey(scope: string): { directory: string; candidateName: string } {
   const separator = scope.indexOf(SCOPE_SEPARATOR)

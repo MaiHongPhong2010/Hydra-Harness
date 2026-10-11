@@ -15,6 +15,7 @@
  */
 
 import type { IApiClient } from '@hydraharness/harness-api-remotes/client'
+import type { SettingsDescribeFace, SettingsTarget } from '@hydraharness/harness-client-ui-settings/client'
 import { createSnapshotStore, type SnapshotStore } from '@hydraharness/harness-client-runtime/client'
 import { createRosterLoader, messageOf, writeDefaultPreset } from './settings-store.ts'
 import type { RosterValue } from './settings-store.ts'
@@ -145,8 +146,10 @@ export class AgentPresetSectionController {
      * offer now exists.
      */
     private readonly rosterChanged: () => void = () => {},
+    private readonly target: SettingsTarget = {},
+    private readonly describeFace?: SettingsDescribeFace,
   ) {
-    this.refresh = createRosterLoader(api, this.store, (roster) => { this.acceptRoster(roster) })
+    this.refresh = createRosterLoader(api, this.store, roster => this.acceptRoster(roster), target)
   }
 
   private set(patch: Partial<AgentPresetSectionState>): void {
@@ -169,7 +172,10 @@ export class AgentPresetSectionController {
     return this.refresh()
   }
 
-  private acceptRoster(roster: RosterValue): void {
+  private async acceptRoster(roster: RosterValue): Promise<void> {
+    await this.describeFace?.ensure()
+    const settings = this.describeFace?.getSnapshot().view?.namespaces.find(view => view.ns === 'agent-presets')
+    const defaultId = (settings?.value as { default?: string } | undefined)?.default
     const { presets, authorable, hasDocument } = roster
     if (presets.length === 0) {
       // Nothing to manage leaves nothing to keep a dialog open over.
@@ -186,7 +192,7 @@ export class AgentPresetSectionController {
       error: null,
       authorable,
       hasDocument,
-      rows: presets.map(preset => ({ ...preset })),
+      rows: presets.map(preset => ({ ...preset, ...defaultId === undefined ? {} : { isDefault: preset.id === defaultId } })),
       revealedPaths: kept,
     })
   }
@@ -199,7 +205,7 @@ export class AgentPresetSectionController {
   async view(id: string): Promise<void> {
     this.set({ error: null })
     try {
-      const response = await this.api.agentPresets.read({ agentPreset: id })
+      const response = await this.api.agentPresets.read({ ...this.target, agentPreset: id })
       if (!response.result.ok) {
         this.set({ error: response.result.error.message })
         return
@@ -263,6 +269,7 @@ export class AgentPresetSectionController {
     try {
       const name = draft.name.trim()
       const response = await this.api.agentPresets.copy({
+        ...this.target,
         from: draft.from,
         agentPreset: draft.id,
         ...name === '' ? {} : { name },
@@ -290,7 +297,7 @@ export class AgentPresetSectionController {
    */
   async openLocation(id: string): Promise<void> {
     try {
-      const response = await this.api.agentPresets.openDocument({ agentPreset: id })
+      const response = await this.api.agentPresets.openDocument({ ...this.target, agentPreset: id })
       if (!response.result.ok) {
         this.set({ error: response.result.error.message })
         return
@@ -324,7 +331,7 @@ export class AgentPresetSectionController {
     if (pendingDelete === null || deleting) return
     this.set({ deleting: true, error: null })
     try {
-      const response = await this.api.agentPresets.remove({ agentPreset: pendingDelete })
+      const response = await this.api.agentPresets.remove({ ...this.target, agentPreset: pendingDelete })
       if (!response.result.ok) {
         this.set({ deleting: false, pendingDelete: null, error: response.result.error.message })
         return
@@ -344,7 +351,7 @@ export class AgentPresetSectionController {
    * @returns once the write settled and the roster was re-read.
    */
   async makeDefault(id: string): Promise<void> {
-    const failure = await writeDefaultPreset(this.api, id)
+    const failure = await writeDefaultPreset(this.api, id, this.target, (view) => { this.describeFace?.acceptView(view) })
     if (failure !== undefined) {
       this.set({ error: failure })
       return

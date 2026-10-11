@@ -53,15 +53,17 @@ describe('GeneralSection', () => {
     const renderSlot = vi.fn(
       ((key: string) => <div data-testid={`slot-${key}`} />) as GeneralSectionComponentProps['renderSlot'],
     )
-    const props: GeneralSectionComponentProps = { ...kit, renderSlot, close: vi.fn() }
+    const props: GeneralSectionComponentProps = { ...kit, renderSlot, close: vi.fn(), openSection: vi.fn(), t,
+      useGeneralItems: select => select([{ id: 'language', slot: 'settings.general.general.item', label: 'Language', order: 0 }]),
+    }
     const view = render(<GeneralSection {...props} />)
     return { view, renderSlot }
   }
 
   it('renders the item slot as the section body', () => {
     const { renderSlot } = mount()
-    expect(renderSlot).toHaveBeenCalledWith('settings.general.item', {})
-    expect(screen.getByTestId('slot-settings.general.item')).toBeTruthy()
+    expect(renderSlot).toHaveBeenCalledWith('settings.general.general.item', {}, { only: 'language' })
+    expect(screen.getByTestId('slot-settings.general.general.item')).toBeTruthy()
   })
 })
 

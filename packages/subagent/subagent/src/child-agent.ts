@@ -13,6 +13,7 @@ import type { Agent, AgentOptions, CreateAgentOptions } from '@hydraharness/harn
 import type { SandboxMode } from '@hydraharness/harness-sandbox'
 import type { Session, SessionId } from '@hydraharness/harness-session'
 import type { ToolRestriction } from '@hydraharness/harness-tools'
+import { bindScopeParent, scopeOf, scopeParentOf } from '@hydraharness/harness-scope'
 // Type-only: make `ctx.get('sandboxPolicy')` / `ctx.get('approval')` resolve
 // to the policy services when composed — delegation consumes both
 // opportunistically (the documented `ctx.get` pattern), never as a hard dep —
@@ -21,9 +22,8 @@ import type {} from '@hydraharness/harness-sandbox-policy'
 import type {} from '@hydraharness/harness-user-approval'
 // Type-only: make `ctx.get('agentPresets')` resolve to the preset roster when
 // composed — a child inherits its parent's composition opportunistically (the
-// documented `ctx.get` pattern), never as a hard dep. A rosterless deployment
-// keeps its model-facing rows on the host plane, where the child already sees
-// them through the tool registry's global layer.
+// documented `ctx.get` pattern), never as a hard dep. Without a joined preset,
+// the child retains its parent's enclosing workspace scope.
 import type {} from '@hydraharness/harness-agent-presets'
 import { delegationDepthOf } from './depth.ts'
 
@@ -165,7 +165,14 @@ export function applyChildComposition(
   parent: Agent,
   composition: ChildComposition,
 ): void {
-  childCtx.get('agentPresets')?.composeFrom(childCtx, parent.ctx)
+  const preset = childCtx.get('agentPresets')?.composeFrom(childCtx, parent.ctx)
+  const parentKey = scopeOf(parent.ctx)
+  const parentScope = parentKey === undefined ? undefined : scopeParentOf(parentKey)
+  if (preset === undefined && parentScope !== undefined) {
+    const childScope = scopeOf(childCtx)
+    if (childScope === undefined) throw new Error('subagent: child composition requires an agent scope')
+    bindScopeParent(childScope, parentScope)
+  }
   // Order 120: after the sandbox:policy (110) and approval:policy (115) sentences.
   childCtx.systemPrompt.context({ name: 'subagent:delegation', order: 120, text: SUBAGENT_DELEGATION_CONTEXT })
   if (composition.persona !== undefined) {

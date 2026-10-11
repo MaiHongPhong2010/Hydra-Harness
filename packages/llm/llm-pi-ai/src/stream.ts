@@ -194,6 +194,7 @@ export async function* toStreamChunks(
           type: 'finish',
           reason: mapStopReason(event.message, contextWindow),
           replayState: toPiReplayState(event.message),
+          ...event.message.serviceTier === undefined ? {} : { serviceTier: event.message.serviceTier },
         }
         return
       case 'error':

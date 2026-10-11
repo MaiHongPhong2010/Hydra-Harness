@@ -203,6 +203,9 @@ export function dynamicCordisContext(ctx: Context, env: DynamicCordisGuardEnv): 
   }
   const readService = (name: string, requireDeclaration: boolean): unknown => {
     if (requireDeclaration && !declared.has(name)) return denyRead(name)
+    if (name === 'workspaceConfig' || name === 'apiProxy' || name === 'connection' || name === 'remote' || name === 'settingsScope') {
+      return rejectGuard(env, `service "${name}" is reserved for Host controls; workspace trust belongs to the user in Settings`)
+    }
     const service = denyContext(ctx.get(name), name, env)
     if (service === null || (typeof service !== 'object' && typeof service !== 'function')) return service
     if (name === 'slots') return guardedSlots(service as SlotRegistry, env)

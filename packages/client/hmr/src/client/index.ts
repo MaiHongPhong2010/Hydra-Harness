@@ -101,6 +101,24 @@ export function apply(ctx: Context): void {
   const modLoader = ctx.modules
   const loader: Loader = ctx.loader
 
+  async function reconcile(graph: unknown): Promise<void> {
+    const previous = [...modLoader.manifest.plugins]
+    const next = modLoader.updateGraph(graph)
+    const wanted = new Set(next.plugins.map(row => row.id))
+    for (const row of previous.toReversed()) {
+      if (wanted.has(row.id)) continue
+      await findEntry(loader, row.id)?.update({ disabled: true })
+    }
+    const present = new Set(previous.map(row => row.id))
+    for (const row of next.plugins) {
+      if (present.has(row.id)) continue
+      await modLoader.prefetch(row.id)
+      const entry = findEntry(loader, row.id)
+      if (entry === undefined) await loader.create({ name: row.id })
+      else await entry.update({ disabled: null })
+    }
+  }
+
   async function reload(id: string): Promise<void> {
     const entry = findEntry(loader, id)
     if (entry === undefined) {
@@ -151,10 +169,9 @@ export function apply(ctx: Context): void {
         })
         break
       case 'graph':
-        // Connect-time snapshot, unused. The loader's cached graph rev
-        // goes stale after rebuilds — harmless, since prefetch hits the
-        // network anyway (host serves bundles no-cache); graph rev refresh
-        // lands with the reconnect-handshake mechanism.
+        queue = queue.then(() => reconcile(frame.graph)).catch((error: unknown) => {
+          ctx.logger.error(`client-hmr: contribution graph update failed: ${String(error)}`)
+        })
         break
       default:
         // Merge-extensible frame union: unknown frame types from newer hosts

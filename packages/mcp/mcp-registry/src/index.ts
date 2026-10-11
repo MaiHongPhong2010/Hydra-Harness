@@ -8,9 +8,12 @@
  * @module @hydraharness/harness-mcp-registry
  */
 
+import type {} from '@hydraharness/harness-optional-plugins'
+import { isAbsolute, resolve } from 'node:path'
 import { Service, type Context, type Fiber } from '@hydraharness/cordis'
 import z from '@hydraharness/schemastery'
-import { settingsNamespace, type SettingsScope } from '@hydraharness/harness-settings'
+import { settingsNamespace, type SettingsProvider, type SettingsScope } from '@hydraharness/harness-settings'
+import { scopeOf } from '@hydraharness/harness-scope'
 import {
   apply as applyMcpClient, inject as mcpClientInject, type Config as McpClientConfig,
 } from '@hydraharness/harness-mcp-client'
@@ -40,30 +43,28 @@ const MAX_SERVERS = 50
 const MAX_ARGS = 64
 const MAX_VALUE_LENGTH = 4_096
 
-/** Remove URL userinfo before an endpoint crosses the Host/browser projection. */
+/** Remove URL credentials, query and fragment before projecting an endpoint. */
 function redactUrlUserinfo(value: string): string {
   // Strip a leading userinfo segment before parsing. URL accepts values such as
   // `user:password@host` as a custom-scheme URL, so parsing first would echo it.
   const withoutUserinfo = value.replace(/^((?:[a-z][a-z\d+.-]*:)?\/\/)?[^/?#@]*@/iu, '$1')
-  if (withoutUserinfo !== value) {
-    try {
-      return new URL(withoutUserinfo).toString()
-    } catch {
-      // Keep the non-sensitive remainder visible so the UI can still identify
-      // the hand-edited endpoint as invalid from its status and detail.
-      return withoutUserinfo
-    }
-  }
   try {
-    const parsed = new URL(value)
+    const parsed = new URL(withoutUserinfo)
     parsed.username = ''
     parsed.password = ''
+    parsed.search = ''
+    parsed.hash = ''
     return parsed.toString()
   } catch {
-    // A malformed value without a detectable userinfo segment is not a
-    // credential-bearing URL we can safely normalize; preserve it for detail.
-    return value
+    // Malformed endpoints can still contain credential query/fragment values.
+    return withoutUserinfo.replace(/[?#][\s\S]*$/u, '')
   }
+}
+
+/** Owning directory used by workspace server processes. */
+export interface Config {
+  /** Absolute directory for omitted or relative record working directories. */
+  cwd?: string
 }
 
 /** One stored record, as the settings document holds it. */
@@ -159,7 +160,7 @@ function assertUniqueNames(settings: McpServersSettings): void {
 }
 
 /** Translate one stored record into the mcp-client plugin config it mounts as. */
-function clientConfig(record: StoredServer): McpClientConfig {
+function clientConfig(record: StoredServer, cwd?: string): McpClientConfig {
   const shared = {
     serverName: record.name,
     toolCallTimeoutMs: record.toolCallTimeoutMs,
@@ -176,7 +177,7 @@ function clientConfig(record: StoredServer): McpClientConfig {
       command: record.command,
       args: [...record.args],
       env: { ...record.env },
-      cwd: record.cwd,
+      cwd: cwd === undefined ? record.cwd : resolve(cwd, record.cwd),
     }
   }
   return {
@@ -188,10 +189,8 @@ function clientConfig(record: StoredServer): McpClientConfig {
 }
 
 /**
- * Fold one write request onto the record it replaces. `env` and `headers` are
- * the only fields an omission preserves: a configuration surface reads a
- * redacted descriptor, so restating them is impossible and dropping them would
- * silently delete credentials the wire never returned.
+ * Fold a write request onto its previous record, preserving omitted secret
+ * fields (`env`, `headers`, `url`) that a configuration surface never receives.
  * @param request - complete definition supplied by the caller.
  * @param previous - the record being replaced, when one exists.
  * @returns the next stored record.
@@ -208,7 +207,7 @@ function foldDefinition(
     args: transport === 'stdio' ? [...request.args ?? []] : [],
     env: request.env === undefined ? { ...previous?.env } : { ...request.env },
     cwd: transport === 'stdio' ? (request.cwd ?? '').trim() : '',
-    url: transport === 'streamable-http' ? (request.url ?? '').trim() : '',
+    url: transport === 'streamable-http' ? (request.url ?? previous?.url ?? '').trim() : '',
     headers: request.headers === undefined ? { ...previous?.headers } : { ...request.headers },
     toolCallTimeoutMs: request.toolCallTimeoutMs ?? previous?.toolCallTimeoutMs ?? DEFAULT_TOOL_CALL_TIMEOUT_MS,
     enabled: request.enabled ?? previous?.enabled ?? false,
@@ -220,8 +219,8 @@ function foldDefinition(
  * redefined record from an untouched one without restarting a live server on
  * every unrelated document commit.
  */
-function mountDigest(record: StoredServer): string {
-  return JSON.stringify(clientConfig(record))
+function mountDigest(record: StoredServer, cwd?: string): string {
+  return JSON.stringify(clientConfig(record, cwd))
 }
 
 /** Services required by the registry. */
@@ -245,8 +244,11 @@ interface LiveMount {
  */
 export class McpServerRegistry extends Service {
   static inject = inject
+  static Config: z<Config> = z.object({ cwd: z.string() })
   /** Server mounts belong to this Host service, not to a traced API caller. */
   private readonly owner: Context
+  private readonly tools: Context['tools']
+  private readonly cwd: string | undefined
 
   private readonly settings: SettingsScope<McpServersSettings>
   private readonly live = new Map<string, LiveMount>()
@@ -255,9 +257,12 @@ export class McpServerRegistry extends Service {
   private tail: Promise<unknown> = Promise.resolve()
   private stopped = false
 
-  constructor(ctx: Context) {
+  constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'mcpServers')
+    if (config.cwd !== undefined && !isAbsolute(config.cwd)) throw new Error('mcpServers: cwd must be absolute')
     this.owner = ctx
+    this.cwd = config.cwd
+    this.tools = ctx.tools
     this.settings = ctx.settings.register(MCP_SERVERS_SETTINGS_NAMESPACE, McpServersSettingsSchema, {
       // Refuse a colliding section where it is written: two records claiming
       // one name would make which server serves a tool depend on mount order.
@@ -266,6 +271,14 @@ export class McpServerRegistry extends Service {
   }
 
   protected async [Service.init](): Promise<void> {
+    this.ctx.inject(['optionalPlugins'], (pctx) => {
+      pctx.effect(() => pctx.optionalPlugins.subscribe((enabled) => {
+        void this.enqueue(async () => {
+          if (!enabled) await pctx.optionalPlugins.drain()
+          if (pctx.optionalPlugins.enabled === enabled) await this.reconcile()
+        }).catch((error: unknown) => { this.ctx.logger.error(error) })
+      }), 'mcp-registry: optional policy')
+    })
     this.ctx.effect(() => () => this.shutdown(), 'mcpServers.dispose')
     this.ctx.effect(
       () => this.settings.watch(() => this.enqueue(() => this.reconcile())),
@@ -276,10 +289,20 @@ export class McpServerRegistry extends Service {
 
   /**
    * Project every stored record with its live state.
+   * @param settings - optional layer whose desired records to project.
    * @returns the current record projection, in stored order.
    */
-  list(): McpServerSnapshot {
-    return { servers: this.settings.get().servers.map(record => this.view(record)) }
+  list(settings?: SettingsProvider): McpServerSnapshot {
+    const servers = settings === undefined ? this.settings.get().servers : this.writeSource(settings).servers
+    return { servers: servers.map(record => this.view(record)) }
+  }
+
+  /**
+   * Reconcile the current effective settings after a layer or trust change.
+   * @returns completion after earlier queued work and the current mounts settle.
+   */
+  settle(): Promise<void> {
+    return this.enqueue(() => this.reconcile())
   }
 
   /**
@@ -287,13 +310,13 @@ export class McpServerRegistry extends Service {
    * converge the mounted set. A definition this registry could not mount is
    * refused before anything persists.
    * @param request - complete server definition.
+   * @param settings - selected write layer; omitted uses this registry's provider.
    * @returns the refreshed projection.
    * @throws If create names an existing record or replace names a missing record.
    */
-  define(request: McpServerDefinitionRequest): Promise<McpServerSnapshot> {
+  define(request: McpServerDefinitionRequest, settings: SettingsProvider = this.owner.settings): Promise<McpServerSnapshot> {
     return this.enqueue(async () => {
-      const revision = this.settings.revision
-      const servers = this.settings.get().servers
+      const { revision, servers } = this.writeSource(settings)
       const index = servers.findIndex(candidate => candidate.name === request.name.trim())
       if (request.mode === 'create' && index !== -1) throw new Error(`mcpServers.define: server ${request.name} already exists`)
       if (request.mode === 'replace' && index === -1) throw new Error(`mcpServers.define: server ${request.name} is not configured`)
@@ -301,7 +324,7 @@ export class McpServerRegistry extends Service {
       assertMountable(record, 'mcpServers.define')
       const next = index === -1 ? [...servers, record] : servers.map((candidate, position) => position === index ? record : candidate)
       if (next.length > MAX_SERVERS) throw new Error(`mcpServers.define: at most ${String(MAX_SERVERS)} servers are supported`)
-      await this.ctx.settings.update(MCP_SERVERS_SETTINGS_NAMESPACE, { servers: next }, revision)
+      await settings.update(MCP_SERVERS_SETTINGS_NAMESPACE, { servers: next }, revision)
       await this.reconcile()
       return this.list()
     })
@@ -310,18 +333,18 @@ export class McpServerRegistry extends Service {
   /**
    * Change one stored record's desired state.
    * @param request - target record and desired state.
+   * @param settings - selected write layer; omitted uses this registry's provider.
    * @returns the refreshed projection.
    */
-  setEnabled(request: McpServerEnablementRequest): Promise<McpServerSnapshot> {
+  setEnabled(request: McpServerEnablementRequest, settings: SettingsProvider = this.owner.settings): Promise<McpServerSnapshot> {
     return this.enqueue(async () => {
-      const revision = this.settings.revision
-      const servers = this.settings.get().servers
+      const { revision, servers } = this.writeSource(settings)
       const index = servers.findIndex(candidate => candidate.name === request.name)
       if (index === -1) throw new Error(`mcpServers.setEnabled: server ${request.name} is not configured`)
       const next = servers.map((candidate, position) => position === index
         ? { ...candidate, enabled: request.enabled }
         : candidate)
-      await this.ctx.settings.update(MCP_SERVERS_SETTINGS_NAMESPACE, { servers: next }, revision)
+      await settings.update(MCP_SERVERS_SETTINGS_NAMESPACE, { servers: next }, revision)
       await this.reconcile()
       return this.list()
     })
@@ -330,20 +353,33 @@ export class McpServerRegistry extends Service {
   /**
    * Remove one stored record and unmount it.
    * @param name - stored record name.
+   * @param settings - selected write layer; omitted uses this registry's provider.
    * @returns the refreshed projection.
    */
-  remove(name: string): Promise<McpServerSnapshot> {
+  remove(name: string, settings: SettingsProvider = this.owner.settings): Promise<McpServerSnapshot> {
     return this.enqueue(async () => {
-      const revision = this.settings.revision
-      const servers = this.settings.get().servers
+      const { revision, servers } = this.writeSource(settings)
       if (!servers.some(candidate => candidate.name === name)) {
         throw new Error(`mcpServers.remove: server ${name} is not configured`)
       }
-      await this.ctx.settings.replace(MCP_SERVERS_SETTINGS_NAMESPACE,
+      await settings.replace(MCP_SERVERS_SETTINGS_NAMESPACE,
         { servers: servers.filter(candidate => candidate.name !== name) }, revision)
       await this.reconcile()
       return this.list()
     })
+  }
+
+  /** Read the selected layer's desired records, including overrides suppressed by trust. */
+  private writeSource(settings: SettingsProvider): McpServersSettings & { revision: number } {
+    const descriptor = settings.describe().find(section => section.ns === MCP_SERVERS_SETTINGS_NAMESPACE)
+    if (descriptor === undefined) throw new Error('mcpServers: selected settings provider has no mcp-servers namespace')
+    return {
+      ...McpServersSettingsSchema({
+        servers: (descriptor.user as Partial<McpServersSettings> | undefined)?.servers
+          ?? (descriptor.base as Partial<McpServersSettings> | undefined)?.servers ?? [],
+      }),
+      revision: descriptor.revision,
+    }
   }
 
   /** Serialize every mutation and reconciliation on one chain. */
@@ -368,13 +404,13 @@ export class McpServerRegistry extends Service {
     this.invalid.clear()
     for (const [name, mount] of [...this.live]) {
       const record = records.get(name)
-      if (record?.enabled === true && mountDigest(record) === mount.digest) continue
+      if (this.ctx.get('optionalPlugins')?.enabled !== false && record?.enabled === true && mountDigest(record, this.cwd) === mount.digest) continue
       this.live.delete(name)
       await disposeQuietly(mount.fiber)
     }
     const pending: Promise<void>[] = []
     for (const record of records.values()) {
-      if (!record.enabled || this.live.has(record.name)) continue
+      if (this.ctx.get('optionalPlugins')?.enabled === false || !record.enabled || this.live.has(record.name)) continue
       try {
         assertMountable(record, 'mcpServers')
       } catch (error) {
@@ -400,12 +436,12 @@ export class McpServerRegistry extends Service {
    * the explicit retry.
    */
   private async mount(record: StoredServer): Promise<void> {
-    const digest = mountDigest(record)
+    const digest = mountDigest(record, this.cwd)
     const fiber = this.owner.plugin({
       name: `mcp-server:${record.name}`,
       inject: mcpClientInject,
       apply: applyMcpClient,
-    }, clientConfig(record))
+    }, clientConfig(record, this.cwd))
     const mount: LiveMount = { fiber, digest, status: 'starting' }
     this.live.set(record.name, mount)
     try {
@@ -420,12 +456,17 @@ export class McpServerRegistry extends Service {
 
   /** Project one stored record with its live state and registered tool names. */
   private view(record: StoredServer): McpServerView {
-    const mount = this.live.get(record.name)
-    const invalid = this.invalid.get(record.name)
+    const candidate = record.enabled ? this.live.get(record.name) : undefined
+    const digest = mountDigest(record, this.cwd)
+    const mount = candidate?.digest === digest ? candidate : undefined
+    const effective = this.settings.get().servers.find(server => server.name === record.name)
+    const invalid = record.enabled && effective !== undefined && mountDigest(effective, this.cwd) === digest
+      ? this.invalid.get(record.name) : undefined
     const status: McpServerStatus = invalid !== undefined
       ? 'invalid'
       : !record.enabled ? 'stopped' : mount?.status ?? 'stopped'
-    const detail = invalid ?? mount?.detail
+    const rawDetail = invalid ?? mount?.detail
+    const detail = record.url === '' ? rawDetail : rawDetail?.replaceAll(record.url, redactUrlUserinfo(record.url))
     const prefix = `mcp__${record.name}__`
     return {
       name: record.name,
@@ -439,7 +480,8 @@ export class McpServerRegistry extends Service {
       envNames: Object.keys(record.env).sort(),
       headerNames: Object.keys(record.headers).sort(),
       toolCallTimeoutMs: record.toolCallTimeoutMs,
-      tools: this.ctx.tools.schemas().map(tool => tool.name).filter(name => name.startsWith(prefix)).sort(),
+      tools: mount?.status === 'started'
+        ? this.tools.schemas(scopeOf(this.owner)).map(tool => tool.name).filter(name => name.startsWith(prefix)).sort() : [],
     }
   }
 

@@ -42,6 +42,7 @@
   ],
   "license": "MIT",
   "peerDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/harness-atomic-write": "workspace:^",
     "@hydraharness/harness-commands": "workspace:^",
     "@hydraharness/harness-hook-protocol": "workspace:^",
@@ -59,6 +60,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/harness-atomic-write": "workspace:^",
     "@hydraharness/harness-commands": "workspace:^",
     "@hydraharness/harness-hook-protocol": "workspace:^",

@@ -2,7 +2,7 @@
 /** LanguageRow behavior: selector pill shows the active locale, the menu
  * opens/closes, and selection drives setLocale. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createSnapshotStore, type SessionListState, type WorkspaceListState } from '@hydraharness/harness-client-runtime/client'
 import { bindSnapshotSelector } from '@hydraharness/harness-client-test-runtime'
 import { LanguageRow } from '../src/client/LanguageRow.tsx'
@@ -11,7 +11,7 @@ import { createLanguageRowStore } from '../src/client/settings-store.ts'
 
 afterEach(cleanup)
 
-const OPTIONS = [{ id: 'fr', label: 'Français' }, { id: 'en', label: 'English' }]
+const OPTIONS = [{ id: 'auto', label: 'Auto' }, { id: 'fr', label: 'Français' }, { id: 'en', label: 'English' }]
 
 /** Empty global standard-kit hooks (the row reads neither). */
 function emptySessions() {
@@ -31,7 +31,7 @@ function mount(active = 'en') {
   // Real store instance — the sanctioned zero-machinery path for tests.
   const store = createLanguageRowStore().create()
   store.actions.sync(active, OPTIONS, 0)
-  const setLocale = vi.fn()
+  const setLocale = vi.fn(async () => {})
   const props: LanguageRowComponentProps = {
     useSessions: emptySessions(),
     useWorkspaces: emptyWorkspaces(),
@@ -45,6 +45,15 @@ function mount(active = 'en') {
 }
 
 describe('LanguageRow', () => {
+  it('keeps the accepted locale when an Auto save fails and shows the error', async () => {
+    const b = mount('en')
+    b.setLocale.mockRejectedValueOnce(new Error('Settings revision conflict'))
+    fireEvent.click(screen.getByRole('button', { name: /English/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Auto' }))
+    expect(b.setLocale).toHaveBeenCalledWith('auto')
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain('revision conflict') })
+    expect(screen.getByRole('button', { name: /English/ })).toBeDefined()
+  })
   it('shows the title and the active locale label on the selector pill', () => {
     mount('en')
     expect(screen.getByText('Language')).toBeDefined()

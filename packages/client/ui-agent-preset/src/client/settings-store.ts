@@ -1,15 +1,14 @@
 /**
  * Agent-preset default-settings controller.
  *
- * Options and the current default both come from one `agentPreset.list` call:
- * the roster already reports which id a session with no explicit choice gets,
- * so the row needs no schema introspection. Writes target the settings
- * namespace's `default` field, which is what the host resolves at creation.
+ * The roster supplies available presets; the addressed settings view supplies
+ * the selected layer's default and inheritance. Writes target the namespace's
+ * `default` field, which the Host resolves at session creation.
  */
 
-import type { IApiClient } from '@hydraharness/harness-api-remotes/client'
+import type { IApiClient, SettingsNamespaceView } from '@hydraharness/harness-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@hydraharness/harness-client-runtime/client'
-import type { SettingsDescribeFace } from '@hydraharness/harness-client-ui-settings/client'
+import type { SettingsDescribeFace, SettingsTarget } from '@hydraharness/harness-client-ui-settings/client'
 
 /** The agent-preset settings namespace on the host wire. */
 export const AGENT_PRESET_SETTINGS_NS = 'agent-presets'
@@ -33,21 +32,27 @@ export function messageOf(error: unknown): string {
  * namespace and field the host resolves at session creation.
  * @param api - the settings wire face.
  * @param id - the preset to make default.
+ * @param target - global or workspace document receiving the override.
+ * @param accept - folds the addressed Host acknowledgement into its settings mirror.
  * @returns the failure message, or undefined once the write landed.
  */
 export async function writeDefaultPreset(
   api: Pick<IApiClient, 'settings'>,
   id: string,
+  target: SettingsTarget = {},
+  accept?: (view: SettingsNamespaceView) => void,
 ): Promise<string | undefined> {
   let response
   try {
-    response = await api.settings.update({ ns: AGENT_PRESET_SETTINGS_NS, patch: { default: id } })
+    response = await api.settings.update({ ...target, ns: AGENT_PRESET_SETTINGS_NS, patch: { default: id } })
   } catch (error) {
     // The transport rejected rather than answering; the caller must be able to
     // say so instead of the row silently snapping back.
     return messageOf(error)
   }
-  return response.result.ok ? undefined : response.result.error.message
+  if (!response.result.ok) return response.result.error.message
+  accept?.(response.result.value)
+  return undefined
 }
 
 /** One selectable preset. */
@@ -99,11 +104,12 @@ export type RosterRead = { ok: true; value: RosterValue } | { ok: false; error: 
  * them here keeps each store's `load` about what it does with a roster rather
  * than about how the call can fail.
  * @param api - the agent-preset wire face.
+ * @param target - workspace whose effective roster is requested.
  * @returns the roster, or the message to show in its place.
  */
-export async function readRoster(api: Pick<IApiClient, 'agentPresets'>): Promise<RosterRead> {
+export async function readRoster(api: Pick<IApiClient, 'agentPresets'>, target: SettingsTarget = {}): Promise<RosterRead> {
   try {
-    const response = await api.agentPresets.list({})
+    const response = await api.agentPresets.list(target)
     return response.result.ok
       ? { ok: true, value: response.result.value }
       : { ok: false, error: response.result.error.message }
@@ -118,12 +124,14 @@ export async function readRoster(api: Pick<IApiClient, 'agentPresets'>): Promise
  * @param api - the agent-preset wire face.
  * @param store - the surface's own snapshot store.
  * @param accept - publish a successful roster into the surface's snapshot.
+ * @param target - workspace whose effective roster is requested.
  * @returns the refresh callback owned by this controller.
  */
 export function createRosterLoader<S extends { status: string; error: string | null }>(
   api: Pick<IApiClient, 'agentPresets'>,
   store: SnapshotStore<S>,
   accept: (roster: RosterValue) => void | Promise<void>,
+  target: SettingsTarget = {},
 ): () => Promise<void> {
   let inFlight: Promise<void> | undefined
   let rerun = false
@@ -138,7 +146,7 @@ export function createRosterLoader<S extends { status: string; error: string | n
         do {
           store.set({ ...store.getSnapshot(), status: 'loading', error: null })
           rerun = false
-          const roster = await readRoster(api)
+          const roster = await readRoster(api, target)
           if (needsRerun()) continue
           if (roster.ok) await accept(roster.value)
           else store.set({ ...store.getSnapshot(), status: 'error', error: roster.error })
@@ -189,6 +197,8 @@ export interface AgentPresetSettingsState {
    */
   writable: boolean
   currentValue: string
+  /** Whether the addressed document overrides the inherited preset. */
+  overridden?: boolean
   options: readonly AgentPresetOption[]
 }
 
@@ -216,7 +226,7 @@ export class AgentPresetSettingsController {
     private readonly api: IApiClient,
     private readonly describeFace: SettingsDescribeFace,
   ) {
-    this.refresh = createRosterLoader(api, this.store, roster => this.acceptRoster(roster))
+    this.refresh = createRosterLoader(api, this.store, roster => this.acceptRoster(roster), describeFace.target)
   }
 
   private set(patch: Partial<AgentPresetSettingsState>): void {
@@ -245,6 +255,7 @@ export class AgentPresetSettingsController {
     // answers, so the row stays read-only rather than offering a control
     // whose write the Host would refuse.
     await this.describeFace.ensure()
+    const settings = this.describeFace.getSnapshot().view?.namespaces.find(view => view.ns === AGENT_PRESET_SETTINGS_NS)
     this.set({
       status: 'ready',
       error: null,
@@ -252,7 +263,9 @@ export class AgentPresetSettingsController {
       options: presetOptions(presets),
       // A roster can mark nothing default: settings can name a preset that
       // was since deleted, and the picker still has to show something.
-      currentValue: presets.find(preset => preset.isDefault)?.id ?? first.id,
+      currentValue: (settings?.value as { default?: string } | undefined)?.default
+        ?? presets.find(preset => preset.isDefault)?.id ?? first.id,
+      overridden: Object.prototype.hasOwnProperty.call(settings?.user ?? {}, 'default'),
     })
   }
 
@@ -267,13 +280,29 @@ export class AgentPresetSettingsController {
     const before = this.store.getSnapshot()
     if (before.status === 'saving' || id === before.currentValue) return
     this.set({ status: 'saving', error: null, currentValue: id })
-    const failure = await writeDefaultPreset(this.api, id)
+    const failure = await writeDefaultPreset(this.api, id, this.describeFace.target, (view) => { this.describeFace.acceptView(view) })
     if (failure !== undefined) {
       this.set({ status: 'ready', currentValue: before.currentValue, error: failure })
       return
     }
-    // Re-read rather than trust the patch: the host resolves the default
-    // through the same roster the row displays.
+    // The roster may change when the default enables a different composition.
     await this.load()
+  }
+
+  /**
+   * Clear the addressed preset override and inherit the previous layer.
+   * @returns after the Host acknowledges and the roster refreshes.
+   */
+  async reset(): Promise<void> {
+    const view = this.describeFace.getSnapshot().view?.namespaces.find(entry => entry.ns === AGENT_PRESET_SETTINGS_NS)
+    if (view === undefined || !this.store.getSnapshot().writable) return
+    this.set({ status: 'saving', error: null })
+    try {
+      const response = await this.api.settings.mutate({ ...this.describeFace.target, ns: AGENT_PRESET_SETTINGS_NS,
+        expectedRevision: view.revision, ops: [{ op: 'unset', path: ['default'] }] })
+      if (!response.result.ok) throw new Error(response.result.error.message)
+      this.describeFace.acceptView(response.result.value)
+      await this.load()
+    } catch (error) { this.set({ status: 'ready', error: messageOf(error) }) }
   }
 }

@@ -1,0 +1,88 @@
+- id: settings
+  name: '@hydraharness/harness-settings-file'
+  config:
+    path: './host/settings.yaml'
+    watch: false
+
+- id: spine
+  name: '@hydraharness/harness-agent-spine-demo'
+  config:
+    workspaceContext:
+      maxBytes: 65536
+      hydraHome: './host'
+    skills:
+      filesystem:
+        hydraHome: './host'
+        agentsHome: './host/agents'
+        watch: false
+    toolBash: false
+    toolJobs: false
+    goals: false
+
+- id: default-model
+  name: '@hydraharness/harness-agent-default-model'
+  config:
+    provider: workspace-fixture
+    model: global
+
+- id: persistence
+  name: '@hydraharness/harness-session-persistence-jsonl'
+  config:
+    root: './host/sessions'
+    compression: none
+
+- id: calls
+  name: '@hydraharness/harness-llm-call-log'
+
+- id: fs
+  name: '@hydraharness/harness-fs-local'
+  config:
+    cwd: !!js process.cwd()
+
+- id: subprocess
+  name: '@hydraharness/harness-subprocess-local'
+
+- id: bash
+  name: '@hydraharness/harness-bash-local'
+  disabled: !!js process.platform === 'win32'
+
+- id: pwsh
+  name: '@hydraharness/harness-pwsh-local'
+  disabled: !!js process.platform !== 'win32'
+
+- id: storage
+  name: '@hydraharness/harness-storage'
+
+- id: storage-json
+  name: '@hydraharness/harness-storage-json'
+  config:
+    root: './host/storage'
+
+- id: domain
+  name: '@hydraharness/harness-storage-domain'
+  config:
+    backend: json
+
+- id: workspaces
+  name: '@hydraharness/harness-workspace'
+
+- id: presets
+  name: '@hydraharness/harness-agent-presets'
+  config:
+    default: snapshot
+    includeUserRoot: false
+    roots:
+      - path: !!js process.cwd() + '/system-presets'
+        trust: system
+
+- id: workspace-config
+  name: '@hydraharness/harness-workspace-config'
+  config:
+    hydraHome: './host'
+    watch: false
+
+- id: cordis-host-runner
+  name: '@hydraharness/harness-cordis-host-runner'
+
+- id: tool-cordis
+  name: '@hydraharness/harness-tool-cordis'

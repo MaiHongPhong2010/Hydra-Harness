@@ -12,6 +12,8 @@ The Node half scans enabled Loader entries for web `hydra.client` packages, reso
 
 `hydra.client.external` is an optional exact-specifier request list beyond the implicit baseline: shell-seeded React, Cordis, and static UI libraries plus parser-preloaded runtime. A request is answered by the dynamic package row it names or an exact static-table key; only a trailing `/client` aliases a package row, and there is no provider-alias declaration. Type-only imports are erased and create no request. Composition rejects malformed requests, missing suppliers, self-requests, and synchronous request cycles; import and prefetch recursively register dynamic suppliers before their consumers materialize. See [shared modules and the module graph](../AGENTS.md#shared-modules-and-the-module-graph).
 
+The client module loader validates live Host graph replacements before adopting their fetch routes. Invalid replacements retain the previous manifest. Contribution owners unload their fibers through the Loader; materialized exports remain cached for other consumers.
+
 ## Model Experience
 
 None, as the module loader is browser-side kernel machinery; nothing here reaches a model request.

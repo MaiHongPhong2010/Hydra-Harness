@@ -42,7 +42,7 @@ export interface ProviderRow {
   credential: CredentialView | undefined
   /** Fallback references joined with their write-only credential state. */
   fallbackCredentials: Readonly<Record<string, CredentialView | undefined>>
-  /** Connected accounts for account-backed routes; absent for API-key routes. */
+  /** Connected accounts; absent for API-key routes or failed account reads. */
   accountCount?: number
 }
 
@@ -280,11 +280,13 @@ export class ModelsSettingsStore {
       }
     }
     const accounts = new Map<string, number>()
+    let accountsLoaded = false
     if (rows.some(row => providerAccountKey(row.entry.settingsNs, row.entry.provider) !== undefined)) {
       try {
         const response = await this.api.authorization.list({})
         if (!response.result.ok) throw new Error(response.result.error.message)
         for (const entry of response.result.value.entries) accounts.set(entry.key, entry.accounts.length)
+        accountsLoaded = true
       } catch (error) {
         credentialError = messageOf(error)
       }
@@ -300,7 +302,7 @@ export class ModelsSettingsStore {
         const accountKey = providerAccountKey(row.entry.settingsNs, row.entry.provider)
         return {
           ...row,
-          ...accountKey === undefined ? {} : { accountCount: accounts.get(accountKey) ?? 0 },
+          ...accountKey === undefined || !accountsLoaded ? {} : { accountCount: accounts.get(accountKey) ?? 0 },
           fallbackCredentials: Object.fromEntries(Object.keys(row.fallbackCredentials).map(ref => [ref, credentials[ref]])),
           ...row.apiKeyEnv !== undefined && credentials[row.apiKeyEnv] !== undefined
             ? { credential: credentials[row.apiKeyEnv] }
@@ -326,6 +328,7 @@ export class ModelsSettingsStore {
 export function providerUsable(row: ProviderRow): boolean {
   if (!row.entry.active) return false
   if (row.accountCount !== undefined) return row.accountCount > 0
+  if (providerAccountKey(row.entry.settingsNs, row.entry.provider) !== undefined) return false
   if (row.apiKeyEnv === undefined && Object.keys(row.fallbackCredentials).length === 0) return true
   return row.credential?.configured === true || Object.values(row.fallbackCredentials).some(state => state?.configured === true)
 }

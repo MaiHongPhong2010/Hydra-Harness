@@ -9,13 +9,20 @@
  * through {@link SettingsDescribeMirror.acceptView}.
  */
 
-import type { IApiClient, SettingsNamespaceView } from '@hydraharness/harness-api-remotes/client'
+import type { IApiClient, SettingsNamespaceView, WorkspaceId, SettingsTarget } from '@hydraharness/harness-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@hydraharness/harness-client-runtime/client'
 
 type SettingsFace = Pick<IApiClient, 'settings'>
 
+export type { SettingsTarget }
+
 /** The full `settings.describe` answer the mirror serves. */
 export interface SettingsDescribeView {
+  /** Workspace identity and layer echoed by the Host for scoped reads. */
+  workspaceId?: WorkspaceId
+  layer?: 'shared' | 'local'
+  /** Whether executable configuration from this workspace may run. */
+  trusted?: boolean
   /** Every namespace a live Host plugin registered, as the Host reported it. */
   namespaces: readonly SettingsNamespaceView[]
   /** Whether the settings provider accepts writes. */
@@ -44,6 +51,8 @@ export interface SettingsMirrorSnapshot {
  * this face — invalidation refreshes belong to the mirror's owning plugin.
  */
 export interface SettingsDescribeFace {
+  /** Address used by operations on this describe surface. */
+  readonly target?: SettingsTarget
   /** @returns the current sync snapshot (stable reference until the next change). */
   getSnapshot(): SettingsMirrorSnapshot
   /**
@@ -84,6 +93,7 @@ export class SettingsDescribeMirror implements SettingsDescribeFace {
   constructor(
     private readonly api: SettingsFace,
     private readonly persistence: 'host' | 'memory' = 'host',
+    readonly target: SettingsTarget = {},
   ) {
     this.store = createSnapshotStore<SettingsMirrorSnapshot>({
       status: persistence === 'host' ? 'idle' : 'unavailable',
@@ -144,6 +154,8 @@ export class SettingsDescribeMirror implements SettingsDescribeFace {
    * @param view - the namespace view a settings write answered with.
    */
   acceptView(view: SettingsNamespaceView): void {
+    if (view.workspaceId !== this.target.workspaceId
+      || (view.workspaceId !== undefined && view.layer !== this.target.layer)) return
     const before = this.store.getSnapshot()
     const current = before.view?.namespaces.find(row => row.ns === view.ns)
     if (current !== undefined && current.revision > view.revision) return
@@ -182,9 +194,12 @@ export class SettingsDescribeMirror implements SettingsDescribeFace {
         const generation = ++this.generation
         let outcome: { view: SettingsDescribeView } | { failure: string }
         try {
-          const response = await this.api.settings.describe({})
+          const response = await this.api.settings.describe(this.target)
           outcome = response.result.ok
-            ? { view: response.result.value }
+            ? response.result.value.workspaceId === this.target.workspaceId
+              && (this.target.workspaceId === undefined || response.result.value.layer === this.target.layer)
+              ? { view: response.result.value }
+              : { failure: 'The Host returned settings for a different workspace.' }
             : { failure: response.result.error.message }
         } catch (error) {
           outcome = { failure: error instanceof Error ? error.message : String(error) }

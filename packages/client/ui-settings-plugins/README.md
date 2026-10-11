@@ -36,6 +36,8 @@ A key can also be written from another surface — the Models page addresses the
 
 A field's presence in the raw user layer — not its value — is what marks it overridden; a reset clears that field so it re-inherits the composition layer. Secret-role fields never ride a response, so a key control starts blank, reports only whether one is configured, and writes through the credentials domain rather than the settings section; a blank draft writes nothing and keeps the stored key. A key write succeeds only when the Host acknowledges the write and the credential can be read back; the configured badge may describe an older key and cannot prove acceptance. A rejected or unverified write retains its draft.
 
+Plugins Settings edits global MCP and hook records, provider credentials, imported bundles, and plugin preferences. Project MCP and hook definitions apply automatically in their trusted workspace; opening Settings does not retarget these editors.
+
 ## Model Experience
 
 None, as the section renders a browser configuration UI; the values it writes reach a model only through the plugins that own them, each documenting that effect itself.

@@ -12,6 +12,7 @@
     { "path": "../../fs/fs" },
     { "path": "../../util/home-paths" },
     { "path": "../skill" },
+    { "path": "../../workspace/workspace-config" },
     { "path": "../../runtime-diagnostics/invariants" }
   ]
 }

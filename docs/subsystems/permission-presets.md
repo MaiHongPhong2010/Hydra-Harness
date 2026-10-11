@@ -133,9 +133,16 @@ optionOf(name: string): PresetOption
  * @param name - the preset to switch to; unknown names throw.
  */
 set(session: Session, name: string): void
+
+/**
+ * Apply a user selection to a live agent, including the approval policy's logged model update.
+ * @param agent - currently served agent in this permission service's realm.
+ * @param name - configured preset; validation precedes all writes.
+ */
+setLive(agent: Agent, name: string): void
 ```
 
-Types: [Session](session.md) · [SessionEvent](session.md)
+Types: [Agent](core.md) · [Session](session.md) · [SessionEvent](session.md)
 
 Source: [`packages/interaction/permission-presets/src/index.ts`](../../packages/interaction/permission-presets/src/index.ts)
 <!-- END GENERATED cordis-surface -->

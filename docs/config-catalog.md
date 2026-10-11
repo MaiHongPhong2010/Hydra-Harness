@@ -29,7 +29,7 @@ export interface AcpConfig {
 
 Depends on: `Stream` (`@agentclientprotocol/sdk`)
 
-Source: [`packages/acp/acp/src/index.ts:71`](../packages/acp/acp/src/index.ts)
+Source: [`packages/acp/acp/src/index.ts:76`](../packages/acp/acp/src/index.ts)
 
 <a id="hydraharness-acp-demo"></a>
 
@@ -111,7 +111,7 @@ Source: [`packages/core/agent-default-model/src/index.ts:41`](../packages/core/a
 export interface Config {
   /** Harness home containing the fixed user-global `AGENTS.md`; defaults to `$HYDRA_HOME` or `~/.hydra`. */
   hydraHome?: string
-  /** Directory entries that identify the project root while walking upward from the session cwd. */
+  /** Directory entries identifying the project root when `ctx.workspaceConfig` is absent. */
   projectRootMarkers?: string[]
   /** UTF-8 byte cap for one rendered baseline or dynamic batch; non-positive or non-finite disables loading. */
   maxBytes: number
@@ -130,7 +130,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/context/agent-instructions/src/config.ts:18`](../packages/context/agent-instructions/src/config.ts)
+Source: [`packages/context/agent-instructions/src/config.ts:19`](../packages/context/agent-instructions/src/config.ts)
 
 <a id="hydraharness-agent-loop"></a>
 
@@ -182,6 +182,8 @@ export interface Config {
    * configured root. False mounts a roster over `roots` alone.
    */
   includeUserRoot: boolean
+  /** Canonical workspace directory confining authoring to its `.hydra/agent-presets`. */
+  workspaceRoot?: string
 }
 
 /** One directory scanned for preset subdirectories. */
@@ -388,6 +390,22 @@ export type Config = LocalConfig
 Depends on: [`LocalConfig`](#hydraharness-bash-local)
 
 Source: [`packages/shell/bash-sandbox/src/index.ts:35`](../packages/shell/bash-sandbox/src/index.ts)
+
+<a id="hydraharness-browser-decisions"></a>
+
+## `@hydraharness/harness-browser-decisions`
+
+Requires: `tools`
+
+```ts config-catalog
+/** Global preference for new advisory browser decision calls. */
+export interface Config {
+  /** Whether browser_decide may call Jev; pending requests keep running. */
+  enabled?: boolean
+}
+```
+
+Source: [`packages/browser/browser-decisions/src/index.ts:11`](../packages/browser/browser-decisions/src/index.ts)
 
 <a id="hydraharness-browser-electron"></a>
 
@@ -797,7 +815,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/bundle/headless/src/index.ts:31`](../packages/bundle/headless/src/index.ts)
+Source: [`packages/bundle/headless/src/index.ts:35`](../packages/bundle/headless/src/index.ts)
 
 <a id="hydraharness-hooks-claude-code"></a>
 
@@ -810,12 +828,13 @@ Requires: `shell`
 export interface Config {
   /**
    * Path to a `hooks.json` or a settings file whose `hooks` key holds the config.
-   * Process-level: read once at load, a relative path resolves against the process
-   * launch cwd, so one config applies to the whole process.
-   * TODO(per-session-hook-config): per-session discovery of a project-local
-   * `hooks.json` from each `session/new.cwd`.
+   * Read once at load; relative paths resolve against the process launch cwd.
+   * Hooks cover agents within the mounting context's registration scope, or
+   * every agent for an unscoped mount.
    */
   configPath: string
+  /** Owning workspace cwd; omitted uses each agent's session cwd. */
+  cwd?: string
   /**
    * Replaces `${CLAUDE_PLUGIN_ROOT}` in command strings (the plugin's root dir).
    */
@@ -835,7 +854,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/hooks/hooks-claude-code/src/index.ts:45`](../packages/hooks/hooks-claude-code/src/index.ts)
+Source: [`packages/hooks/hooks-claude-code/src/index.ts:46`](../packages/hooks/hooks-claude-code/src/index.ts)
 
 <a id="hydraharness-hooks-codex"></a>
 
@@ -847,12 +866,13 @@ Requires: `shell`
 /** Plugin config: where the Codex hooks.json lives + the model name for payloads. */
 export interface Config {
   /**
-   * Path to a Codex `hooks.json`. Process-level: read once at load, a relative
-   * path resolves against the process launch cwd.
-   * TODO(per-session-hook-config): per-session project-local discovery from each
-   * `session/new.cwd`.
+   * Path to a Codex `hooks.json`, read once at load. Relative paths resolve
+   * against the process launch cwd. Hooks cover agents within the mounting
+   * context's registration scope, or every agent for an unscoped mount.
    */
   configPath: string
+  /** Owning workspace cwd; omitted uses each agent's session cwd. */
+  cwd?: string
   /** The model name stamped on every payload (Codex includes `model` on each event). */
   model?: string
   /** Default per-hook timeout in ms when a hook sets none (Codex default: 600000). */
@@ -864,7 +884,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/hooks/hooks-codex/src/index.ts:47`](../packages/hooks/hooks-codex/src/index.ts)
+Source: [`packages/hooks/hooks-codex/src/index.ts:48`](../packages/hooks/hooks-codex/src/index.ts)
 
 <a id="hydraharness-hooks-registry"></a>
 
@@ -877,10 +897,12 @@ Requires: `settings` · `shell`
 export interface Config {
   /** Override the resolved harness home that holds materialized inline documents. */
   hydraHome?: string
+  /** Absolute workspace directory for relative document paths and hook commands. */
+  cwd?: string
 }
 ```
 
-Source: [`packages/hooks/hooks-registry/src/index.ts:54`](../packages/hooks/hooks-registry/src/index.ts)
+Source: [`packages/hooks/hooks-registry/src/index.ts:55`](../packages/hooks/hooks-registry/src/index.ts)
 
 <a id="hydraharness-host-apiproxy"></a>
 
@@ -968,7 +990,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/host/plugin-inventory/src/index.ts:373`](../packages/host/plugin-inventory/src/index.ts)
+Source: [`packages/host/plugin-inventory/src/index.ts:378`](../packages/host/plugin-inventory/src/index.ts)
 
 <a id="hydraharness-host-webserver"></a>
 
@@ -1614,7 +1636,7 @@ export interface StdioConfig {
   /**
    * Stable local namespace for this server's model-facing tool names
    * (`mcp__<serverName>__<rawName>`). Must match `[A-Za-z0-9_-]{1,32}` and be
-   * unique across live mcp-client instances.
+   * unique across live mcp-client instances in the same registration scope.
    */
   serverName: string
   /** Executable used to start the server. */
@@ -1640,7 +1662,7 @@ export interface StreamableHttpConfig {
   /**
    * Stable local namespace for this server's model-facing tool names
    * (`mcp__<serverName>__<rawName>`). Must match `[A-Za-z0-9_-]{1,32}` and be
-   * unique across live mcp-client instances.
+   * unique across live mcp-client instances in the same registration scope.
    */
   serverName: string
   /** MCP endpoint URL. */
@@ -1671,6 +1693,22 @@ export interface ReconnectConfig {
 ```
 
 Source: [`packages/mcp/mcp-client/src/index.ts:101`](../packages/mcp/mcp-client/src/index.ts)
+
+<a id="hydraharness-mcp-registry"></a>
+
+## `@hydraharness/harness-mcp-registry`
+
+Requires: `settings` · `tools`
+
+```ts config-catalog
+/** Owning directory used by workspace server processes. */
+export interface Config {
+  /** Absolute directory for omitted or relative record working directories. */
+  cwd?: string
+}
+```
+
+Source: [`packages/mcp/mcp-registry/src/index.ts:65`](../packages/mcp/mcp-registry/src/index.ts)
 
 <a id="hydraharness-message-feedback"></a>
 
@@ -1788,7 +1826,7 @@ export interface PresetSpec {
 
 Depends on: [`ApprovalPolicy`](subsystems/approval.md) · [`SandboxMode`](subsystems/sandbox.md)
 
-Source: [`packages/interaction/permission-presets/src/index.ts:168`](../packages/interaction/permission-presets/src/index.ts)
+Source: [`packages/interaction/permission-presets/src/index.ts:170`](../packages/interaction/permission-presets/src/index.ts)
 
 <a id="hydraharness-persona"></a>
 
@@ -1844,7 +1882,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/host/plugin-runtime/src/index.ts:45`](../packages/host/plugin-runtime/src/index.ts)
+Source: [`packages/host/plugin-runtime/src/index.ts:46`](../packages/host/plugin-runtime/src/index.ts)
 
 <a id="hydraharness-pwsh-local"></a>
 
@@ -2079,7 +2117,7 @@ export interface Config {
 export type JsonlCompression = 'zstd' | 'none'
 ```
 
-Source: [`packages/session/session-persistence-jsonl/src/index.ts:60`](../packages/session/session-persistence-jsonl/src/index.ts)
+Source: [`packages/session/session-persistence-jsonl/src/index.ts:61`](../packages/session/session-persistence-jsonl/src/index.ts)
 
 <a id="hydraharness-session-persistence-sqlite"></a>
 
@@ -2308,6 +2346,12 @@ export interface Config {
   watch?: boolean
   /** Watcher write-settle window in milliseconds; defaults to 100. */
   debounceMs?: number
+  /** Allowed document namespaces; omitted permits every namespace. */
+  allowedNamespaces?: string[] | undefined
+  /** Apply raw sections to resolved reads; defaults to true. Stored sections remain editable. */
+  layerEnabled?: boolean
+  /** Canonical workspace root confining document reads and writes; omitted for global settings. */
+  confinedRoot?: string
 }
 ```
 
@@ -2339,7 +2383,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/skill/src/index.ts:277`](../packages/skill/skill/src/index.ts)
+Source: [`packages/skill/skill/src/index.ts:278`](../packages/skill/skill/src/index.ts)
 
 <a id="hydraharness-skill-filesystem"></a>
 
@@ -2377,7 +2421,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/skill-filesystem/src/index.ts:48`](../packages/skill/skill-filesystem/src/index.ts)
+Source: [`packages/skill/skill-filesystem/src/index.ts:49`](../packages/skill/skill-filesystem/src/index.ts)
 
 <a id="hydraharness-spill-local"></a>
 
@@ -2734,6 +2778,32 @@ export interface Config {
 ```
 
 Source: [`packages/e2b/subprocess-e2b/src/index.ts:25`](../packages/e2b/subprocess-e2b/src/index.ts)
+
+<a id="hydraharness-suggested-prompts"></a>
+
+## `@hydraharness/harness-suggested-prompts`
+
+Requires: `settings` · `llm` · `fs`
+
+```ts config-catalog
+/** Deployment budgets for a single explicitly enabled batch. */
+export interface Config {
+  /** Maximum aggregate UTF-8 source bytes. */
+  maxInputBytes?: number
+  /** Maximum suggestion count. */
+  maxSuggestions?: number
+  /** Maximum model response tokens. */
+  maxTokens?: number
+  /** Cooperative deadline for source reads and model generation. */
+  timeoutMs?: number
+  /** Workspace-relative files read without following links outside the root. */
+  projectFiles?: string[]
+  /** Maximum MCP resources read from each permitted source. */
+  maxResources?: number
+}
+```
+
+Source: [`packages/interaction/suggested-prompts/src/index.ts:33`](../packages/interaction/suggested-prompts/src/index.ts)
 
 <a id="hydraharness-system-prompt"></a>
 
@@ -3477,7 +3547,23 @@ export interface Config {
 export type ToolPresentationMode = 'native' | 'code' | 'both'
 ```
 
-Source: [`packages/core/tools/src/index.ts:656`](../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts:657`](../packages/core/tools/src/index.ts)
+
+<a id="hydraharness-toys"></a>
+
+## `@hydraharness/harness-toys`
+
+```ts config-catalog
+/** Deployment limits for a single transient effect. */
+export interface Config {
+  /** Number of visual particles. */
+  particles?: number
+  /** Effect lifetime in milliseconds. */
+  durationMs?: number
+}
+```
+
+Source: [`packages/interaction/toys/src/index.ts:11`](../packages/interaction/toys/src/index.ts)
 
 <a id="hydraharness-typert-loader"></a>
 
@@ -3782,6 +3868,26 @@ export interface Config {
 
 Source: [`packages/workflow/workflow-worker-thread/src/index.ts:32`](../packages/workflow/workflow-worker-thread/src/index.ts)
 
+<a id="hydraharness-workspace-config"></a>
+
+## `@hydraharness/harness-workspace-config`
+
+Requires: `settings` · `tools` · `shell` · `systemPrompt`
+
+```ts config-catalog
+/** Parameters for workspace document watching and Host-owned hook storage. */
+export interface Config {
+  /** Harness home holding workspace hook documents and user configuration. */
+  hydraHome?: string
+  /** Watch shared and personal documents; defaults to the file provider's behavior. */
+  watch?: boolean
+  /** Workspace file watcher settle window; defaults to the file provider's value. */
+  debounceMs?: number
+}
+```
+
+Source: [`packages/workspace/workspace-config/src/index.ts:26`](../packages/workspace/workspace-config/src/index.ts)
+
 ## Loadable plugins with no config
 
 These load from a `cordis.yml` entry with no `config:` block; they declare no configuration API.
@@ -3790,7 +3896,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@hydraharness/harness-api-gateway` — requires `typert` ([`packages/api/gateway/src/index.ts`](../packages/api/gateway/src/index.ts))
 - `@hydraharness/harness-api-remotes` ([`packages/api/remotes/src/index.ts`](../packages/api/remotes/src/index.ts))
 - `@hydraharness/harness-authorization` — requires `credentials` ([`packages/credentials/authorization/src/index.ts`](../packages/credentials/authorization/src/index.ts))
-- `@hydraharness/harness-browser-decisions` — requires `tools` ([`packages/browser/browser-decisions/src/index.ts`](../packages/browser/browser-decisions/src/index.ts))
 - `@hydraharness/harness-client-file-upload` ([`packages/client/file-upload/src/index.ts`](../packages/client/file-upload/src/index.ts))
 - `@hydraharness/harness-client-locale` ([`packages/client/locale/src/index.ts`](../packages/client/locale/src/index.ts))
 - `@hydraharness/harness-client-modules` — requires `webServer` · `loader` ([`packages/client/modules/src/index.ts`](../packages/client/modules/src/index.ts))
@@ -3825,6 +3930,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@hydraharness/harness-client-ui-sidebar` ([`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts))
 - `@hydraharness/harness-client-ui-skill` ([`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts))
 - `@hydraharness/harness-client-ui-subagent` ([`packages/client/ui-subagent/src/index.ts`](../packages/client/ui-subagent/src/index.ts))
+- `@hydraharness/harness-client-ui-suggested-prompts` ([`packages/client/ui-suggested-prompts/src/index.ts`](../packages/client/ui-suggested-prompts/src/index.ts))
 - `@hydraharness/harness-client-ui-theme` ([`packages/client/ui-theme/src/index.ts`](../packages/client/ui-theme/src/index.ts))
 - `@hydraharness/harness-client-ui-tool` ([`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts))
 - `@hydraharness/harness-client-ui-trajectory` ([`packages/client/ui-trajectory/src/index.ts`](../packages/client/ui-trajectory/src/index.ts))
@@ -3844,7 +3950,8 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@hydraharness/harness-llm` ([`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts))
 - `@hydraharness/harness-llm-call-log` — requires `llm` · `sessions` ([`packages/llm/llm-call-log/src/index.ts`](../packages/llm/llm-call-log/src/index.ts))
 - `@hydraharness/harness-lsp` ([`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts))
-- `@hydraharness/harness-mcp-registry` — requires `settings` · `tools` ([`packages/mcp/mcp-registry/src/index.ts`](../packages/mcp/mcp-registry/src/index.ts))
+- `@hydraharness/harness-notifications` ([`packages/interaction/notifications/src/index.ts`](../packages/interaction/notifications/src/index.ts))
+- `@hydraharness/harness-optional-plugins` — requires `settings` ([`packages/host/optional-plugins/src/index.ts`](../packages/host/optional-plugins/src/index.ts))
 - `@hydraharness/harness-personalization` — requires `systemPrompt` ([`packages/context/personalization/src/index.ts`](../packages/context/personalization/src/index.ts))
 - `@hydraharness/harness-schedule` — requires `agents` · `sessions` · `tools` · `sessionPersistence` ([`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts))
 - `@hydraharness/harness-session` ([`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts))

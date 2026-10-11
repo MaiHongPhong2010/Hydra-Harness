@@ -112,9 +112,11 @@ describe('ui-layout client apply', () => {
 })
 
 describe('node half + invariant companion', () => {
-  it('node apply is an intentional no-op (loader-managed lifecycle only)', () => {
-    nodeApply()
-    expect(true).toBe(true) // reaching here without throw is the contract
+  it('registers desktop preferences with the optional Host settings service', () => {
+    const register = vi.fn()
+    nodeApply({ inject: (_keys: string[], body: (context: object) => void) => { body({ settings: { register } }) } } as never)
+    expect(register).toHaveBeenCalledOnce()
+    expect(register.mock.calls[0]?.[0]).toBe('desktop-ui')
   })
 
   it('invariant companion registers under the package name', async () => {

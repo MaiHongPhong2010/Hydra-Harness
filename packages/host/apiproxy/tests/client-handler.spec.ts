@@ -38,6 +38,7 @@ function scriptedApi(overrides: {
   return {
     review: { list: r => ok(r, { changes: [] }), workspace: r => ok(r, { workspace: '', repository: null, branch: null, branches: [], commits: [], mode: r.payload.mode, baseRef: null, files: [], truncated: false }), keep: err, undo: err, ...overrides.review },
     sessions: {
+      suggestions: r => ok(r, { items: [] }),
       selectVersion: r => ok(r, { versionId: r.payload.versionId }),
       delete: r => ok(r, { deleted: true as const, sessionIds: [r.payload.sessionId] }),
       revise: r => Promise.resolve({ rpcId: r.rpcId, result: { ok: false, error: { code: 'fork-unavailable', message: 'not configured', details: { sessionId: r.payload.sessionId } } } }),
@@ -123,6 +124,8 @@ function scriptedApi(overrides: {
       mutate: err,
       readInstructions: r => ok(r, { content: '', revision: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' }),
       writeInstructions: err,
+      workspaceStatus: r => ok(r, { workspaceId: r.payload.workspaceId, trusted: false, trustDecided: false, hasProjectConfig: false }),
+      setWorkspaceTrust: r => ok(r, { ...r.payload, trustDecided: true, hasProjectConfig: false }),
       listMemories: r => ok(r, { entries: [] }),
       removeMemory: r => ok(r, { removed: false }),
       ...overrides.settings,
@@ -803,6 +806,8 @@ describe('config unary surface', () => {
         mutate: record('settings.mutate', r => ok(r, view)),
         readInstructions: record('settings.readInstructions', r => ok(r, { content: 'hello', revision: 'a'.repeat(64) })),
         writeInstructions: record('settings.writeInstructions', r => ok(r, { content: 'hello v2', revision: 'b'.repeat(64) })),
+        workspaceStatus: record('settings.workspaceStatus', r => ok(r, { workspaceId: r.payload.workspaceId, trusted: false, trustDecided: false, hasProjectConfig: true })),
+        setWorkspaceTrust: record('settings.setWorkspaceTrust', r => ok(r, { ...r.payload, trustDecided: true, hasProjectConfig: true })),
         listMemories: record('settings.listMemories', r => ok(r, { entries: [] })),
         removeMemory: record('settings.removeMemory', r => ok(r, { removed: true })),
       },
@@ -854,12 +859,20 @@ describe('config unary surface', () => {
     expect(instructionsWritten.result).toEqual({ ok: true, value: { content: 'hello v2', revision: 'b'.repeat(64) } })
     expect((await c.settings.listMemories({})).result).toEqual({ ok: true, value: { entries: [] } })
     expect((await c.settings.removeMemory({ id: '00000000-0000-4000-8000-000000000001' })).result).toEqual({ ok: true, value: { removed: true } })
+    const workspaceId = 'workspace-a' as never
+    expect((await c.settings.workspaceStatus({ workspaceId })).result).toEqual({
+      ok: true, value: { workspaceId, trusted: false, trustDecided: false, hasProjectConfig: true },
+    })
+    expect((await c.settings.setWorkspaceTrust({ workspaceId, trusted: true })).result).toEqual({
+      ok: true, value: { workspaceId, trusted: true, trustDecided: true, hasProjectConfig: true },
+    })
 
     expect(seen.map(call => call.method)).toEqual([
       'settings.describe', 'settings.openDocument', 'settings.update', 'settings.replace', 'settings.mutate',
       'credentials.describe', 'credentials.set', 'credentials.unset',
       'llm.providers', 'llm.models', 'llm.discoverModels',
       'settings.readInstructions', 'settings.writeInstructions', 'settings.listMemories', 'settings.removeMemory',
+      'settings.workspaceStatus', 'settings.setWorkspaceTrust',
     ])
     expect(seen[2]?.payload).toEqual({ ns: 'llm-deepseek', patch: { baseURL: 'https://next' } })
     expect(seen[4]?.payload)

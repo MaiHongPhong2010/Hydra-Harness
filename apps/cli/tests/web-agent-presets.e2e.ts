@@ -31,6 +31,10 @@ const CLAUDE_CODE_PACKAGE_DIR = join(REPO_ROOT, 'packages/subagent/subagent-clau
 /** The installation anchor whose dependency surface the preset module fallback mirrors. */
 const INSTALL_ANCHOR = join(REPO_ROOT, 'apps/cli/package.json')
 const MINIMAL_PROMPT = 'You are a helpful software engineer assistant.'
+const SHARED_HOST_TOOL_NAMES = [
+  'gemini_web_retrieve', 'image_generate', 'image_generate_google',
+  'session_version_list', 'session_version_read', 'video_generate',
+]
 const MINIMAL_BASH_DESCRIPTION = `Run commands in a bash shell
 * When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.
 * You don't have access to the internet via this tool.
@@ -43,7 +47,7 @@ const MINIMAL_BASH_DESCRIPTION = `Run commands in a bash shell
 /**
  * Boot the shipped Web composition, minus the rows that would bind a port,
  * touch the network, or write outside the test. Everything that decides an
- * agent's capabilities is the real thing, including both shipped presets.
+ * agent's capabilities is the real thing, including the shipped presets.
  */
 async function bootWeb(
   settingsFile: string,
@@ -187,7 +191,8 @@ async function bootWeb(
 const toolNames = (ctx: Context, agent?: Agent): string[] =>
   ctx.tools.schemas(agent).map(schema => schema.name).sort()
 
-const coreToolNames = (ctx: Context, agent?: Agent): string[] => toolNames(ctx, agent)
+const coreToolNames = (ctx: Context, agent: Agent): string[] =>
+  toolNames(ctx, agent).filter(name => !SHARED_HOST_TOOL_NAMES.includes(name))
 
 function toolParameterNames(ctx: Context, agent: Agent, toolName: string): string[] {
   const schema = ctx.tools.schemas(agent).find(tool => tool.name === toolName)
@@ -227,13 +232,8 @@ afterAll(() => {
 })
 
 describe('the shipped Web composition', () => {
-  it('leaves the global tool layer empty', () => {
-    // Every model-facing tool belongs to a preset, `ask_user_question`
-    // included: a tool in the global layer reaches EVERY agent regardless of
-    // which preset composed it, so a two-tool benchmark surface would really
-    // present three. A regression here means an agent-plane row came back to
-    // the host composition.
-    expect(coreToolNames(ctx)).toEqual([])
+  it('shares exactly the media and session-version tools from the Host', () => {
+    expect(toolNames(ctx)).toEqual(SHARED_HOST_TOOL_NAMES)
   })
 
   it('keeps the token meter and its context-meter projections on the host plane', async () => {
@@ -285,18 +285,19 @@ describe('the shipped Web composition', () => {
       // layer mounts cleanly and simply contributes nothing. `glob`/`grep` are
       // excluded for the reason the TUI composition e2e excludes them — they
       // depend on ripgrep being present on the machine.
-      expect(coreToolNames(ctx, handle.agent).filter(name => name !== 'glob' && name !== 'grep')).toEqual([
+      expect(toolNames(ctx, handle.agent).filter(name => name !== 'glob' && name !== 'grep')).toEqual([
+        ...SHARED_HOST_TOOL_NAMES,
         'ask_user_question', ...(process.platform === 'win32' ? [] : ['bash']), 'create_goal', 'edit', 'exit_plan_mode',
         'get_goal', 'interrupt_agent', 'job_kill', 'job_list', 'job_output', 'list_agents', ...(process.platform === 'win32' ? ['pwsh'] : []), 'ralph', 'read', 'read_image', 'send_message', 'skill', 'skill_search',
         'subagent', 'subagent_fork', 'todo_write', 'update_goal', 'web_fetch', 'web_search',
         'workflow', 'write',
-      ])
+      ].sort())
     } finally {
       await handle.dispose()
     }
   })
 
-  it('composes the exact RL prompt and two tools from `minimal`', async () => {
+  it('composes the exact RL prompt and two preset tools alongside shared Host tools from `minimal`', async () => {
     const handle = await ctx.agents.create({
       sessionId: SessionId('preset-minimal'),
       setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'minimal').then(() => undefined),
@@ -306,9 +307,11 @@ describe('the shipped Web composition', () => {
       expect(assembly.sections).toEqual([
         { name: 'deployment:persona', text: MINIMAL_PROMPT },
       ])
-      expect(assembly.tools.map(tool => tool.name)).toEqual(process.platform === 'win32'
-        ? ['pwsh', 'str_replace_editor']
-        : ['bash', 'str_replace_editor'])
+      expect(assembly.tools.map(tool => tool.name).sort()).toEqual([
+        ...SHARED_HOST_TOOL_NAMES,
+        process.platform === 'win32' ? 'pwsh' : 'bash',
+        'str_replace_editor',
+      ].sort())
       const shellTool = assembly.tools.find(tool => tool.name === (process.platform === 'win32' ? 'pwsh' : 'bash'))
       expect(shellTool).toBeDefined()
       if (process.platform !== 'win32') expect(shellTool?.description).toBe(MINIMAL_BASH_DESCRIPTION)
@@ -340,7 +343,7 @@ describe('the shipped Web composition', () => {
 
       // Tearing the minimal session down leaves the full one whole.
       expect(toolNames(ctx, full.agent).length).toBeGreaterThan(10)
-      expect(coreToolNames(ctx)).toEqual([])
+      expect(toolNames(ctx)).toEqual(SHARED_HOST_TOOL_NAMES)
     } finally {
       await full.dispose()
     }
@@ -808,11 +811,10 @@ describe('a forked session', () => {
       setup: agentCtx => ctx.agentPresets.mount(agentCtx, inherited).then(() => undefined),
     })
     try {
-      // Composing nothing would leave the child empty: this layer moved every
-      // model-facing row out of the host plane, so there is nothing to inherit
-      // for free any more.
+      // The preset supplies the child's shell and editor alongside the shared
+      // Host tools.
       expect(toolNames(ctx, child.agent)).toEqual(toolNames(ctx, parent.agent))
-      expect(toolNames(ctx, child.agent).length).toBeGreaterThan(0)
+      expect(coreToolNames(ctx, child.agent).length).toBeGreaterThan(0)
     } finally {
       await child.dispose()
       await parent.dispose()
@@ -1025,8 +1027,8 @@ describe('the default preset as a user setting', () => {
         setup: agentCtx => ctx.agentPresets.mount(agentCtx).then(() => undefined),
       })
       try {
-        // `mount()` with no id resolves the effective default. Two tools, not
-        // `standard`'s catalog: the setting decided the composition.
+        // `mount()` with no id resolves the effective default. The preset
+        // supplies the minimal shell and editor tools.
         expect(coreToolNames(ctx, handle.agent)).toEqual(process.platform === 'win32'
           ? ['pwsh', 'str_replace_editor']
           : ['bash', 'str_replace_editor'])

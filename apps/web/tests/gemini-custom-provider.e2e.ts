@@ -65,16 +65,14 @@ it('separates Google sign-in from API-key creation, loads all model pages, and r
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true })
   await dialog.waitFor()
   await dialog.getByRole('button', { name: 'Models', exact: true }).click()
-  const accounts = dialog.getByRole('region', { name: 'Account sign-in', exact: true })
-  await accounts.getByRole('button', { name: 'Add sign-in provider', exact: true }).click()
-  await accounts.getByLabel('Provider', { exact: true }).selectOption('google')
-  expect(await accounts.getByRole('combobox').count()).toBe(1)
-  expect(await accounts.getByText('Sign in with Google to use Antigravity. No Cloud project ID is needed.', { exact: true }).count()).toBe(1)
-  await expect.poll(() => accounts.getByRole('button', { name: 'Add account', exact: true }).isEnabled()).toBe(true)
+  await dialog.getByRole('button', { name: 'Accounts', exact: true }).click()
+  await dialog.getByLabel('Provider', { exact: true }).selectOption('llm-account-auth/antigravity')
+  await expect.poll(() => dialog.getByRole('button', { name: 'Add account', exact: true }).isEnabled()).toBe(true)
+  expect(await dialog.getByLabel('Sign-in method', { exact: true }).count()).toBe(1)
   await compareOrRefreshGolden(join(dirname(golden), 'google-login.expected.md'),
     await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), webSnapshotMode())
-  expect(await accounts.getByLabel(/Google Cloud project ID/).count()).toBe(0)
-  await accounts.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(await dialog.getByLabel(/Google Cloud project ID/).count()).toBe(0)
+  await dialog.getByRole('button', { name: 'Manage models', exact: true }).click()
 
   const apiKeys = dialog.getByRole('region', { name: 'API keys', exact: true })
   for (const theme of ['Light', 'Dark']) {
@@ -107,6 +105,7 @@ it('separates Google sign-in from API-key creation, loads all model pages, and r
   const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
   await compareOrRefreshGolden(golden, snapshot.replaceAll(endpoint, '<gemini-fixture>'), webSnapshotMode())
   await apiKeys.getByRole('button', { name: 'Create provider', exact: true }).click()
+  await apiKeys.getByRole('button', { name: 'Create provider', exact: true }).waitFor({ state: 'detached' })
   await apiKeys.getByRole('button', { name: 'Edit Gemini API (gemini)', exact: true }).waitFor()
   const saved = scaffold.ctx.settings.get(settingsNamespace('llm-pi-ai')) as {
     providers: Record<string, { api: string; apiKeyEnv: string; models: { id: string; endpoints?: string[] }[] }>
@@ -116,7 +115,7 @@ it('separates Google sign-in from API-key creation, loads all model pages, and r
     { id: 'veo-3.1-generate-preview', endpoints: ['videos'] },
   ] })
   const credentialsPath = join(scaffold.harnessHome, '.credentials.yaml')
-  expect(await readFile(credentialsPath, 'utf8')).toContain('fixture-gemini-key')
+  await expect.poll(() => readFile(credentialsPath, 'utf8'), { timeout: 10_000 }).toContain('fixture-gemini-key')
   expect(await readFile(credentialsPath, 'utf8')).toContain('GEMINI_API_KEY')
   expect(await readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8')).not.toContain('fixture-gemini-key')
   const google = scaffold.ctx.settings.get(settingsNamespace('llm-account-auth')) as { providers?: Record<string, unknown> }

@@ -15,7 +15,7 @@ export type {
   ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
   ModelReasoningEffort, ModelSelection, QueueAction, QueuedInboxItem, SessionModels,
   GoalsApi, GoalRef,
-  SettingsApi, SettingsNamespaceView, SettingsPathOpView, SettingsSecretView,
+  SettingsApi, SettingsNamespaceView, SettingsPathOpView, SettingsSecretView, WorkspaceSettingsStatus,
   CredentialsApi, CredentialView, ConfigurableProviderView, DiscoveredModelView, LlmApi,
   AuthorizationAccountView, AuthorizationApi, AuthorizationAttemptView, AuthorizationEntryView,
   AuthorizationNoticeView, AuthorizationPromptView,

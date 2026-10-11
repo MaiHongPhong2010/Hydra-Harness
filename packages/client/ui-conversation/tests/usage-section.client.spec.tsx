@@ -60,6 +60,7 @@ describe('UsageSection', () => {
     const unusedHook = (() => { throw new Error('unused') }) as never
     render(<UsageSection
       close={() => {}}
+      openSection={vi.fn()}
       refresh={async () => {}}
       useSessions={bindSnapshotSelector(list)}
       useWorkspaces={unusedHook}
@@ -91,6 +92,7 @@ describe('UsageSection', () => {
     const unusedHook = (() => { throw new Error('unused') }) as never
     render(<UsageSection
       close={() => {}}
+      openSection={vi.fn()}
       refresh={refresh}
       useSessions={bindSnapshotSelector(list)}
       useWorkspaces={unusedHook}

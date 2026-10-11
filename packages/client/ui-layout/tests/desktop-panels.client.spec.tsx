@@ -294,15 +294,15 @@ describe('DesktopTerminalPanel', () => {
     window.hydraDesktop = { browser: { setBounds: vi.fn() }, terminal: api }
 
     const view = render(<DesktopTerminalPanel onEmpty={() => {}} onNewTerminal={() => {}} open terminalId="right-4" embedded />)
-    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right-4', expect.any(Object), undefined) })
+    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right-4', expect.any(Object), undefined, undefined) })
 
     const splitBtn = view.getByRole('button', { name: 'Split Terminal' })
     fireEvent.click(splitBtn)
-    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right-4-2', expect.any(Object), undefined) })
+    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right-4-2', expect.any(Object), undefined, undefined) })
 
     const splitBtns = view.getAllByRole('button', { name: 'Split Terminal' })
     fireEvent.click(splitBtns[0]!)
-    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right-4-3', expect.any(Object), undefined) })
+    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right-4-3', expect.any(Object), undefined, undefined) })
 
     // Kill the second pane (right-4-2)
     const killBtns = view.getAllByRole('button', { name: /Kill/ })
@@ -314,7 +314,7 @@ describe('DesktopTerminalPanel', () => {
     // Split again should generate next monotonic ID right-4-4 without colliding with right-4-3
     const remainingSplitBtns = view.getAllByRole('button', { name: 'Split Terminal' })
     fireEvent.click(remainingSplitBtns[0]!)
-    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right-4-4', expect.any(Object), undefined) })
+    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right-4-4', expect.any(Object), undefined, undefined) })
 
     // Unmounting cleans up all open split panes
     view.unmount()
@@ -334,11 +334,11 @@ describe('DesktopTerminalPanel', () => {
     window.hydraDesktop = { browser: { setBounds: vi.fn() }, terminal: api }
 
     const view = render(<DesktopTerminalPanel onEmpty={() => {}} onNewTerminal={() => {}} open terminalId="right" embedded />)
-    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right', expect.any(Object), undefined) })
+    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right', expect.any(Object), undefined, undefined) })
 
     const splitBtn = view.getByRole('button', { name: 'Split Terminal' })
     fireEvent.click(splitBtn)
-    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right-1-2', expect.any(Object), undefined) })
+    await waitFor(() => { expect(api.start).toHaveBeenCalledWith('right-1-2', expect.any(Object), undefined, undefined) })
   })
 
   it('supports quoting selected terminal text into chat session', async () => {

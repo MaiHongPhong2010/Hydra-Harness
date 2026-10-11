@@ -21,9 +21,18 @@ export const DEFAULT_BUSY_ENTER_BEHAVIOR: BusyEnterBehavior = 'queue'
 export interface ConversationSettings {
   /** Delivery mode for plain Enter while the addressed agent is busy. */
   busyEnter: BusyEnterBehavior
+  /** Whether composing shows literal text without reference decoration. */
+  plainText?: boolean
+  /** Whether the composer shows estimated context occupancy. */
+  showContextUsage?: boolean
+  /** Primary keyboard shortcut for sending a message. */
+  sendShortcut?: 'enter' | 'mod-enter'
 }
 
 /** Durable conversation schema; also the wire envelope the browser scope validates against. */
 export const ConversationSettingsSchema: z<ConversationSettings> = z.object({
   [BUSY_ENTER_FIELD]: z.union([...BUSY_ENTER_BEHAVIORS]).default(DEFAULT_BUSY_ENTER_BEHAVIOR),
+  plainText: z.boolean().default(false),
+  showContextUsage: z.boolean().default(true),
+  sendShortcut: z.union(['enter', 'mod-enter']).default('enter'),
 })

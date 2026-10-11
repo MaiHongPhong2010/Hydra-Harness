@@ -4,7 +4,9 @@
     "rootDir": "src",
     "outDir": "lib/types"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
     {
       "path": "../../../vendor/cosmokit"
@@ -22,6 +24,9 @@
       "path": "../../core/tools"
     },
     {
+      "path": "../../core/scope"
+    },
+    {
       "path": "../../subprocess/subprocess"
     },
     {
@@ -29,6 +34,9 @@
     },
     {
       "path": "../../util/timeout"
+    },
+    {
+      "path": "../../interaction/suggested-prompts"
     }
   ]
 }

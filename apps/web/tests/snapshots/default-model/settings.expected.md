@@ -1,0 +1,83 @@
+- dialog "Settings":
+  - navigation:
+    - text: Settings
+    - searchbox "Search settings"
+    - button "General":
+      - img
+      - text: General
+    - button "Personalization":
+      - img
+      - text: Personalization
+    - button "Models":
+      - img
+      - text: Models
+    - button "Accounts":
+      - img
+      - text: Accounts
+    - button "Web Search":
+      - img
+      - text: Web Search
+    - button "Usage"
+    - button "Plugins":
+      - img
+      - text: Plugins
+    - button "Agent presets":
+      - img
+      - text: Agent presets
+    - button "Archived sessions":
+      - img
+      - text: Archived sessions
+  - button "Open configuration file"
+  - button "Close":
+    - img
+    - text: Close
+  - heading "Models" [level=2]
+  - paragraph: Configure providers, API keys, model catalogs, and default models.
+  - region "Default model":
+    - text: Default model
+    - combobox "Default model"
+    - paragraph: Used by new chats. Existing chats keep their selected model.
+    - status: Default model saved. Applies to new chats.
+  - region "Image and video generation":
+    - heading "Image and video generation" [level=3]
+    - button "Refresh models"
+    - paragraph: Choose models marked Image or Video, grouped by provider. Fetch and save a provider's models to add them here. Generation requires a connected provider that supports the selected task.
+    - text: Image model
+    - combobox "Image model":
+      - option "Automatic fallback" [selected]
+    - text: Video model
+    - combobox "Video model":
+      - option "Automatic fallback" [selected]
+  - region "Decision model":
+    - heading "Decision model" [level=3]
+    - text: Decision model
+    - combobox "Decision model" [disabled]:
+      - option "Off" [selected]
+    - paragraph: Enable the Jev group in Plugins to use browser decisions.
+    - button "Manage plugins"
+  - region "API keys":
+    - heading "API keys" [level=3]
+    - paragraph: Configure provider API keys and optional fallback keys.
+    - list:
+      - listitem:
+        - text: Origin Gateway Custom
+        - button "Edit Origin Gateway (origin-gateway)": Edit
+        - button "Delete Origin Gateway (origin-gateway)": Delete
+      - listitem:
+        - text: Acme Gateway Custom
+        - button "Edit Acme Gateway (acme-gateway)": Edit
+        - button "Delete Acme Gateway (acme-gateway)": Delete
+    - button "Add provider":
+      - img
+      - text: Add provider
+    - button "Add a custom provider":
+      - img
+      - text: Add a custom provider
+  - region "Account-backed models":
+    - heading "Account-backed models" [level=3]
+    - paragraph: Configure catalogs for providers that use connected accounts. Manage sign-in and usage in Accounts.
+    - button "Manage accounts"
+    - list
+    - button "Add provider":
+      - img
+      - text: Add provider

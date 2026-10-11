@@ -7,7 +7,7 @@ The plugin config requires `{ provider, model }`. That composition entry is the 
 - `ctx.agentDefaultModel.currentSelection()` returns a detached `{ provider, model, reasoningEffort? }` selection for a newly created Agent.
 - `ctx.agentDefaultModel.saveSelection(selection)` saves the complete user selection. Without a settings provider it is a no-op and the composition entry remains current.
 
-The service does not validate catalog membership. A provider route may serve an unadvertised model, and the consumer that actually opens a model request owns availability diagnostics.
+Settings → Models → Default model and the composer write this same namespace. The default is global across workspaces; project settings files cannot store this namespace. The service does not validate catalog membership. A provider route may serve an unadvertised model, and the consumer that actually opens a model request owns availability diagnostics.
 
 ## Model Experience
 

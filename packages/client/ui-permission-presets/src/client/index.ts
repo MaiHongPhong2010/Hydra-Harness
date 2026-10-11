@@ -22,6 +22,7 @@ import type {} from '@hydraharness/harness-client-ui-settings/client'
 // (the settings invalidation rides the allowlist) into this program.
 import type {} from '@hydraharness/harness-api-remotes/client'
 import type { ClientContext, SessionFace } from '@hydraharness/harness-client-runtime/client'
+import { createSnapshotStore } from '@hydraharness/harness-client-runtime/client'
 import type { CommandUiContract, SelectOption } from '@hydraharness/harness-client-ui-commands/client'
 import type { ClientSessionContext } from '@hydraharness/harness-client-ui-input-trigger/client'
 import type { PermissionSelect } from '@hydraharness/harness-permission-presets/client'
@@ -104,24 +105,56 @@ export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
   // The row follows the shared describe mirror, whose owning plugin already
   // refreshes it on document commits and reconnects.
-  const controller = new PermissionPresetSettingsController(
-    ctx.settingsScope.describe(), connection.api, ctx.settingsSchema)
+  const selection = ctx.settingsScope.selection()
+  const controllers = new Map<string, PermissionPresetSettingsController>()
+  const addressed = () => {
+    const { target } = selection.getSnapshot()
+    const key = `${target.workspaceId ?? 'global'}:${target.layer ?? ''}`
+    let controller = controllers.get(key)
+    if (controller === undefined) {
+      controller = new PermissionPresetSettingsController(ctx.settingsScope.describe(target), connection.api, ctx.settingsSchema)
+      controllers.set(key, controller)
+    }
+    return controller
+  }
+  let controller = addressed()
+  const permission = createSnapshotStore(controller.store.getSnapshot())
+  let stop = controller.store.subscribe(() => { permission.set(controller.store.getSnapshot()) })
+  ctx.effect(() => {
+    const stopSelection = selection.subscribe(() => {
+      const next = addressed()
+      if (next === controller) return
+      stop()
+      controller = next
+      permission.set(controller.store.getSnapshot())
+      stop = controller.store.subscribe(() => { permission.set(controller.store.getSnapshot()) })
+    })
+    return () => { stop(); stopSelection(); for (const item of controllers.values()) item.dispose() }
+  }, 'ui-permission: addressed settings forms')
   const load = (): Promise<void> => controller.load()
   const select = (preset: string): Promise<void> => controller.select(preset)
   const injected = (): PermissionRowInjected => ({
-    hooks: { permission: controller.store },
+    hooks: { permission },
     load,
     select,
+    reset: () => controller.reset(),
   })
 
   ctx.effect(() => () => { controller.dispose() }, 'ui-permission: settings row directory')
 
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
+  ctx.slots.inject('settings.general.permissions.item', () => ctx.slots.register({
+    name: 'settings.general.permissions.item',
     id: 'permission',
+    label: () => ctx.locale.bind('settings.permission')('title'),
     order: -20,
     locale: 'settings.permission',
     inject: injected,
+  }, PermissionRow))
+
+  ctx.slots.inject('settings.general.permissions.item', () => ctx.slots.register({
+    name: 'settings.general.permissions.item', id: 'full-access', order: -19,
+    label: () => ctx.locale.bind('settings.permission')('full.title'),
+    locale: 'settings.permission', inject: () => ({ ...injected(), fullAccess: true }),
   }, PermissionRow))
 
   ctx.effect(() => command.decorate({

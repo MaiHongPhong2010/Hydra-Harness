@@ -182,7 +182,8 @@ describe.skipIf(webSnapshotMode() === 'record').each(['OpenAI', 'Google', 'OpenA
       await settings.getByRole('button', { name: 'Edit ChatGPT (chatgpt)', exact: true }).click()
       await settings.getByText('Customized settings', { exact: true }).click()
       await settings.getByText(/Codex Fetch combines/).waitFor()
-      await settings.getByText('Usage unavailable from provider', { exact: true }).waitFor()
+      expect(await settings.getByText('Usage unavailable from provider', { exact: true }).count()).toBe(0)
+      expect(await settings.getByRole('button', { name: 'Add account', exact: true }).count()).toBe(0)
       await settings.getByRole('button', { name: 'Get all', exact: true }).click()
       await settings.getByLabel('Model ID 3', { exact: true }).waitFor()
       for (const [index, id] of ['chat-fixture', 'gpt-image-1.5', 'gpt-image-2'].entries()) {

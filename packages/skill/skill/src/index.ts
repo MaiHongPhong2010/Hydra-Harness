@@ -10,6 +10,7 @@
  * @module @hydraharness/harness-skill
  */
 
+import type {} from '@hydraharness/harness-optional-plugins'
 import { Context, Service } from '@hydraharness/cordis'
 import { assertNever } from '@hydraharness/harness-llm'
 import { NamedEntries, ScopedLayers, scopeChainOf, scopeOf } from '@hydraharness/harness-scope'
@@ -360,6 +361,9 @@ export class SkillRegistry extends Service {
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'skills')
+    ctx.inject(['optionalPlugins'], (pctx) => {
+      pctx.effect(() => pctx.optionalPlugins.subscribe(() => { this.invalidateCache() }), 'skills: optional policy')
+    })
     this.collectCacheMaxEntries = config.collectCacheMaxEntries ?? DEFAULT_COLLECT_CACHE_ENTRIES
     assertPositiveInteger('collectCacheMaxEntries', this.collectCacheMaxEntries)
   }
@@ -467,16 +471,20 @@ export class SkillRegistry extends Service {
    * @returns sorted summaries plus discovery-completeness state.
    */
   async snapshot(options: SkillViewOptions = {}): Promise<SkillCatalogSnapshot> {
-    const collected = await this.collect(options)
-    return {
-      skills: [...collected.entries]
-        .map(([name, entry]) => ({
-          ...toSummary(entry.candidate), name,
-          ...name === entry.candidate.name ? {} : { aliasFor: entry.candidate.name },
-        }))
-        .sort(compareSkillSummary),
-      complete: collected.cacheable,
-    }
+    if (this.ctx.get('optionalPlugins')?.enabled === false) return { skills: [], complete: true }
+    const release = this.ctx.get('optionalPlugins')?.acquire()
+    try {
+      const collected = await this.collect(options)
+      return {
+        skills: [...collected.entries]
+          .map(([name, entry]) => ({
+            ...toSummary(entry.candidate), name,
+            ...name === entry.candidate.name ? {} : { aliasFor: entry.candidate.name },
+          }))
+          .sort(compareSkillSummary),
+        complete: collected.cacheable,
+      }
+    } finally { release?.() }
   }
 
   /**
@@ -489,22 +497,26 @@ export class SkillRegistry extends Service {
    * @returns the full skill, including body content, or `undefined`.
    */
   async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition | undefined> {
-    if (!isSkillName(name)) return undefined
-    const collected = await this.collect(options)
-    throwIfAborted(options.signal)
-    const match = collected.entries.get(name)
-    if (match === undefined) return undefined
-    const definition = await waitWithAbort(
-      match.provider.get(match.candidate, options),
-      options.signal,
-    )
-    if (definition === undefined) return undefined
-    validateDefinition(definition)
-    if (definition.name !== match.candidate.name) {
-      this.invalidateEntry(match)
-      return undefined
-    }
-    return name === definition.name ? definition : { ...definition, name }
+    if (this.ctx.get('optionalPlugins')?.enabled === false) return undefined
+    const release = this.ctx.get('optionalPlugins')?.acquire()
+    try {
+      if (!isSkillName(name)) return undefined
+      const collected = await this.collect(options)
+      throwIfAborted(options.signal)
+      const match = collected.entries.get(name)
+      if (match === undefined) return undefined
+      const definition = await waitWithAbort(
+        match.provider.get(match.candidate, options),
+        options.signal,
+      )
+      if (definition === undefined) return undefined
+      validateDefinition(definition)
+      if (definition.name !== match.candidate.name) {
+        this.invalidateEntry(match)
+        return undefined
+      }
+      return name === definition.name ? definition : { ...definition, name }
+    } finally { release?.() }
   }
 
   private async collect(options: SkillViewOptions): Promise<CollectResult> {

@@ -13,7 +13,15 @@
     "src/types.ts"
   ],
   "references": [
-    { "path": "../../fs/fs-review" },
+    {
+      "path": "../../interaction/notifications"
+    },
+    {
+      "path": "../../workspace/workspace-config"
+    },
+    {
+      "path": "../../fs/fs-review"
+    },
     {
       "path": "../../../vendor/cordis"
     },
@@ -58,6 +66,9 @@
     },
     {
       "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../interaction/toys"
     }
   ]
 }

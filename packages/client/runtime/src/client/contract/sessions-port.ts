@@ -37,7 +37,9 @@ export interface SessionsPort {
    * @returns the created or adopted session id.
    */
   create(opts: {
-    workspaceId: WorkspaceId
+    workspaceId?: WorkspaceId
+    /** Allocate a task directory for a new chat outside projects. */
+    projectless?: true
     sessionId?: SessionId
     reuseWorkspaceBlank?: true
     /**

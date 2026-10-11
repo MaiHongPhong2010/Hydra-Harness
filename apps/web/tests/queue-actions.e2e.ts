@@ -203,9 +203,10 @@ describe('web e2e: queue row actions', () => {
     await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
     await page.locator('[data-goal-bar]').waitFor({ timeout: 10_000 })
 
-    const sessions = scaffold.ctx.sessions.list()
-    expect(sessions).toHaveLength(1)
-    sessions[0]!.append('todo/write', {
+    const projectCwd = join(scaffold.workspaceCwd, 'workspace')
+    const agent = scaffold.ctx.agents.roots().find(root => root.session.header.cwd === projectCwd)
+    expect(agent).toBeDefined()
+    agent!.session.append('todo/write', {
       todos: [
         { content: 'Confirm the panel order', status: 'completed' },
         { content: 'Align the panel widths', status: 'in_progress' },

@@ -42,7 +42,7 @@ async function bench(): Promise<{ ctx: Context; fiber: ReturnType<Context['plugi
   // These specs assert the shipped English copy. There is no jsdom `window` in
   // this lane, so browser-language detection never runs and the locale comes
   // from FALLBACK_LOCALE (en): state the asserted locale explicitly.
-  ctx.locale.setLocale('en')
+  await ctx.locale.setLocale('en')
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   return { ctx, fiber }

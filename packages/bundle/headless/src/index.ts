@@ -8,12 +8,16 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import assert from 'node:assert/strict'
 import type { Context } from '@hydraharness/cordis'
 import z from '@hydraharness/schemastery'
 import { installModelSelection } from '@hydraharness/harness-agent'
 import type { ModelSelectionRef } from '@hydraharness/harness-agent'
 import type {} from '@hydraharness/harness-agent-default-model'
 import { createUserMessage } from '@hydraharness/harness-llm'
+import { bindScopeParent, scopeOf } from '@hydraharness/harness-scope'
+import type {} from '@hydraharness/harness-agent-presets'
+import type {} from '@hydraharness/harness-workspace-config'
 import { SessionId } from '@hydraharness/harness-session'
 import type { SessionEvent } from '@hydraharness/harness-session'
 // Empty type imports carry the loader Context merge for the settlement await
@@ -103,16 +107,22 @@ async function run(ctx: Context, task: string, io: HeadlessIo): Promise<void> {
   // Early process shutdown can dispose the tree while settlement is pending.
   if (agents === undefined || defaultModel === undefined || sessions === undefined) return
 
+  const cwd = process.cwd()
+  const environment = await ctx.get('workspaceConfig')?.environment(cwd)
   const selection = defaultModel.currentSelection()
-  // This bundle composes no preset roster, so the model-facing rows sit in the
-  // host plane and the agent reads them from the global layer. A deployment
-  // that DOES configure one has to join it here first
-  // (@hydraharness/harness-agent-presets README, "Composing a child agent").
+  const presets = environment?.presets ?? ctx.get('agentPresets')
+  const presetId = presets?.defaultId
   const { agent } = await agents.create({
     sessionId: SessionId(`session-${randomUUID()}`),
-    meta: { cwd: process.cwd() },
+    meta: { cwd, ...presetId === undefined ? {} : { agentPreset: presetId } },
     agentOptions: { provider: selection.provider, model: selection.model },
-    setup: (agentCtx) => {
+    setup: async (agentCtx) => {
+      if (presets !== undefined) await presets.mount(agentCtx, presetId)
+      else if (environment !== undefined) {
+        const agentScope = scopeOf(agentCtx)
+        assert(agentScope !== undefined, 'headless workspace setup requires an agent scope')
+        bindScopeParent(agentScope, environment.scopeKey)
+      }
       const selected: ModelSelectionRef = { current: selection, assembled: undefined }
       installModelSelection(agentCtx, selected)
     },

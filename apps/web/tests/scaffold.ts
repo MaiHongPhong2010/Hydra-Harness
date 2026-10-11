@@ -30,6 +30,7 @@ import { pathToFileURL } from 'node:url'
 import type { Page } from 'playwright'
 import { expect } from 'vitest'
 import { Context } from '@hydraharness/cordis'
+import { writeFileAtomic } from '@hydraharness/harness-atomic-write'
 import Loader from '@hydraharness/cordis-plugin-loader'
 import Include, { type PatchOptions } from '@hydraharness/cordis-plugin-include'
 import Group from '@hydraharness/cordis-plugin-group'
@@ -81,7 +82,7 @@ export const WELCOME_NOTICE_VERSION = '2026-08-13.1'
 export const WELCOME_NOTICE_COPY = {
   en: {
     title: 'Internal Testing Notice',
-    body: "Hydra harness 0.1 remains in testing for Harness developers. Many areas need further improvement, and we welcome feedback from the developer community. Hydra harness's core plugins and foundational APIs will continue to evolve rapidly over the coming months.\n\nWe look forward to exploring the limits of intelligence with developers around the world, building on open-source, open, reusable, and composable infrastructure. We welcome Harness developers everywhere to join the Hydra plugin ecosystem.",
+    body: "Hydra harness 0.1.1-rc.9 remains in testing for Harness developers. Many areas need further improvement, and we welcome feedback from the developer community. Hydra harness's core plugins and foundational APIs will continue to evolve rapidly over the coming months.\n\nWe look forward to exploring the limits of intelligence with developers around the world, building on open-source, open, reusable, and composable infrastructure. We welcome Harness developers everywhere to join the Hydra plugin ecosystem.",
     continueLabel: 'Continue',
   },
 } as const
@@ -575,6 +576,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     })
     await ctx.loader.await()
     assertEntriesLoaded(ctx, 'web e2e scaffold')
+    await ctx.settings.update(settingsNamespace('projectless-tasks'), { root: join(workspaceCwd, 'projectless-tasks') })
     if (options.welcomeNoticePending !== true) {
       await ctx.settings.mutate(settingsNamespace(WELCOME_NOTICE_SETTINGS_NAMESPACE), [{
         op: 'set', path: [WELCOME_NOTICE_ACK_FIELD], value: WELCOME_NOTICE_VERSION,
@@ -972,7 +974,7 @@ export async function captureStableAria(page: Page, selector: string, workspaceC
 }
 
 /**
- * Compare a normalized golden, or rewrite it under refresh. Refresh is the
+ * Compare a normalized golden, or replace it atomically under refresh. Refresh is the
  * ONLY writer: a missing golden in replay mode fails with the healing command
  * instead of silently self-bootstrapping.
  * @param goldenPath - the committed ui.expected.md path.
@@ -982,7 +984,7 @@ export async function captureStableAria(page: Page, selector: string, workspaceC
 export async function compareOrRefreshGolden(goldenPath: string, actual: string, mode: WebSnapshotMode): Promise<void> {
   const payload = `${actual}\n`
   if (mode === 'refresh') {
-    await writeFile(goldenPath, payload)
+    await writeFileAtomic(goldenPath, payload, { mode: 0o644 })
     return
   }
   if (!existsSync(goldenPath)) {

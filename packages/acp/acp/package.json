@@ -38,22 +38,30 @@
   "peerDependencies": {
     "@hydraharness/harness-attachment": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
+    "@hydraharness/harness-agent-default-model": "workspace:^",
+    "@hydraharness/harness-agent-presets": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-llm": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
     "@hydraharness/harness-session": "workspace:^",
     "@hydraharness/harness-user-approval": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/cordis": "workspace:^"
   },
   "devDependencies": {
     "@hydraharness/harness-attachment": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
+    "@hydraharness/harness-agent-default-model": "workspace:^",
+    "@hydraharness/harness-agent-presets": "workspace:^",
     "@hydraharness/harness-agent-loop": "workspace:^",
     "@hydraharness/harness-agent-loop-testkit": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-llm": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
     "@hydraharness/harness-session": "workspace:^",
     "@hydraharness/harness-tools": "workspace:^",
     "@hydraharness/harness-user-approval": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/cordis": "workspace:^"
   }
 }

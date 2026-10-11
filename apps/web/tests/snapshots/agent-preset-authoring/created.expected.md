@@ -1,6 +1,7 @@
 - dialog "Settings":
   - navigation:
     - text: Settings
+    - searchbox "Search settings"
     - button "General":
       - img
       - text: General
@@ -10,6 +11,9 @@
     - button "Models":
       - img
       - text: Models
+    - button "Accounts":
+      - img
+      - text: Accounts
     - button "Web Search":
       - img
       - text: Web Search

@@ -10,12 +10,17 @@ File-backed settings provider. One YAML or JSON document carries every namespace
 | `hydraHome` | Harness home used when `path` is omitted | `$HYDRA_HOME` or `~/.hydra` |
 | `watch` | Watch the document and hot-publish external edits | `true` |
 | `debounceMs` | Watcher write-settle window in milliseconds | `100` |
+| `allowedNamespaces` | Namespace names permitted in this document; an empty list forbids all | Every namespace |
+| `layerEnabled` | Include raw sections in resolved reads; stored sections remain editable | `true` |
+| `confinedRoot` | Canonical workspace root containing document access; linked files and escaping ancestors reject | Unrestricted |
 
 Defaulting is one explicit `resolveSpec(config)` step; an unsupported extension fails at load.
 
 ## Behavior
 
 - **Boot fails loud, reload keeps last-good.** An existing-but-invalid document fails plugin load; once live, an unreadable or unparsable edit warns and keeps the last good sections. A missing document resolves every namespace from defaults and `base`; deleting it publishes the same empty state.
+- **Restricted documents reject unsupported namespaces.** The restriction applies at initial load, external reload, lock reconciliation and persistence, including when `layerEnabled` is false. An unsupported external section keeps the last good document and cannot be overwritten by an in-process edit. `setLayerEnabled()` changes effective resolution without changing or hiding stored overrides; inherited namespace values remain the lower layer.
+- **Workspace access checks the current filesystem.** When `confinedRoot` is set, each load, reload, preparation and write checks the canonical document path before accessing it. A changed symlink or junction cannot redirect those operations outside the supplied canonical root; an existing document must be a regular file.
 - **Every write derives from the current file.** Under the writer lock, the provider reads and publishes any unseen document change before checking `expectedRevision`, applying `update`/`mutate` edits, and validating the resolved candidate. Editing a sibling field cannot restore a deleted provider from an old cache. A stale revision rejects without writing; an unversioned `replace` deliberately replaces the complete section. An invalid on-disk document rejects the write instead of being overwritten.
 - **Writes hold a cross-process writer lock.** Reading, validation, rename, and in-memory commit run under a `wx`-created `<file>.lock` sibling with exponential backoff and a 2 s acquisition deadline. A contender times out without removing the existing lock because age cannot distinguish a crashed owner from a paused live writer; orphan recovery is an operator action. Readers never take the lock: the rename commit is atomic, so reloads are always consistent.
 - **Write-back is atomic, owner-only, and symlink-proof.** The render exclusive-creates a random-suffix temp sibling with mode `0600` (`wx` refuses to follow a planted symlink) and renames over the target, cleaning the temp up on failure.

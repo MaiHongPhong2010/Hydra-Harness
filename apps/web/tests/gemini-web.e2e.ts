@@ -107,8 +107,8 @@ describe.each(['image', 'video', 'retrieve', 'error', 'reference', 'refusal'] as
   it('selects media, displays durable attachments or a recoverable job error, and survives reload/export', async () => {
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Settings' })
-    await dialog.getByRole('button', { name: 'Models', exact: true }).click()
-    await dialog.getByRole('button', { name: 'Edit Gemini Web (gemini-web)', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Accounts', exact: true }).click()
+    await dialog.getByLabel('Provider', { exact: true }).selectOption('llm-account-auth/gemini-web')
     const docs = dialog.getByRole('link', { name: 'Read the full cookie-copy guide', exact: true })
     expect(await docs.getAttribute('href')).toBe('https://maihongphong1902.github.io/Hydra-Harness/guide/providers#import-gemini-web-cookies')
     if (scenario === 'image') {
@@ -144,8 +144,8 @@ describe.each(['image', 'video', 'retrieve', 'error', 'reference', 'refusal'] as
       for (const theme of ['Light', 'Dark']) {
         await dialog.getByRole('button', { name: 'General', exact: true }).click()
         await dialog.getByRole('button', { name: theme, exact: true }).click()
-        await dialog.getByRole('button', { name: 'Models', exact: true }).click()
-        await dialog.getByRole('button', { name: 'Edit Gemini Web (gemini-web)', exact: true }).click()
+        await dialog.getByRole('button', { name: 'Accounts', exact: true }).click()
+        await dialog.getByLabel('Provider', { exact: true }).selectOption('llm-account-auth/gemini-web')
         await dialog.getByRole('combobox', { name: 'Sign-in method' }).selectOption('cookies')
         await dialog.getByRole('button', { name: 'Import Cookies', exact: true }).click()
         await secret.waitFor()
@@ -168,7 +168,7 @@ describe.each(['image', 'video', 'retrieve', 'error', 'reference', 'refusal'] as
           secure: true, httpOnly: true, hostOnly: false, session: true, sameSite: null, storeId: null }])) })
       await expect.poll(() => secret.inputValue()).toContain('import-fixture-cookie')
       await dialog.getByRole('button', { name: 'Continue', exact: true }).click()
-      await dialog.getByText('Account connected. Apply to save provider settings.', { exact: true }).waitFor()
+      await dialog.getByText('Account connected. Configure or enable this provider in Models.', { exact: true }).waitFor()
       expect(calls.filter(call => call === 'submit')).toHaveLength(0)
     }
     await dialog.getByText('fixture@example.test', { exact: true }).waitFor()
@@ -191,13 +191,13 @@ describe.each(['image', 'video', 'retrieve', 'error', 'reference', 'refusal'] as
       expect(output).not.toMatch(/expired-fixture-cookie|import-fixture-cookie/)
       await compareOrRefreshGolden(join(DIR, 'import-expired.expected.md'), output, webSnapshotMode())
       denyBootstrap = false
-      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
-      await dialog.getByRole('button', { name: 'Edit Gemini Web (gemini-web)', exact: true }).click()
     }
+    await dialog.getByRole('button', { name: 'Manage models', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Edit Gemini Web (gemini-web)', exact: true }).click()
     await dialog.getByText('Customized settings', { exact: true }).click()
     await dialog.getByRole('button', { name: 'Get all', exact: true }).click()
     await expect.poll(() => dialog.getByRole('textbox', { name: 'Model ID 1', exact: true }).inputValue()).toBe('gemini-web-image')
-    await dialog.getByRole('button', { name: 'Apply', exact: true }).click()
+    await dialog.getByRole('region', { name: 'Account-backed models', exact: true }).getByRole('button', { name: 'Apply', exact: true }).click()
     await dialog.getByRole('button', { name: 'Edit Gemini Web (gemini-web)', exact: true }).waitFor()
     await dialog.getByLabel('Image model', { exact: true }).selectOption(JSON.stringify(['gemini-web', 'gemini-web-image']))
     await dialog.getByLabel('Video model', { exact: true }).selectOption(JSON.stringify(['gemini-web', 'gemini-web-video']))

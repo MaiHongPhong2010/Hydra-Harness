@@ -108,7 +108,7 @@ async function bench() {
   // This spec asserts the shipped English copy. There is no jsdom `window` in
   // this lane, so browser-language detection never runs and the locale comes
   // from FALLBACK_LOCALE (en): state the asserted locale explicitly.
-  localeRuntime.setLocale('en')
+  await localeRuntime.setLocale('en')
   ctx.provide('locale', localeRuntime)
   const scopes = new Map<SessionId, Context>()
   const addressed = new Set<SessionId>()

@@ -8,6 +8,8 @@
     "src"
   ],
   "references": [
+    { "path": "../../util/home-paths" },
+    { "path": "../../settings/settings" },
     {
       "path": "../../../vendor/cosmokit"
     },

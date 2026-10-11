@@ -6,6 +6,18 @@
 - id: sdk-jsonrpc-server
   name: '@hydraharness/harness-sdk-jsonrpc-server'
 
+- id: agent-default-model
+  name: '@hydraharness/harness-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash
+
+- id: settings
+  name: '@hydraharness/harness-settings-file'
+
+- id: workspace-config
+  name: '@hydraharness/harness-workspace-config'
+
 # Agent spine; the SDK server creates agents per sessionId.
 - id: agent-core
   name: '@hydraharness/harness-agent-spine-demo'

@@ -7,9 +7,9 @@ import {
   createSnapshotStore, type SettingsScope, type SnapshotStore,
 } from '@hydraharness/harness-client-runtime/client'
 import type {
-  BusyEnterBehavior, ComposerSubmitGesture, InputSubmitMode,
+  ComposerSubmitGesture, InputSubmitMode,
 } from '../contract/composer-submission.ts'
-import { BUSY_ENTER_FIELD, DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
+import { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
 import type { ConversationSettings } from '../../submission-settings.ts'
 
 export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
@@ -20,8 +20,12 @@ export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
  * submission into the next waking Queue item.
  */
 export class ComposerSubmissionPolicy {
-  /** Reactive preference source for the Settings row. */
-  readonly busyEnter: SnapshotStore<BusyEnterBehavior> = createSnapshotStore(DEFAULT_BUSY_ENTER_BEHAVIOR)
+  /** Accepted composition preferences. */
+  readonly preferences: SnapshotStore<Required<ConversationSettings>> = createSnapshotStore({
+    busyEnter: DEFAULT_BUSY_ENTER_BEHAVIOR, plainText: false, showContextUsage: true, sendShortcut: 'enter',
+  })
+  /** Whether the settings provider currently accepts writes. */
+  readonly writable: SnapshotStore<boolean> = createSnapshotStore(false)
   private readonly host: SettingsScope<ConversationSettings> | undefined
 
   /**
@@ -51,20 +55,23 @@ export class ComposerSubmissionPolicy {
     steeringAvailable: boolean,
   ): InputSubmitMode {
     if (!running || !steeringAvailable) return 'queue'
-    const preferred = this.busyEnter.getSnapshot()
-    if (gesture === 'enter') return preferred
-    return preferred === 'queue' ? 'steer' : 'queue'
+    const preferred = this.preferences.getSnapshot().busyEnter
+    const opposite = gesture === 'alternate'
+      || (gesture === 'accelerated' && this.preferences.getSnapshot().sendShortcut === 'enter')
+    return opposite ? (preferred === 'queue' ? 'steer' : 'queue') : preferred
   }
 
   /**
-   * Change the plain-Enter behavior used during busy state; the live value
-   * publishes before the durable write starts.
-   * @param behavior - Queue or Steer.
+   * Save one preference and publish only the Host-acknowledged value.
+   * @param field - conversation preference field.
+   * @param value - schema-valid value selected by the user.
+   * @returns settlement; rejects if the Host did not accept the selected value.
    */
-  setBusyEnter(behavior: BusyEnterBehavior): void {
-    if (this.busyEnter.getSnapshot() === behavior) return
-    this.busyEnter.set(behavior)
-    void this.host?.set(BUSY_ENTER_FIELD, behavior)
+  async save(field: keyof ConversationSettings, value: ConversationSettings[keyof ConversationSettings]): Promise<void> {
+    if (this.host === undefined) throw new Error('Settings are unavailable')
+    if (!this.host.getSnapshot().writable) throw new Error('Settings are read only')
+    await this.host.set(field, value)
+    if (this.host.getSnapshot().value?.[field] !== value) throw new Error('Could not save this setting. Try again.')
   }
 
   /**
@@ -72,8 +79,19 @@ export class ComposerSubmissionPolicy {
    * @param host - the constructor-narrowed scope driving this adoption.
    */
   private adopt(host: SettingsScope<ConversationSettings>): void {
-    const section = host.getSnapshot().value
-    if (section === undefined || this.busyEnter.getSnapshot() === section.busyEnter) return
-    this.busyEnter.set(section.busyEnter)
+    const snapshot = host.getSnapshot()
+    this.writable.set(snapshot.writable)
+    const section = snapshot.value
+    if (section === undefined) return
+    const resolved: Required<ConversationSettings> = {
+      busyEnter: section.busyEnter,
+      plainText: section.plainText ?? false,
+      showContextUsage: section.showContextUsage ?? true,
+      sendShortcut: section.sendShortcut ?? 'enter',
+    }
+    const held = this.preferences.getSnapshot()
+    if (Object.keys(resolved).some(key => resolved[key as keyof typeof resolved] !== held[key as keyof typeof held])) {
+      this.preferences.set(resolved)
+    }
   }
 }

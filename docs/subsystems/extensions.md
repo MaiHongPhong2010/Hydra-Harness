@@ -263,35 +263,47 @@ Settings-backed hook records with their live bridge mounts. Reconciliation is id
 ```ts cordis-catalog
 /**
  * Project every stored record with its live state.
+ * @param settings - optional layer whose desired records to project.
  * @returns the current record projection, in stored order.
  */
-list(): HookRecordSnapshot
+list(settings?: SettingsProvider): HookRecordSnapshot
+
+/**
+ * Reconcile the current effective settings after a layer or trust change.
+ * @returns completion after earlier queued work and the current mounts settle.
+ */
+settle(): Promise<void>
 
 /**
  * Create or replace one complete definition as requested, then
  * converge the mounted set. A definition this registry could not mount is
  * refused before anything persists.
  * @param request - complete record definition.
+ * @param settings - selected write layer; omitted uses this registry's provider.
  * @returns the refreshed projection.
  * @throws If create names an existing record or replace names a missing record.
  */
-define(request: HookRecordDefinitionRequest): Promise<HookRecordSnapshot>
+define(request: HookRecordDefinitionRequest, settings: SettingsProvider = this.owner.settings): Promise<HookRecordSnapshot>
 
 /**
  * Change one stored record's desired state.
  * @param request - target record and desired state.
+ * @param settings - selected write layer; omitted uses this registry's provider.
  * @returns the refreshed projection.
  */
-setEnabled(request: HookRecordEnablementRequest): Promise<HookRecordSnapshot>
+setEnabled(request: HookRecordEnablementRequest, settings: SettingsProvider = this.owner.settings): Promise<HookRecordSnapshot>
 
 /**
  * Remove one stored record, unmount it, and delete any document this registry
  * materialized for it.
  * @param name - stored record name.
+ * @param settings - selected write layer; omitted uses this registry's provider.
  * @returns the refreshed projection.
  */
-remove(name: string): Promise<HookRecordSnapshot>
+remove(name: string, settings: SettingsProvider = this.owner.settings): Promise<HookRecordSnapshot>
 ```
+
+Types: [SettingsProvider](settings.md)
 
 Source: [`packages/hooks/hooks-registry/src/index.ts`](../../packages/hooks/hooks-registry/src/index.ts)
 
@@ -395,36 +407,74 @@ Settings-backed MCP server records with their live `mcp-client` mounts. Reconcil
 ```ts cordis-catalog
 /**
  * Project every stored record with its live state.
+ * @param settings - optional layer whose desired records to project.
  * @returns the current record projection, in stored order.
  */
-list(): McpServerSnapshot
+list(settings?: SettingsProvider): McpServerSnapshot
+
+/**
+ * Reconcile the current effective settings after a layer or trust change.
+ * @returns completion after earlier queued work and the current mounts settle.
+ */
+settle(): Promise<void>
 
 /**
  * Create or replace one complete definition as requested, then
  * converge the mounted set. A definition this registry could not mount is
  * refused before anything persists.
  * @param request - complete server definition.
+ * @param settings - selected write layer; omitted uses this registry's provider.
  * @returns the refreshed projection.
  * @throws If create names an existing record or replace names a missing record.
  */
-define(request: McpServerDefinitionRequest): Promise<McpServerSnapshot>
+define(request: McpServerDefinitionRequest, settings: SettingsProvider = this.owner.settings): Promise<McpServerSnapshot>
 
 /**
  * Change one stored record's desired state.
  * @param request - target record and desired state.
+ * @param settings - selected write layer; omitted uses this registry's provider.
  * @returns the refreshed projection.
  */
-setEnabled(request: McpServerEnablementRequest): Promise<McpServerSnapshot>
+setEnabled(request: McpServerEnablementRequest, settings: SettingsProvider = this.owner.settings): Promise<McpServerSnapshot>
 
 /**
  * Remove one stored record and unmount it.
  * @param name - stored record name.
+ * @param settings - selected write layer; omitted uses this registry's provider.
  * @returns the refreshed projection.
  */
-remove(name: string): Promise<McpServerSnapshot>
+remove(name: string, settings: SettingsProvider = this.owner.settings): Promise<McpServerSnapshot>
 ```
 
+Types: [SettingsProvider](settings.md)
+
 Source: [`packages/mcp/mcp-registry/src/index.ts`](../../packages/mcp/mcp-registry/src/index.ts)
+
+<a id="ctxoptionalplugins--optionalpluginpolicy"></a>
+
+### `ctx.optionalPlugins` — `OptionalPluginPolicy`
+
+Immediate disablement and leases for operations that may already be running.
+
+```ts cordis-catalog
+/** Rejects new optional work while disabled and tracks work already admitted.
+ * @returns an idempotent completion lease; rejects a new operation immediately while disabled.
+ */
+acquire(): () => void
+
+/** Waits for owned work before a contribution can be removed.
+ * @returns settlement when existing optional operations finish, or the user enables plugins again.
+ */
+drain(): Promise<void>
+
+/** Observes accepted common-policy changes.
+ * @param listener - callback after an accepted policy change.
+ * @returns subscription disposer.
+ */
+subscribe(listener: (enabled: boolean) => void): () => void
+```
+
+Source: [`packages/host/optional-plugins/src/index.ts`](../../packages/host/optional-plugins/src/index.ts)
 
 <a id="cordis-events"></a>
 

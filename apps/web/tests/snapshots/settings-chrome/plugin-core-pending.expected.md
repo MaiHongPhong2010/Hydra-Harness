@@ -24,10 +24,7 @@
     - listitem:
       - code: "@hydraharness/harness-client-ui-settings-models"
     - listitem:
-      - code: "@hydraharness/harness-client-ui-settings-personalization"
-    - listitem:
       - code: "@hydraharness/harness-client-ui-settings-plugin-inventory"
     - listitem:
       - code: "@hydraharness/harness-client-ui-settings-plugins"
-  - paragraph: Changed since app start
-  - paragraph: This change will apply after restart.
+  - paragraph: Required by Hydra or another enabled plugin.

@@ -138,7 +138,7 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
 
-    const root = scaffold.ctx.agents.roots()[0]
+    const root = scaffold.ctx.agents.roots().find(agent => agent.session.header.cwd === join(scaffold.workspaceCwd, 'workspace'))
     if (root === undefined) throw new Error('fresh workspace did not publish its parent Agent')
     parent = root
     // The child's first model call claims the primary override and holds.

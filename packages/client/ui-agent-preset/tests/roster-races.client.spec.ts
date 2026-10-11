@@ -18,7 +18,8 @@ it.each(['section', 'general'] as const)('refreshes %s after a mutation overlaps
     .mockResolvedValue(roster('second'))
   const update = vi.fn().mockResolvedValue({ rpcId: 'write', result: { ok: true, value: {} } })
   const api = { agentPresets: { list }, settings: { update } } as never
-  const mirror = { ensure: async () => {}, getSnapshot: () => ({ view: { writable: true } }) } as never
+  const mirror = { ensure: async () => {}, acceptView: () => {},
+    getSnapshot: () => ({ view: { writable: true, namespaces: [] } }) } as never
   const controller = kind === 'section'
     ? new AgentPresetSectionController(api) : new AgentPresetSettingsController(api, mirror)
   await controller.load()

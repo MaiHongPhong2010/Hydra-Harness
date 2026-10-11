@@ -3,6 +3,18 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('hydraDesktop', {
+  environment: {
+    status: () => ipcRenderer.invoke('hydra-desktop:environment-status'),
+    select: value => ipcRenderer.invoke('hydra-desktop:environment-select', value),
+  },
+  preferences: {
+    openNotificationSettings: () => ipcRenderer.invoke('hydra-desktop:notification-settings'),
+    status: () => ipcRenderer.invoke('hydra-desktop:preferences-status'),
+    configure: value => ipcRenderer.invoke('hydra-desktop:preferences-configure', value),
+    openStartup: () => ipcRenderer.invoke('hydra-desktop:preferences-startup'),
+    setContext: workspaceId => { ipcRenderer.send('hydra-desktop:window-context', workspaceId) },
+    notify: value => ipcRenderer.invoke('hydra-desktop:notification', value),
+  },
   openSessionWindow: sessionId => ipcRenderer.invoke('hydra-desktop:open-session-window', { sessionId }),
   openExternal: url => ipcRenderer.invoke('hydra-desktop:open-external', { url }),
   chrome: {
@@ -42,7 +54,7 @@ contextBridge.exposeInMainWorld('hydraDesktop', {
     },
   },
   terminal: {
-    start: (terminalId, size, workspaceId) => ipcRenderer.invoke('hydra-desktop:terminal-start', { terminalId, size, workspaceId }),
+    start: (terminalId, size, workspaceId, cwd) => ipcRenderer.invoke('hydra-desktop:terminal-start', { terminalId, size, workspaceId, cwd }),
     stop: terminalId => ipcRenderer.invoke('hydra-desktop:terminal-stop', { terminalId }),
     write: (terminalId, data) => { ipcRenderer.send('hydra-desktop:terminal-write', { terminalId, data }) },
     resize: (terminalId, size) => { ipcRenderer.send('hydra-desktop:terminal-resize', { terminalId, size }) },
@@ -56,6 +68,7 @@ contextBridge.exposeInMainWorld('hydraDesktop', {
     },
   },
   files: {
+    openSystem: (path, workspaceId) => ipcRenderer.invoke('hydra-desktop:files-open-system', { path, workspaceId }),
     root: workspaceId => ipcRenderer.invoke('hydra-desktop:files-root', { workspaceId }),
     list: (path, workspaceId) => ipcRenderer.invoke('hydra-desktop:files-list', { path, workspaceId }),
     search: (query, workspaceId) => ipcRenderer.invoke('hydra-desktop:files-search', { query, workspaceId }),
@@ -76,6 +89,7 @@ contextBridge.exposeInMainWorld('hydraDesktop', {
       ipcRenderer.invoke('hydra-desktop:files-format', { path, content, workspaceId }),
   },
   panels: {
+    open: kind => ipcRenderer.invoke('hydra-desktop:panel-open', kind),
     onShortcut: listener => {
       const handler = (_event, shortcut) => { listener(shortcut) }
       ipcRenderer.on('hydra-desktop:panel-shortcut', handler)

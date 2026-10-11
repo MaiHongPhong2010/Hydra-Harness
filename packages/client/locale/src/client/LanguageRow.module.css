@@ -33,3 +33,9 @@
 .chevron {
   flex: none;
 }
+
+.description { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+@media (max-width: 720px) {
+  .row { flex-wrap: wrap; }
+  .rowText { flex-basis: 100%; padding-right: 0; }
+}

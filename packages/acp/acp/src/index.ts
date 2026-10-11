@@ -10,6 +10,7 @@
  */
 
 import type { Context } from '@hydraharness/cordis'
+import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { isAbsolute } from 'node:path'
 import { Readable, Writable } from 'node:stream'
@@ -33,7 +34,11 @@ import {
   type StopReason,
   type Stream,
 } from '@agentclientprotocol/sdk'
-import type { Agent } from '@hydraharness/harness-agent'
+import { installModelSelection, type Agent } from '@hydraharness/harness-agent'
+import type {} from '@hydraharness/harness-agent-default-model'
+import { bindScopeParent, scopeOf } from '@hydraharness/harness-scope'
+import type {} from '@hydraharness/harness-agent-presets'
+import type {} from '@hydraharness/harness-workspace-config'
 import { SessionId, type SessionEvent, type TurnEndReason } from '@hydraharness/harness-session'
 // Side-effect type import: declaration-merges the approval waterfall answered below.
 import type {} from '@hydraharness/harness-user-approval'
@@ -309,14 +314,25 @@ export function apply(ctx: Context, config: AcpConfig): void {
         assertOpen()
         validateSessionParams(params)
         const sessionId = SessionId(randomUUID())
-        // No preset composition: the ACP bundle keeps the model-facing rows in
-        // the host plane, so this agent reads them from the global layer. A
-        // deployment that configures a roster has to join one here first
-        // (@hydraharness/harness-agent-presets README, "Composing a child agent").
+        const environment = await ctx.get('workspaceConfig')?.environment(params.cwd)
+        const presets = environment?.presets ?? ctx.get('agentPresets')
+        const presetId = presets?.defaultId
+        const selection = config.provider === undefined && config.model === undefined
+          ? ctx.get('agentDefaultModel')?.currentSelection()
+          : undefined
         const handle = await agents.create({
           sessionId,
-          meta: { cwd: params.cwd },
-          agentOptions: agentOptions(config),
+          meta: { cwd: params.cwd, ...presetId === undefined ? {} : { agentPreset: presetId } },
+          agentOptions: selection === undefined ? agentOptions(config) : { provider: selection.provider, model: selection.model },
+          setup: async (agentCtx) => {
+            if (presets !== undefined) await presets.mount(agentCtx, presetId)
+            else if (environment !== undefined) {
+              const agentScope = scopeOf(agentCtx)
+              assert(agentScope !== undefined, 'ACP workspace setup requires an agent scope')
+              bindScopeParent(agentScope, environment.scopeKey)
+            }
+            if (selection !== undefined) installModelSelection(agentCtx, { current: selection, assembled: undefined })
+          },
         })
         /* v8 ignore next 4 -- a real stdio close can race an in-flight create. */
         if (closed) {

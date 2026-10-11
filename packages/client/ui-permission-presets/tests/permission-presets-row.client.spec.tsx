@@ -60,6 +60,7 @@ function mount(controller: PermissionPresetSettingsController) {
       {...runtime}
       load={() => controller.load()}
       select={preset => controller.select(preset)}
+      reset={() => controller.reset()}
       usePermission={bindSnapshotSelector(controller.store)}
       t={t}
     />,
@@ -67,6 +68,21 @@ function mount(controller: PermissionPresetSettingsController) {
 }
 
 describe('PermissionRow', () => {
+  it('requires acknowledgement when resetting an override would enable full access', async () => {
+    const inherited = { ...view('read-only'), base: { defaultPreset: 'danger-full-access' }, user: { defaultPreset: 'read-only' } }
+    const mutate = vi.fn(async (_request: unknown) => ok({ ...view('danger-full-access', 1), base: inherited.base }))
+    const controller = derivedController({ settings: {
+      describe: async () => ok({ writable: true, hasDocument: true, namespaces: [inherited] }), mutate,
+    } })
+    mount(controller)
+    await screen.findByRole('button', { name: 'Read only' })
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to inherited permission' }))
+    expect(mutate).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Enable Auto-Pilot' }))
+    await waitFor(() => { expect(mutate).toHaveBeenCalledOnce() })
+    expect(mutate.mock.calls[0]![0]).toMatchObject({ ops: [{ op: 'unset', path: ['defaultPreset'] }], applyPermissionToOpenSessions: true })
+  })
   it('loads the descriptor, opens the menu, and selects a new default', async () => {
     const mutate = vi.fn(() => Promise.resolve(ok(view('workspace-write', 1))))
     const controller = derivedController({

@@ -21,7 +21,8 @@ import type {
 } from './shell-contract.ts'
 import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
-import { GeneralSection } from './GeneralSection.tsx'
+import { GENERAL_GROUPS, GeneralSection } from './GeneralSection.tsx'
+import type { GeneralItem } from './GeneralSection.tsx'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from './SettingsDocumentAction.tsx'
 import { SettingsDocumentStore } from './settings-document-store.ts'
@@ -90,8 +91,45 @@ export function apply(ctx: ClientContext): void {
   let rows: readonly SettingsSectionRow[] = []
   let onboardingVersion = -1
   let onboardingSteps: readonly SettingsOnboardingStep[] = []
+  let generalVersion = ''
+  let generalItems: readonly GeneralItem[] = []
+  const generalSource = {
+    getSnapshot: (): readonly GeneralItem[] => {
+      const version = `${ctx.locale.getSnapshot().revision}:${GENERAL_GROUPS.map(group => ctx.slots.getVersion(group.slot)).join(':')}`
+      if (generalVersion !== version) {
+        generalVersion = version
+        generalItems = GENERAL_GROUPS.flatMap(group => ctx.slots.entries(group.slot).map(entry => ({
+          slot: group.slot,
+          id: entry.options.id ?? '',
+          label: `${t(group.title)} ${resolveSlotLabel(entry.options.label) ?? ''}`,
+          order: entry.options.order ?? 0,
+        }))).sort((a, b) => a.order - b.order)
+      }
+      return generalItems
+    },
+    subscribe: (listener: () => void) => {
+      const disposers = GENERAL_GROUPS.map(group => ctx.slots.subscribe(group.slot, listener))
+      disposers.push(ctx.locale.subscribe(listener))
+      return () => { for (const dispose of disposers) dispose() }
+    },
+  }
+  const workspaceStatus: SettingsRootInjected['workspaceStatus'] = async (workspaceId) => {
+    const response = await connection.api.settings.workspaceStatus({ workspaceId })
+    if (!response.result.ok) throw new Error(response.result.error.message)
+    return response.result.value
+  }
+  const trustWorkspace: SettingsRootInjected['trustWorkspace'] = async (workspaceId, trusted) => {
+    const response = await connection.api.settings.setWorkspaceTrust({ workspaceId, trusted })
+    if (!response.result.ok) throw new Error(response.result.error.message)
+    ctx.settingsScope.refresh(workspaceId)
+  }
   const shellInjected = (): SettingsRootInjected => ({
+    searchCopy: { label: t('search'), empty: t('search.empty') },
+    workspaceStatus,
+    trustWorkspace,
+    trustCopy: { title: t('trust.title'), description: t('trust.description'), allow: t('trust.allow'), cancel: t('trust.cancel') },
     hooks: {
+      generalItems: generalSource,
       sections: {
         getSnapshot: () => {
           const version = ctx.slots.getVersion('settings.section')
@@ -172,6 +210,14 @@ export function apply(ctx: ClientContext): void {
     order: 0,
     label: () => t('general.nav'),
     locale: NS,
-    children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
+    children: {
+      'settings.general.permissions.item': { kind: 'list', scope: 'root' },
+      'settings.general.general.item': { kind: 'list', scope: 'root' },
+      'settings.general.composer.item': { kind: 'list', scope: 'root' },
+      'settings.general.popout.item': { kind: 'list', scope: 'root' },
+      'settings.general.notifications.item': { kind: 'list', scope: 'root' },
+      'settings.general.toys.item': { kind: 'list', scope: 'root' },
+    },
+    inject: () => ({ hooks: { generalItems: generalSource } }),
   }, GeneralSection))
 }

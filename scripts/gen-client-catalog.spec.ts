@@ -8,7 +8,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { collectSlotEntries, oversizedSlotReports, resolveSlotEntries, validateSlotContracts } from './gen-client-catalog.ts'
+import { collectSlotEntries, oversizedSlotReports, renderClientCatalog, resolveSlotEntries, validateSlotContracts } from './gen-client-catalog.ts'
+import ts from 'typescript'
 import type { SlotDeclaration, SlotRegistration, TypeDeclaration } from './slot-walk.ts'
 
 /** A declaration with every field the catalog needs, overridable per case. */
@@ -101,6 +102,18 @@ describe('client slot contract validation', () => {
 
 describe('client slot projection', () => {
   const kits = new Map<string, readonly string[]>([['root', ['useSessions: Hook']]])
+
+  it('emits compilable owner declarations with identical LF and CRLF source', () => {
+    const owner = OWNER_TYPES.get('DemoOwnerProps')!
+    const source = "export interface DemoOwnerProps {\n  /** Provider's path. */\n  path: string\n}"
+    const render = (text: string) => renderClientCatalog(resolveSlotEntries(
+      [declaration({ ownerType: 'DemoOwnerProps' })], [], new Map([['DemoOwnerProps', { ...owner, text }]]), kits,
+    ))
+    const catalog = render(source.replaceAll('\n', '\r\n'))
+    expect(catalog).toBe(render(source))
+    const output = ts.transpileModule(catalog, { compilerOptions: { target: ts.ScriptTarget.ESNext }, reportDiagnostics: true })
+    expect(output.diagnostics).toEqual([])
+  })
 
   it('warns that a single seat with a shipped occupant is replaced, not shared', () => {
     const [entry] = resolveSlotEntries([declaration()], [registration()], OWNER_TYPES, kits)

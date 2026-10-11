@@ -37,7 +37,7 @@ function mount(preference: ThemePreference = 'system') {
   // Real store instance — the sanctioned zero-machinery path for tests.
   const store = createAppearanceRowStore().create()
   store.actions.sync(preference, 0)
-  const setTheme = vi.fn()
+  const setTheme = vi.fn(async () => {})
   const props: AppearanceRowComponentProps = {
     useSessions: emptySessions(),
     useWorkspaces: emptyWorkspaces(),

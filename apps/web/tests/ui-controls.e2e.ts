@@ -65,9 +65,8 @@ describe('web e2e: shared native controls', () => {
       await page.screenshot({ path: join(SHOTS, `${theme.toLowerCase()}-general.png`) })
 
       await dialog.getByRole('button', { name: 'Models', exact: true }).click()
-      await dialog.getByRole('button', { name: 'Add provider', exact: true }).click()
-      const select = dialog.getByLabel('Provider', { exact: true })
-      await select.selectOption('plugin:jev')
+      const select = dialog.getByRole('combobox', { name: 'Decision model', exact: true })
+      await dialog.getByRole('button', { name: 'Configure Jev', exact: true }).click()
       const input = dialog.getByLabel('API key', { exact: true })
       await expect.poll(() => input.isEnabled()).toBe(true)
       await input.fill('jev-style-fixture')
@@ -91,7 +90,7 @@ describe('web e2e: shared native controls', () => {
         await expect.poll(() => input.isDisabled()).toBe(true)
         expect(await input.evaluate(element => getComputedStyle(element).opacity)).toBe('0.5')
       } finally { release() }
-      await dialog.getByRole('button', { name: 'Edit Jev', exact: true }).waitFor()
+      await expect.poll(() => input.count()).toBe(0)
       await page.unroute('**/api/credentials.set')
 
       await dialog.getByRole('button', { name: 'Plugins', exact: true }).click()

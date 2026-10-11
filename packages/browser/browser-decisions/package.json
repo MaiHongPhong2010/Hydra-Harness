@@ -26,12 +26,16 @@
   "license": "MIT",
   "peerDependencies": {
     "@hydraharness/harness-invariants": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/schemastery": "workspace:^",
     "@hydraharness/harness-tools": "workspace:^",
     "@hydraharness/harness-jev": "workspace:^",
     "@hydraharness/cordis": "workspace:^"
   },
   "devDependencies": {
     "@hydraharness/harness-invariants": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/schemastery": "workspace:^",
     "@hydraharness/harness-tools": "workspace:^",
     "@hydraharness/harness-jev": "workspace:^",
     "@hydraharness/cordis": "workspace:^"

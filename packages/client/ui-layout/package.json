@@ -53,14 +53,23 @@
     "@xterm/xterm": "^6.0.0"
   },
   "peerDependencies": {
+    "@hydraharness/harness-api-remotes": "workspace:^",
+    "@hydraharness/harness-notifications": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/schemastery": "workspace:^",
     "@hydraharness/harness-client-runtime": "workspace:^",
     "@hydraharness/harness-client-locale": "workspace:^",
     "@hydraharness/harness-client-ui-settings": "workspace:^",
     "@hydraharness/harness-client-ui-theme": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
-    "@hydraharness/cordis": "workspace:^"
+    "@hydraharness/cordis": "workspace:^",
+    "@hydraharness/harness-toys": "workspace:^"
   },
   "devDependencies": {
+    "@hydraharness/harness-api-remotes": "workspace:^",
+    "@hydraharness/harness-notifications": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/schemastery": "workspace:^",
     "@hydraharness/harness-client-locale": "workspace:^",
     "@hydraharness/harness-client-runtime": "workspace:^",
     "@hydraharness/harness-client-test-runtime": "workspace:^",
@@ -71,7 +80,8 @@
     "@types/react": "~18.3.1",
     "@hydraharness/cordis": "workspace:^",
     "react": "^18.2.0",
-    "@hydraharness/harness-client-ui-primitives": "workspace:^"
+    "@hydraharness/harness-client-ui-primitives": "workspace:^",
+    "@hydraharness/harness-toys": "workspace:^"
   },
   "files": [
     "lib/index.js",

@@ -50,6 +50,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@hydraharness/harness-notifications": "workspace:^",
     "@hydraharness/harness-agent-instructions": "workspace:^",
     "@hydraharness/harness-atomic-write": "workspace:^",
     "@hydraharness/harness-attachment": "workspace:^",
@@ -72,6 +73,7 @@
     "@hydraharness/harness-session-query": "workspace:^",
     "@hydraharness/harness-session-title": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
     "@hydraharness/harness-skill": "workspace:^",
     "@hydraharness/harness-subagent": "workspace:^",
     "@hydraharness/harness-jobs": "workspace:^",
@@ -87,14 +89,17 @@
   "peerDependencies": {
     "@hydraharness/cordis": "workspace:^",
     "@hydraharness/harness-agent-presets": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/harness-cordis-host-runner": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-permission-presets": "workspace:^",
-    "@hydraharness/harness-fs-review": "workspace:^"
+    "@hydraharness/harness-fs-review": "workspace:^",
+    "@hydraharness/harness-suggested-prompts": "workspace:^"
   },
   "devDependencies": {
     "@hydraharness/cordis": "workspace:^",
     "@hydraharness/harness-agent-presets": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/harness-cordis-host-runner": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-permission-presets": "workspace:^",
@@ -102,6 +107,9 @@
     "@hydraharness/harness-storage-domain": "workspace:^",
     "@hydraharness/harness-typert-protocol": "workspace:^",
     "@hydraharness/harness-typert-registry": "workspace:^",
-    "@hydraharness/harness-fs-review": "workspace:^"
+    "@hydraharness/harness-fs-review": "workspace:^",
+    "@hydraharness/harness-suggested-prompts": "workspace:^",
+    "@hydraharness/harness-toys": "workspace:^",
+    "@hydraharness/harness-fs-local": "workspace:^"
   }
 }

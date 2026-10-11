@@ -144,3 +144,5 @@ An ask-policy agent browser action or download requires an open owning turn; nat
 - One agent owns one Chromium profile and window. Parallelism is across that window's isolated tabs; use separate agents when work requires independent browser profiles or windows.
 
 The embedded controller uses `playwright-core` directly through an in-process CDP transport attached to each Electron tab. Playwright supplies actionability and locator execution for clicks, hover, drag, text entry, selection, form filling, and find operations. Hydra still owns navigation and permission policy, tab lifecycle, accessibility snapshots, upload handling, and approval-gated raw CDP. The adapter does not open a TCP debugging port or start a Playwright MCP server.
+
+Desktop ownership also supports a WSL Host through the native-command desktop bridge. Browser messages travel over the owned child pipes with a launch token, and Electron converts filesystem paths between the selected distro and native Windows. Changing the active trusted window reattaches native views without ending browser sessions.

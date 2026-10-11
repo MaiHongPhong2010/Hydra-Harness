@@ -47,6 +47,7 @@
     "@hydraharness/schemastery": "workspace:^"
   },
   "peerDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/harness-hooks-claude-code": "workspace:^",
     "@hydraharness/harness-hooks-codex": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
@@ -55,12 +56,16 @@
     "@hydraharness/cordis": "workspace:^"
   },
   "devDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
+    "@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-hooks-claude-code": "workspace:^",
     "@hydraharness/harness-hooks-codex": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-session": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
     "@hydraharness/harness-settings-file": "workspace:^",
+    "@hydraharness/harness-tools": "workspace:^",
     "@hydraharness/cordis": "workspace:^",
     "@hydraharness/cordis-plugin-loader": "workspace:^"
   }

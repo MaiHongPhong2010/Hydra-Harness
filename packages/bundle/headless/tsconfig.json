@@ -24,6 +24,15 @@
       "path": "../../core/agent-default-model"
     },
     {
+      "path": "../../core/scope"
+    },
+    {
+      "path": "../../preset/agent-presets"
+    },
+    {
+      "path": "../../workspace/workspace-config"
+    },
+    {
       "path": "../../llm/llm"
     },
     {

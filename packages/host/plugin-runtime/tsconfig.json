@@ -8,6 +8,7 @@
     "src"
   ],
   "references": [
+    { "path": "../optional-plugins" },
     {
       "path": "../../../vendor/cordis"
     },

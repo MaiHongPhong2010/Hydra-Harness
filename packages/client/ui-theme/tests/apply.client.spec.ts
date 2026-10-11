@@ -16,7 +16,7 @@ import type { createAppearanceRowStore } from '../src/client/settings-store.ts'
 // The lane has no jsdom `window`, so browser-language detection never runs;
 // a fresh LocaleRuntime already opens on FALLBACK_LOCALE (en).
 
-const SLOT = 'settings.general.item'
+const SLOT = 'settings.general.general.item'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -116,7 +116,7 @@ describe('ui-theme apply', () => {
     // Copy rides the standard locale seat: the entry declares the namespace.
     expect(b.slots.entries(SLOT).find(e => e.component === AppearanceRow)!.locale).toBe(SETTINGS_NS)
 
-    face.setTheme('system')
+    await face.setTheme('system')
     expect(theme.getTheme().preference).toBe('system')
     expect(instance.getSnapshot().preference).toBe('system')
     await vi.waitFor(() => { expect(b.mutate).toHaveBeenCalledTimes(2) })

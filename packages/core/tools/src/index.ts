@@ -4,6 +4,7 @@
  * @module @hydraharness/harness-tools
  */
 
+import type {} from '@hydraharness/harness-optional-plugins'
 import { Context, Service } from '@hydraharness/cordis'
 import z from '@hydraharness/schemastery'
 import { AnonymousEntries, NamedEntries, ScopedLayers, scopeOf, scopeTarget } from '@hydraharness/harness-scope'
@@ -827,6 +828,18 @@ export class ToolRuntime extends Service {
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'tools')
+    ctx.on('tools/pre-execute', async (exec, next) => {
+      if (exec.name !== RUN_CODE_NAME && ctx.get('optionalPlugins')?.enabled === false) return { kind: 'deny', reason: 'Optional plugins are disabled' }
+      return next()
+    })
+    ctx.on('tools/execute', async (exec, next) => {
+      const release = exec.name === RUN_CODE_NAME ? undefined : ctx.get('optionalPlugins')?.acquire()
+      try { return await next() }
+      finally { release?.() }
+    })
+    ctx.inject(['optionalPlugins'], (pctx) => {
+      pctx.effect(() => pctx.optionalPlugins.subscribe(() => { ctx.emit('tools/change') }), 'tools: optional policy')
+    })
     // The schema already defaulted an omitted mode; the ?? narrows the
     // optional-input type for direct (non-Loader) construction in tests.
     this.defaultMode = config.mode ?? 'native'
@@ -1183,6 +1196,7 @@ export class ToolRuntime extends Service {
         visible.set(name, definition)
       }
     }
+    if (this.ctx.get('optionalPlugins')?.enabled === false) visible.clear()
     // Presentation infrastructure is resolved last and outside capability
     // filtering. Registration rejects this reserved name, so the insertion is
     // an invariant assertion as well as protection against future layer

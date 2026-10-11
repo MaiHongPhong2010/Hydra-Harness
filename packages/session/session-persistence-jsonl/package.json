@@ -36,7 +36,7 @@
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
-  "peerDependencies": {
+  "peerDependencies": {"@hydraharness/harness-settings": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-session": "workspace:^",
     "@hydraharness/harness-session-persistence": "workspace:^",
@@ -46,7 +46,7 @@
     "koffi": "^3.1.0",
     "@hydraharness/schemastery": "workspace:^"
   },
-  "devDependencies": {
+  "devDependencies": {"@hydraharness/harness-settings": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-session": "workspace:^",
     "@hydraharness/harness-session-persistence": "workspace:^",

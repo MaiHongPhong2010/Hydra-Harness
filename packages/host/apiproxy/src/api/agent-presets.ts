@@ -11,6 +11,13 @@
 
 import type { SessionId } from '@hydraharness/harness-session/types'
 import type { RpcRequest, RpcResponse } from './rpc.ts'
+import type { WorkspaceId } from './workspace.ts'
+
+/** Resolve a preset roster in one registered workspace; omission uses the Host roster. */
+export interface AgentPresetTarget {
+  /** Registered workspace; omission uses the Host preset roster. */
+  workspaceId?: WorkspaceId
+}
 
 /** One preset the deployment can compose a session's agent from. */
 export interface AgentPresetEntry {
@@ -57,7 +64,7 @@ export interface AgentPresetsApi {
    * native opener — both deployment facts rather than per-preset ones, and
    * neither exposes a Host path.
    */
-  list(request: RpcRequest<{}>):
+  list(request: RpcRequest<AgentPresetTarget>):
   Promise<RpcResponse<{ presets: readonly AgentPresetEntry[]; authorable: boolean; hasDocument: boolean }>>
 
   /**
@@ -77,7 +84,7 @@ export interface AgentPresetsApi {
    * Privileged: a composition names the plugins a session runs, so reading
    * one is reconnaissance.
    */
-  read(request: RpcRequest<{ agentPreset: string }>):
+  read(request: RpcRequest<AgentPresetTarget & { agentPreset: string }>):
   Promise<RpcResponse<{
     agentPreset: string
     trust: 'system' | 'user'
@@ -96,7 +103,7 @@ export interface AgentPresetsApi {
    * (the file is the author's to edit afterwards) but not its name — `name`
    * here or the id fallback is what distinguishes the rows.
    */
-  copy(request: RpcRequest<{ from: string; agentPreset: string; name?: string }>):
+  copy(request: RpcRequest<AgentPresetTarget & { from: string; agentPreset: string; name?: string }>):
   Promise<RpcResponse<{ agentPreset: string }>>
 
   /**
@@ -108,9 +115,9 @@ export interface AgentPresetsApi {
    * the resolved directory for the surface to show as text instead. Shipped
    * presets are refused: their install is not the user's to manage.
    */
-  openDocument(request: RpcRequest<{ agentPreset: string }>, signal: AbortSignal):
+  openDocument(request: RpcRequest<AgentPresetTarget & { agentPreset: string }>, signal: AbortSignal):
   Promise<RpcResponse<{ opened: true } | { opened: false; path: string }>>
 
   /** Delete a locally authored preset. Shipped presets are refused. */
-  remove(request: RpcRequest<{ agentPreset: string }>): Promise<RpcResponse<{}>>
+  remove(request: RpcRequest<AgentPresetTarget & { agentPreset: string }>): Promise<RpcResponse<{}>>
 }

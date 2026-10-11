@@ -15,12 +15,14 @@
 - insert:
     - id: timer
       name: '@hydraharness/cordis-plugin-timer'
+      pluginRequired: true
       description: Schedules Cordis tasks and timers used by other plugins.
       application: Run delayed and recurring Host work when a plugin registers a timer.
       pluginType: core
 
     - id: hmr
       name: '@hydraharness/cordis-plugin-hmr'
+      pluginRequired: true
       description: Reloads changed plugin modules during development.
       application: Apply local plugin edits without restarting the entire Host.
       config:
@@ -28,22 +30,27 @@
 
     - id: llm
       name: '@hydraharness/harness-llm'
+      pluginRequired: true
       pluginType: core
 
     - id: session
       name: '@hydraharness/harness-session'
+      pluginRequired: true
       pluginType: core
 
     - id: typert
       name: '@hydraharness/harness-typert-registry'
+      pluginRequired: true
       pluginType: core
 
     - id: typert-loader
       name: '@hydraharness/harness-typert-loader'
+      pluginRequired: true
       pluginType: core
 
     - id: typert-gateway
       name: '@hydraharness/harness-api-gateway'
+      pluginRequired: true
       pluginType: core
 
     - id: session-title
@@ -65,15 +72,27 @@
 
     - id: user-questions
       name: '@hydraharness/harness-user-questions'
+      pluginRequired: true
+
+    - id: toys
+      name: '@hydraharness/harness-toys'
+    - id: notifications
+      name: '@hydraharness/harness-notifications'
+
+    - id: optional-plugins
+      name: '@hydraharness/harness-optional-plugins'
+      pluginRequired: true
 
     - id: agent
       name: '@hydraharness/harness-agent'
+      pluginRequired: true
       pluginType: core
 
     # The transport-independent default for Agents created by entry points.
     # Settings may supply a saved selection; consumers read it at creation time.
     - id: agent-default-model
       name: '@hydraharness/harness-agent-default-model'
+      pluginRequired: true
       pluginType: core
       config:
         provider: deepseek-official
@@ -81,19 +100,23 @@
 
     - id: jobs
       name: '@hydraharness/harness-jobs-local'
+      pluginRequired: true
       pluginType: core
 
     - id: llm-retry
       name: '@hydraharness/harness-llm-retry'
+      pluginRequired: true
 
     - id: llm-call-log
       name: '@hydraharness/harness-llm-call-log'
+      pluginRequired: true
 
     # User-settings document (`$HYDRA_HOME/settings.yaml`, hot-reloaded): a
     # `llm-deepseek:` or `llm-pi-ai:` section there overrides the adapter entries
     # below without a restart, and is what the web Models page writes.
     - id: settings
       name: '@hydraharness/harness-settings-file'
+      pluginRequired: true
       pluginType: core
 
     # Credential sources: inherited environment over the managed
@@ -102,12 +125,14 @@
     # managed document, which is never materialized into the process environment.
     - id: credentials
       name: '@hydraharness/harness-credentials-local'
+      pluginRequired: true
       pluginType: core
 
     # Provider-owned login flows use the shared credential record store and
     # expose browser-safe notices/prompts through the Host authorization API.
     - id: authorization
       name: '@hydraharness/harness-authorization'
+      pluginRequired: true
       pluginType: core
 
     # The pi-ai multi-provider twin, mounted dormant: zero routes (and no extra
@@ -119,15 +144,18 @@
     # document.
     - id: llm-pi-ai
       name: '@hydraharness/harness-llm-pi-ai'
+      pluginRequired: true
       pluginType: core
 
     # Account SDKs load only for login or requests on an enabled account route.
     - id: llm-account-auth
       name: '@hydraharness/harness-llm-account-auth'
+      pluginRequired: true
       pluginType: core
 
     - id: session-persistence-jsonl
       name: '@hydraharness/harness-session-persistence-jsonl'
+      pluginRequired: true
       pluginType: core
       config:
         root: !!js hydraHomePath('sessions')
@@ -137,6 +165,7 @@
     # provider requests and authorized history reads.
     - id: attachment-local
       name: '@hydraharness/harness-attachment-local'
+      pluginRequired: true
 
     # Full-text session search is opt-in. `openAt: never` keeps
     # ctx.sessionQuery mounted — exact reads, titles, and lineage traces
@@ -148,6 +177,7 @@
     # cordis.patch.yml or a --patch overlay), typically with a durable `path`.
     - id: session-query-sqlite
       name: '@hydraharness/harness-session-query-sqlite'
+      pluginRequired: true
       config:
         path: ':memory:'
         openAt: never
@@ -157,6 +187,7 @@
     # loud without it; web layers reuse this same mount for list rows.
     - id: session-projection
       name: '@hydraharness/harness-session-projection'
+      pluginRequired: true
       pluginType: core
 
     # Session telemetry is mounted but disabled by default. HYDRA_TELEMETRY_MODE
@@ -195,6 +226,7 @@
 
     - id: subprocess
       name: '@hydraharness/harness-subprocess-local'
+      pluginRequired: true
       pluginType: core
 
     # HYDRA_LSP_COMMAND enables semantic navigation for coding presets. Resolve
@@ -225,10 +257,12 @@
     # sessions pin workspace-write + ask through the permission service below.
     - id: sandbox
       name: '@hydraharness/harness-sandbox-local'
+      pluginRequired: true
       pluginType: core
 
     - id: sandbox-policy
       name: '@hydraharness/harness-sandbox-policy'
+      pluginRequired: true
       pluginType: core
       config:
         mode: !!js process.env.HYDRA_PERMISSION_MODE ?? 'workspace-write'
@@ -236,6 +270,7 @@
 
     - id: bash-sandbox
       name: '@hydraharness/harness-bash-sandbox'
+      pluginRequired: true
       pluginType: core
       disabled: !!js process.platform === 'win32'
       config:
@@ -243,17 +278,20 @@
 
     - id: pwsh-sandbox
       name: '@hydraharness/harness-pwsh-sandbox'
+      pluginRequired: true
       pluginType: core
       disabled: !!js process.platform !== 'win32'
 
     - id: approval
       name: '@hydraharness/harness-user-approval'
+      pluginRequired: true
       pluginType: core
       config:
         policy: !!js "(process.env.HYDRA_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'"
 
     - id: permission
       name: '@hydraharness/harness-permission-presets'
+      pluginRequired: true
       pluginType: core
       config:
         presets:
@@ -269,6 +307,7 @@
 
     - id: shell-env
       name: '@hydraharness/harness-shell-env'
+      pluginRequired: true
       pluginType: core
 
     - id: tool-bash
@@ -284,6 +323,7 @@
 
     - id: fs-observation-policy
       name: '@hydraharness/harness-fs-observation-policy'
+      pluginRequired: true
       pluginType: core
 
     - id: tool-fs
@@ -291,6 +331,7 @@
 
     - id: fs-review
       name: '@hydraharness/harness-fs-review'
+      pluginRequired: true
 
     - id: tool-fs-search
       name: '@hydraharness/harness-tool-fs-search'
@@ -299,6 +340,7 @@
 
     - id: agent-instructions
       name: '@hydraharness/harness-agent-instructions'
+      pluginRequired: true
       config:
         maxBytes: 65536
 
@@ -309,6 +351,7 @@
 
     - id: skill
       name: '@hydraharness/harness-skill'
+      pluginRequired: true
       pluginType: core
 
     - id: skill-filesystem
@@ -323,26 +366,30 @@
 
     - id: commands
       name: '@hydraharness/harness-commands'
+      pluginRequired: true
       pluginType: core
 
     # Imported OpenAI/Codex plugin bundles are shared by every profile. The
     # runtime owns immutable bundles, per-plugin data, and reversible loading.
     - id: plugin-runtime
       name: '@hydraharness/harness-plugin-runtime'
+      pluginRequired: true
       pluginType: core
 
-    # The user's own MCP servers and hooks, stored in `$HYDRA_HOME/settings.yaml`
-    # rather than composed here: each registry mounts what its settings section
-    # declares and unmounts it again when the record is disabled or removed, so
-    # a server or hook added from the Settings page survives a restart and one
-    # added by hand-editing the document takes effect without one.
-    - id: mcp-registry
-      name: '@hydraharness/harness-mcp-registry'
+    # Workspace settings inherit user settings; executable contributions are
+    # scoped to their workspace and project layers require Host-owned trust.
+    - id: workspace-config
+      name: '@hydraharness/harness-workspace-config'
+      pluginRequired: true
       pluginType: core
 
-    - id: hooks-registry
-      name: '@hydraharness/harness-hooks-registry'
-      pluginType: core
+    # The launcher supplies the installation's shipped root. The roster also
+    # includes the user root; workspace-config prepends trusted project presets.
+    - id: agent-presets
+      name: '@hydraharness/harness-agent-presets'
+      pluginRequired: true
+      config:
+        default: standard
 
     - id: command-feedback
       name: '@hydraharness/harness-command-feedback'
@@ -570,12 +617,14 @@
     # keeps the schema default (native).
     - id: tools
       name: '@hydraharness/harness-tools'
+      pluginRequired: true
       pluginType: core
 
     # The deployment persona is a deployment choice; plan-mode and tool plugins own
     # their own prompt sections.
     - id: system-prompt
       name: '@hydraharness/harness-system-prompt'
+      pluginRequired: true
       pluginType: core
       config:
         persona: ''
@@ -584,6 +633,7 @@
     # agents, while Web creates sessions on client request.
     - id: agent-loop
       name: '@hydraharness/harness-agent-loop'
+      pluginRequired: true
       pluginType: core
       config:
         agents: []
@@ -592,6 +642,7 @@
     # overlay can pin another workspace.
     - id: fs-sandbox
       name: '@hydraharness/harness-fs-sandbox'
+      pluginRequired: true
       pluginType: core
 
     # The native DeepSeek adapter. No key or endpoint is inlined: both resolve per
@@ -600,7 +651,11 @@
     # choice.
     - id: llm-deepseek
       name: '@hydraharness/harness-llm-deepseek'
+      pluginRequired: true
       pluginType: core
+
+    - id: suggested-prompts
+      name: '@hydraharness/harness-suggested-prompts'
 
     # Optional TypeSafe Jev decision capability. It is dormant by default;
     # enabling it never changes the LLM provider catalog.

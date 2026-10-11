@@ -11,6 +11,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@hydraharness/cordis'
+import { bindScopeParent, createScope, scopeChainOf, scopeOf } from '@hydraharness/harness-scope'
 import type { Agent } from '@hydraharness/harness-agent'
 import AgentLoop from '@hydraharness/harness-agent-loop'
 import { mountAgentLoopTestDependencies } from '@hydraharness/harness-agent-loop-testkit'
@@ -74,6 +75,23 @@ function policyEvents(events: readonly SessionEvent[]) {
 }
 
 describe('continuable policy inheritance', () => {
+  it('inherits a rosterless workspace scope on creation and cold continuation', { timeout: 20_000 }, async () => {
+    const { ctx, parent } = await setup([textResponse('first'), textResponse('continued')])
+    const workspace = createScope(ctx, {})
+    bindScopeParent(scopeOf(parent.ctx)!, scopeOf(workspace.ctx)!)
+    const observed: Agent[] = []
+    ctx.on('agent/created', ({ agent }) => { if (agent !== parent) observed.push(agent) })
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    await waitNoActivation(ctx, started.childId)
+    await ctx.subagents.followup(parent, started.childId, [{ type: 'text', text: 'continue' }], {
+      source: { kind: 'user' }, signal: new AbortController().signal,
+    })
+    await waitNoActivation(ctx, started.childId)
+    expect(observed).toHaveLength(2)
+    for (const child of observed) expect(scopeChainOf(scopeOf(child.ctx))).toContain(scopeOf(workspace.ctx))
+    await workspace.dispose()
+  })
+
   it('seeds the parent sandbox override and pins approval to never', { timeout: 20_000 }, async () => {
     const { ctx, parent } = await setup([textResponse('child done')])
     setSandboxMode(parent.session, 'danger-full-access')

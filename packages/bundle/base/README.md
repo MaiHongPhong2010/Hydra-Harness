@@ -12,6 +12,8 @@ The base bundle mounts DeepSeek, Serper, and Other search providers with [explic
 
 The base also mounts the LSP capability; its stdio provider defaults to disabled unless `HYDRA_LSP_COMMAND` is set. The provider checks executable availability on query, so a saved enablement override or a command unavailable on another machine cannot prevent Desktop or Web startup. Install a compatible server on that host and set `HYDRA_LSP_COMMAND` to its command or absolute path; queries against a missing server return `LSP_UNAVAILABLE`. See [stdio configuration](../../lsp/lsp-stdio/README.md#configuration).
 
+The base mounts [`workspace-config`](../../workspace/workspace-config/README.md), which prepares `.hydra/` at the selected workspace and owns its settings, MCP, hooks, trust, and preset context. Project execution is enabled by a Host-owned trust decision; provider credentials and sessions remain in the harness home.
+
 ## Model Experience
 
 Indirectly, through the inserted rows: this bundle selects the shipped persona-less prompt base, tool set, and DeepSeek adapter that mode bundles specialize, and contributes no model-visible text of its own.

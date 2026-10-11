@@ -8,6 +8,8 @@ import { performance } from 'node:perf_hooks'
 import SessionStore, { SessionId } from '@hydraharness/harness-session'
 import type { SessionEvent } from '@hydraharness/harness-session'
 import JsonlSessionPersistence from '@hydraharness/harness-session-persistence-jsonl'
+import { settingsNamespace } from '@hydraharness/harness-settings'
+import { MemorySettings } from '../../../settings/settings/tests/memory.ts'
 import { logPath, scanLog, sessionDir, toHeaderLine, type JsonlCompression } from '../src/format.ts'
 import {
   compressZstdFrame, createZstdFrameDecoder, decompressZstdFrame, decompressZstdPrefix, scanZstdFrames,
@@ -696,14 +698,44 @@ describe('JsonlSessionPersistence: default Zstandard encoding', () => {
 })
 
 describe('JsonlSessionPersistence: encoding selection', () => {
-  it('rejects roots owned by the opposite encoding in both directions', async () => {
+  it('adopts a saved default only on restart and preserves older artifact encoding', async () => {
+    const root = await freshRoot()
+    const ctx = new Context()
+    contexts.push(ctx)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(MemorySettings, { doc: { 'session-history': { compression: 'none' } } })
+    await ctx.plugin(JsonlSessionPersistence, { root })
+    const before = meta('before-restart')
+    await ctx.sessionPersistence.create(before)
+    await ctx.sessionPersistence.append(before.id, oneTurnLog())
+    await ctx.settings.update(settingsNamespace('session-history'), { compression: 'zstd' })
+    const waiting = meta('waiting-for-restart')
+    await ctx.sessionPersistence.create(waiting)
+    await ctx.sessionPersistence.append(waiting.id, oneTurnLog())
+    expect(await readFile(logPath(root, waiting.cwd, waiting.id, 'none'), 'utf8')).toContain('waiting-for-restart')
+    await ctx.fiber.dispose()
+    const restarted = new Context()
+    contexts.push(restarted)
+    await restarted.plugin(SessionStore)
+    await restarted.plugin(MemorySettings, { doc: { 'session-history': { compression: 'zstd' } } })
+    await restarted.plugin(JsonlSessionPersistence, { root })
+    const after = meta('after-restart')
+    await restarted.sessionPersistence.create(after)
+    await restarted.sessionPersistence.append(after.id, oneTurnLog())
+    expect((await readFile(logPath(root, after.cwd, after.id, 'zstd'))).subarray(0, 4)).toEqual(MAGIC)
+    await restarted.sessionPersistence.load(before.id)
+    await restarted.sessionPersistence.append(before.id, [{ type: 'turn/start', seq: 6, time: 10, data: { turn: 2 } }])
+    expect(await readFile(logPath(root, before.cwd, before.id, 'none'), 'utf8')).toContain('turn/start')
+  })
+  it('reads both encodings regardless of the new-session default', async () => {
     const rawRoot = await freshRoot('hydra-jsonl-raw-mismatch-')
     const raw = await mount(rawRoot, 'none')
     const rawHeader = meta('raw-log')
     await raw.sessionPersistence.create(rawHeader)
     await raw.sessionPersistence.append(rawHeader.id, oneTurnLog())
     const defaultBackend = await mount(rawRoot)
-    await expect(defaultBackend.sessionPersistence.list()).rejects.toThrow(/configured for compression "zstd"/)
+    expect((await defaultBackend.sessionPersistence.list()).map(header => header.id)).toEqual([rawHeader.id])
+    expect((await defaultBackend.sessionPersistence.load(rawHeader.id)).events).toEqual(oneTurnLog())
 
     const zstdRoot = await freshRoot('hydra-jsonl-zstd-mismatch-')
     const zstd = await mount(zstdRoot)
@@ -711,7 +743,8 @@ describe('JsonlSessionPersistence: encoding selection', () => {
     await zstd.sessionPersistence.create(zstdHeader)
     await zstd.sessionPersistence.append(zstdHeader.id, oneTurnLog())
     const rawBackend = await mount(zstdRoot, 'none')
-    await expect(rawBackend.sessionPersistence.list()).rejects.toThrow(/configured for compression "none"/)
+    expect((await rawBackend.sessionPersistence.list()).map(header => header.id)).toEqual([zstdHeader.id])
+    expect((await rawBackend.sessionPersistence.load(zstdHeader.id)).events).toEqual(oneTurnLog())
   })
 
   it('rechecks targeted artifacts and listing after an initially empty root', async () => {
@@ -726,10 +759,9 @@ describe('JsonlSessionPersistence: encoding selection', () => {
       ...oneTurnLog().map(e => JSON.stringify(e)),
       '',
     ].join('\n'))
-    await expect(ctx.sessionPersistence.load(loadHeader.id)).rejects.toThrow(/uses \.jsonl/)
-    await expect((ctx.sessionPersistence as JsonlSessionPersistence).loadStored(loadHeader.id))
-      .rejects.toThrow(/uses \.jsonl/)
-    await expect(ctx.sessionPersistence.list()).rejects.toThrow(/uses \.jsonl/)
+    expect((await ctx.sessionPersistence.load(loadHeader.id)).events).toEqual(oneTurnLog())
+    expect((await (ctx.sessionPersistence as JsonlSessionPersistence).loadStored(loadHeader.id))?.events).toEqual(oneTurnLog())
+    expect((await ctx.sessionPersistence.list()).map(header => header.id)).toEqual([loadHeader.id])
   })
 
   it('refuses materialization when an opposite artifact appears after create', async () => {
@@ -744,7 +776,28 @@ describe('JsonlSessionPersistence: encoding selection', () => {
       ...oneTurnLog().map(e => JSON.stringify(e)),
       '',
     ].join('\n'))
-    await expect(ctx.sessionPersistence.append(header.id, oneTurnLog())).rejects.toThrow(/uses \.jsonl/)
+    await expect(ctx.sessionPersistence.append(header.id, oneTurnLog())).rejects.toThrow(/already exists with a different encoding/)
     expect((await readdir(sessionDir(root, header.cwd, header.id))).some(name => name.endsWith('.jsonl.zstd'))).toBe(false)
+  })
+
+  it('resumes and appends in the stored encoding while new sessions use the new default', async () => {
+    const root = await freshRoot()
+    const raw = await mount(root, 'none')
+    const old = meta('old-raw')
+    await raw.sessionPersistence.create(old)
+    await raw.sessionPersistence.append(old.id, oneTurnLog())
+    await raw.fiber.dispose()
+    const changed = await mount(root, 'zstd')
+    const stored = await (changed.sessionPersistence as JsonlSessionPersistence).loadStored(old.id)
+    expect(stored?.events).toEqual(oneTurnLog())
+    const extension = { ...oneTurnLog()[0]!, seq: oneTurnLog().length }
+    await (changed.sessionPersistence as JsonlSessionPersistence).appendBatch(old, [extension], true)
+    const current = meta('new-zstd')
+    await changed.sessionPersistence.create(current)
+    await changed.sessionPersistence.append(current.id, oneTurnLog())
+    expect((await changed.sessionPersistence.list()).map(header => header.id).sort()).toEqual([current.id, old.id].sort())
+    expect(scanLog(await readFile(logPath(root, old.cwd, old.id, 'none'))).events).toEqual([...oneTurnLog(), extension])
+    expect((await readdir(sessionDir(root, old.cwd, old.id)))).toEqual(['session.jsonl'])
+    expect((await readdir(sessionDir(root, current.cwd, current.id)))).toEqual(['session.jsonl.zstd'])
   })
 })

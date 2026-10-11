@@ -18,6 +18,8 @@ Loads converge by `(id, rev)` against live state: loading a revision this page a
 
 Nothing loads at activation, and nothing is restored after a refresh — a page runs a dynamic package only when someone answers a run request or asks for it here.
 
+The façade withholds Host control services (`workspaceConfig`, `apiProxy`, `connection`, `remote`, and `settingsScope`), including direct workspace trust RPC access. Workspace trust belongs to the user in Settings. Browser code executes in the page; this API restriction does not make its evaluator a security sandbox.
+
 ## What a run surface reads and calls
 
 `ctx.dynamicCordisRunner` is the whole face:

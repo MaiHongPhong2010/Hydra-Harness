@@ -15,9 +15,11 @@ import { trimmedInstructionDigest } from './digest.ts'
 import {
   decodeScopeKey,
   renderWorkspaceInstructionSet,
+  scopeForDisplayPath,
   type RenderedWorkspaceContext,
   USER_GLOBAL_DIRECTORY,
   USER_GLOBAL_FILE,
+  WORKSPACE_INSTRUCTION_PATHS,
 } from './render.ts'
 
 /** An instruction candidate identified by absolute and model-facing paths. */
@@ -200,7 +202,7 @@ export function ancestorChain(root: string, cwd: string): string[] {
   const chain: string[] = []
   let current = resolve(cwd)
   const resolvedRoot = resolve(root)
-  while (current !== resolvedRoot) {
+  while (relative(resolvedRoot, current) !== '') {
     chain.push(current)
     const parent = dirname(current)
     /* v8 ignore next -- discovery always supplies cwd or an ancestor root. */
@@ -230,10 +232,12 @@ export function descendantDirsBetween(root: string, touchedPath: string): string
  * Convert an absolute instruction path to its project-root-relative display form.
  * @param root - project root used as the display base.
  * @param path - absolute path to display.
- * @returns the root-relative path.
+ * @returns the root-relative path; fixed `.hydra/` instruction paths use portable forward slashes.
  */
 export function relativeDisplay(root: string, path: string): string {
-  return relative(root, path)
+  const displayPath = relative(root, path)
+  const normalizedPath = displayPath.replaceAll('\\', '/')
+  return WORKSPACE_INSTRUCTION_PATHS.includes(normalizedPath) ? normalizedPath : displayPath
 }
 
 async function allExistingInstructionFiles(
@@ -304,6 +308,11 @@ async function discoverInstructionFiles(
         addFile(file)
       }
     }
+    if (dir === projectRoot) {
+      for (const file of await allExistingInstructionFiles(dir, projectRoot, WORKSPACE_INSTRUCTION_PATHS, fileSystem, options.signal)) {
+        addFile(file)
+      }
+    }
   }
   return files
 }
@@ -357,11 +366,11 @@ async function readBounded(
 }
 
 /**
- * Drop later candidates whose trimmed content duplicates an earlier sibling in
- * the same directory. Different directories never collapse even when identical;
- * within one directory the earliest candidate in discovery order is kept and its
- * original bytes are rendered. A candidate that symlinks a sibling resolves to
- * the same content and collapses here like any byte-identical real file.
+ * Drop later candidates whose trimmed content duplicates an earlier file in
+ * the same logical directory. Fixed `.hydra/` files share the workspace root's
+ * directory; other directories never collapse even when identical. The earliest
+ * candidate in discovery order retains its original bytes, including when later
+ * candidates symlink it or contain identical text.
  * @param files - loaded files in discovery order.
  * @returns the retained files in the same order.
  */
@@ -369,7 +378,7 @@ export function dedupInstructionFilesByDirectory(files: LoadedInstructionFile[])
   const keptDigestsByDir = new Map<string, Set<string>>()
   const kept: LoadedInstructionFile[] = []
   for (const file of files) {
-    const dir = dirname(file.displayPath)
+    const dir = scopeForDisplayPath(file.displayPath)
     let digests = keptDigestsByDir.get(dir)
     if (digests === undefined) {
       digests = new Set()

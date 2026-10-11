@@ -85,6 +85,7 @@ export class WorkspaceEntity implements Workspace {
   get path(): string {
     return this.record.path
   }
+  get kind(): 'project' | 'task' | undefined { return this.record.kind }
 
   get title(): string {
     return this.record.title

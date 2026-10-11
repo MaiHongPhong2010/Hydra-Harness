@@ -114,6 +114,19 @@ function chooseAdd(): void {
 }
 
 describe('WorkspacePicker', () => {
+  it('offers projects without listing the private root of every standalone chat', () => {
+    const task = { ...workspace('task', 'Standalone chat'), kind: 'task' as const }
+    mount([task, workspace('alpha', 'Alpha')])
+    expect(screen.queryByRole('menuitem', { name: 'Standalone chat' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: 'Alpha' })).toBeTruthy()
+  })
+
+  it('opens the directory flow when standalone chats exist without a project', () => {
+    mount([{ ...workspace('task'), kind: 'task' }])
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(screen.getByTestId('directory-flow')).toBeTruthy()
+  })
+
   it('lists same-title Workspaces separately and forwards the selected id', () => {
     const b = mount([workspace('alpha', 'Shared'), workspace('beta', 'Shared')])
     const entries = screen.getAllByRole('menuitem', { name: 'Shared' })

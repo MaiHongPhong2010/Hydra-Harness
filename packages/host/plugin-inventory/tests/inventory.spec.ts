@@ -7,11 +7,13 @@ import { Context, type Fiber, type Plugin } from '@hydraharness/cordis'
 import Loader, { EntryTree, type EntryOptions } from '@hydraharness/cordis-plugin-loader'
 import Include from '@hydraharness/cordis-plugin-include'
 import { resolveProfileDir } from '@hydraharness/harness-app-boot'
-import { settingsNamespace } from '@hydraharness/harness-settings'
+import { settingsNamespace, type SettingsProvider } from '@hydraharness/harness-settings'
 import FileSettingsProvider from '@hydraharness/harness-settings-file'
+import OptionalPluginPolicy from '@hydraharness/harness-optional-plugins'
+import AgentPresets, { COMPOSITION_FILE, SETTINGS_NAMESPACE } from '@hydraharness/harness-agent-presets'
 import { remoteMethods } from '@hydraharness/harness-typert-protocol'
 import PluginInventoryGateway from '../src/index.ts'
-import type { PluginEntryId } from '../src/types.ts'
+import type { PluginEntryId, SettingsTarget } from '../src/types.ts'
 
 const contexts: Context[] = []
 const tempDirs: string[] = []
@@ -63,6 +65,91 @@ async function harness(): Promise<{
 }
 
 describe('PluginInventoryGateway', () => {
+  it('drains optional work, preserves individual choices, and keeps required entries available', async () => {
+    const h = await profile([{ id: 'required', name: 'cordis:active', pluginRequired: true, pluginGroup: 'features' },
+      { id: 'optional', name: 'cordis:second', pluginGroup: 'features' }])
+    await h.ctx.plugin(OptionalPluginPolicy)
+    const release = h.ctx.optionalPlugins.acquire()
+    await h.ctx.settings.update(settingsNamespace('optional-plugins'), { enabled: false })
+    expect(() => h.ctx.optionalPlugins.acquire()).toThrow('disabled')
+    expect(h.entry('optional').disabled).toBe(false)
+    release()
+    await vi.waitFor(() => { expect(h.entry('optional').disabled).toBe(true) })
+    expect(h.entry('required').disabled).toBe(false)
+    expect((await h.inventory.list()).entries.find(entry => entry.moduleName === 'cordis:active')?.toggleable).toBe(false)
+    expect((await h.inventory.list()).entries.find(entry => entry.moduleName === 'cordis:second')?.toggleable).toBe(true)
+    await h.ctx.settings.update(settingsNamespace('optional-plugins'), { enabled: true })
+    await vi.waitFor(() => { expect(h.entry('optional').disabled).toBe(false) })
+    await h.inventory.setEnabled({ entryId: h.entry('optional').id as PluginEntryId, enabled: false })
+    await h.ctx.settings.update(settingsNamespace('optional-plugins'), { enabled: false })
+    await h.ctx.settings.update(settingsNamespace('optional-plugins'), { enabled: true })
+    await vi.waitFor(() => { expect(h.entry('optional').disabled).toBe(true) })
+    expect(h.ctx.settings.get(settingsNamespace('plugins'))).toMatchObject({ enabled: { 'cordis:second': false } })
+  })
+
+  it('keeps same preset leaves, settings resets, and initial states separate across workspace layers', async () => {
+    const { ctx, inventory } = await harness()
+    const root = await mkdtemp(join(tmpdir(), 'hydra-workspace-preset-inventory-'))
+    tempDirs.push(root)
+    const ns = settingsNamespace(SETTINGS_NAMESPACE)
+    await ctx.plugin(AgentPresets, { default: 'standard', roots: [], includeUserRoot: false })
+    const hostId = await ctx.loader.create({ name: 'cordis:active' })
+    await ctx.loader.await()
+    expect((await inventory.list()).entries.some(entry => entry.entryId === hostId)).toBe(true)
+    const workspaceIds = ['first', 'second'] as NonNullable<SettingsTarget['workspaceId']>[]
+    const environments = new Map<NonNullable<SettingsTarget['workspaceId']>, {
+      ctx: Context
+      presets: AgentPresets | undefined
+      shared: SettingsProvider
+      local: SettingsProvider
+    }>()
+    for (const [index, workspaceId] of workspaceIds.entries()) {
+      const directory = join(root, workspaceId)
+      const presetRoot = join(directory, 'agent-presets')
+      await mkdir(join(presetRoot, 'standard'), { recursive: true })
+      await writeFile(join(presetRoot, 'standard', COMPOSITION_FILE), `- id: leaf\n  name: cordis:active\n  disabled: ${String(index === 1)}\n`)
+      const shared = new Context()
+      const local = new Context()
+      contexts.push(shared, local)
+      await shared.plugin(FileSettingsProvider, { path: join(directory, 'settings.yaml'), watch: false })
+      shared.settings.inherit(ctx.settings, [ns])
+      await local.plugin(Loader)
+      await local.plugin(FileSettingsProvider, { path: join(directory, 'settings.local.yaml'), watch: false })
+      local.settings.inherit(shared.settings, [ns])
+      await local.plugin(AgentPresets, { default: 'standard', roots: [{ path: presetRoot, trust: 'user' }], includeUserRoot: false })
+      environments.set(workspaceId, { ctx: local, presets: local.get('agentPresets'), shared: shared.settings, local: local.settings })
+    }
+    ctx.provide('workspaceConfig', {
+      environmentFor: async (workspaceId: NonNullable<SettingsTarget['workspaceId']>) => environments.get(workspaceId)!,
+      settingsFor: async (workspaceId: NonNullable<SettingsTarget['workspaceId']>, layer: 'shared' | 'local') => environments.get(workspaceId)![layer],
+    } as never)
+    const first = { workspaceId: workspaceIds[0]!, layer: 'local' } as const
+    const second = { workspaceId: workspaceIds[1]!, layer: 'local' } as const
+    const shared = { ...first, layer: 'shared' } as const
+    const entryId = 'agent-preset:standard:leaf' as PluginEntryId
+    expect((await inventory.list(first)).entries).toMatchObject([{ entryId, enabled: true, initialEnabled: true, presetRowId: 'leaf' }])
+    expect((await inventory.list(second)).entries).toMatchObject([{ entryId, enabled: false, initialEnabled: false }])
+    const sharedResult = await inventory.setEnabled({ entryId, enabled: false, ...shared })
+    expect(sharedResult.snapshot).toMatchObject({ ...shared, entries: [{ entryId, enabled: false }] })
+    await inventory.setEnabled({ entryId, enabled: true, ...first })
+    expect((await inventory.list(shared)).entries[0]?.enabled).toBe(false)
+    expect((await inventory.list(first)).entries[0]).toMatchObject({ enabled: true, initialEnabled: true })
+    expect((await inventory.list(second)).entries[0]).toMatchObject({ enabled: false, initialEnabled: false })
+    expect(ctx.settings.get(ns)).toMatchObject({ pluginEnablement: {} })
+    const firstEnvironment = environments.get(first.workspaceId)!
+    await firstEnvironment.local.mutate(ns, [{ op: 'unset', path: ['pluginEnablement', 'standard', 'leaf'] }])
+    expect((await inventory.list(first)).entries[0]?.enabled).toBe(false)
+    expect(firstEnvironment.shared.get(ns)).toMatchObject({ pluginEnablement: { standard: { leaf: false } } })
+    expect(await readFile(join(root, first.workspaceId, 'settings.local.yaml'), 'utf8')).not.toContain('leaf: true')
+    await expect(inventory.setEnabled({ entryId: hostId as PluginEntryId, enabled: false, ...first }))
+      .rejects.toThrow('only agent preset entries')
+    await expect(inventory.setEnabled({ entryId: 'agent-preset:missing' as PluginEntryId, enabled: false, ...first }))
+      .rejects.toThrow('cannot be toggled in-app')
+    environments.set(first.workspaceId, { ctx, presets: undefined, shared: ctx.settings, local: ctx.settings })
+    await expect(inventory.list(first)).resolves.toMatchObject({ ...first, entries: [] })
+    await expect(inventory.setEnabled({ entryId, enabled: false, ...first })).rejects.toThrow('agent preset controls are unavailable')
+  })
+
   it('projects plugin descriptions and usage from Host and preset metadata', async () => {
     const h = await profile([{ id: 'native', name: 'cordis:active', disabled: true,
       description: 'Fixture description', application: 'Use the fixture.' }])

@@ -1,6 +1,7 @@
 - dialog "Settings":
   - navigation:
     - text: Settings
+    - searchbox "Search settings"
     - button "General":
       - img
       - text: General
@@ -10,6 +11,9 @@
     - button "Models":
       - img
       - text: Models
+    - button "Accounts":
+      - img
+      - text: Accounts
     - button "Web Search":
       - img
       - text: Web Search
@@ -27,103 +31,72 @@
   - button "Close":
     - img
     - text: Close
-  - heading "Models" [level=2]
-  - paragraph: Sign in with your accounts or enter API keys to use models from these providers.
-  - region "Image and video generation":
-    - heading "Image and video generation" [level=3]
-    - button "Refresh models"
-    - paragraph: Choose models marked Image or Video, grouped by provider. Fetch and save a provider's models to add them here. Generation requires a connected provider that supports the selected task.
-    - text: Image model
-    - combobox "Image model":
-      - option "Automatic fallback" [selected]
-    - text: Video model
-    - combobox "Video model":
-      - option "Automatic fallback" [selected]
-  - region "API keys":
-    - heading "API keys" [level=3]
-    - paragraph: Configure provider API keys and optional fallback keys.
-    - list
-    - button "Add provider":
-      - img
-      - text: Add provider
-    - button "Add a custom provider":
-      - img
-      - text: Add a custom provider
-  - region "Account sign-in":
-    - heading "Account sign-in" [level=3]
-    - paragraph: Connect provider accounts independently of your API keys.
-    - list:
-      - listitem:
-        - text: ChatGPT
-        - img "Account connected"
-        - button "Edit ChatGPT (chatgpt)": Edit
-        - button "Delete ChatGPT (chatgpt)": Delete
-        - text: ChatGPT chatgpt
-        - button "Add account"
-        - text: Accounts 100 accounts
-        - paragraph: Requests rotate between accounts. Another account is tried when a request fails or reaches its quota.
-        - searchbox "Search accounts"
-        - checkbox "Select this page"
-        - text: Select this page
-        - list "Accounts":
-          - listitem:
-            - checkbox "Select account-000@example.test"
-            - text: account-000@example.test
-            - button "Show usage for account-000@example.test": Usage
-            - button "Sign out account-000@example.test": Sign out
-          - listitem:
-            - checkbox "Select account-001@example.test"
-            - text: account-001@example.test
-            - button "Show usage for account-001@example.test": Usage
-            - button "Sign out account-001@example.test": Sign out
-          - listitem:
-            - checkbox "Select account-002@example.test"
-            - text: account-002@example.test
-            - button "Show usage for account-002@example.test": Usage
-            - button "Sign out account-002@example.test": Sign out
-          - listitem:
-            - checkbox "Select account-003@example.test"
-            - text: account-003@example.test
-            - button "Show usage for account-003@example.test": Usage
-            - button "Sign out account-003@example.test": Sign out
-          - listitem:
-            - checkbox "Select account-004@example.test"
-            - text: account-004@example.test
-            - button "Show usage for account-004@example.test": Usage
-            - button "Sign out account-004@example.test": Sign out
-          - listitem:
-            - checkbox "Select account-005@example.test"
-            - text: account-005@example.test
-            - button "Show usage for account-005@example.test": Usage
-            - button "Sign out account-005@example.test": Sign out
-          - listitem:
-            - checkbox "Select account-006@example.test"
-            - text: account-006@example.test
-            - button "Show usage for account-006@example.test": Usage
-            - button "Sign out account-006@example.test": Sign out
-          - listitem:
-            - checkbox "Select account-007@example.test"
-            - text: account-007@example.test
-            - button "Show usage for account-007@example.test": Usage
-            - button "Sign out account-007@example.test": Sign out
-          - listitem:
-            - checkbox "Select account-008@example.test"
-            - text: account-008@example.test
-            - button "Show usage for account-008@example.test": Usage
-            - button "Sign out account-008@example.test": Sign out
-          - listitem:
-            - checkbox "Select account-009@example.test"
-            - text: account-009@example.test
-            - button "Show usage for account-009@example.test": Usage
-            - button "Sign out account-009@example.test": Sign out
-        - text: 1–10 of 100
-        - button "Previous accounts page" [disabled]: Previous
-        - text: 1 / 10
-        - button "Next accounts page": Next
-        - status
-        - group: Customized settings
-        - button "Cancel"
-        - button "Apply"
-    - button "Add sign-in provider":
-      - img
-      - text: Add sign-in provider
+  - heading "Accounts" [level=2]
+  - paragraph: Connect provider accounts and view their reported usage. Accounts are saved immediately. Configure providers and models separately in Models.
+  - button "Manage models"
+  - text: Provider
+  - combobox "Provider":
+    - option "ChatGPT" [selected]
+    - option "Google"
+  - button "Add account"
+  - text: Accounts 100 accounts
+  - paragraph: Requests rotate between accounts. Another account is tried when a request fails or reaches its quota.
+  - searchbox "Search accounts"
+  - checkbox "Select this page"
+  - text: Select this page
+  - list "Accounts":
+    - listitem:
+      - checkbox "Select account-000@example.test"
+      - text: account-000@example.test
+      - button "Show usage for account-000@example.test": Usage
+      - button "Sign out account-000@example.test": Sign out
+    - listitem:
+      - checkbox "Select account-001@example.test"
+      - text: account-001@example.test
+      - button "Show usage for account-001@example.test": Usage
+      - button "Sign out account-001@example.test": Sign out
+    - listitem:
+      - checkbox "Select account-002@example.test"
+      - text: account-002@example.test
+      - button "Show usage for account-002@example.test": Usage
+      - button "Sign out account-002@example.test": Sign out
+    - listitem:
+      - checkbox "Select account-003@example.test"
+      - text: account-003@example.test
+      - button "Show usage for account-003@example.test": Usage
+      - button "Sign out account-003@example.test": Sign out
+    - listitem:
+      - checkbox "Select account-004@example.test"
+      - text: account-004@example.test
+      - button "Show usage for account-004@example.test": Usage
+      - button "Sign out account-004@example.test": Sign out
+    - listitem:
+      - checkbox "Select account-005@example.test"
+      - text: account-005@example.test
+      - button "Show usage for account-005@example.test": Usage
+      - button "Sign out account-005@example.test": Sign out
+    - listitem:
+      - checkbox "Select account-006@example.test"
+      - text: account-006@example.test
+      - button "Show usage for account-006@example.test": Usage
+      - button "Sign out account-006@example.test": Sign out
+    - listitem:
+      - checkbox "Select account-007@example.test"
+      - text: account-007@example.test
+      - button "Show usage for account-007@example.test": Usage
+      - button "Sign out account-007@example.test": Sign out
+    - listitem:
+      - checkbox "Select account-008@example.test"
+      - text: account-008@example.test
+      - button "Show usage for account-008@example.test": Usage
+      - button "Sign out account-008@example.test": Sign out
+    - listitem:
+      - checkbox "Select account-009@example.test"
+      - text: account-009@example.test
+      - button "Show usage for account-009@example.test": Usage
+      - button "Sign out account-009@example.test": Sign out
+  - text: 1–10 of 100
+  - button "Previous accounts page" [disabled]: Previous
+  - text: 1 / 10
+  - button "Next accounts page": Next
+  - status

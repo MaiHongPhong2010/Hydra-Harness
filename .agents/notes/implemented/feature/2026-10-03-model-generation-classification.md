@@ -14,6 +14,8 @@ Direct DeepSeek and Kiro propagate saved endpoints through their catalogs and re
 
 Settings and the composer filter image/video choices by the corresponding saved endpoint. Provider/model pairs preserve route identity. An existing choice that loses its generation role remains unavailable until explicitly cleared or replaced. This classification supersedes the unfiltered-selector part of the [generation endpoint decision](../architecture/2026-10-02-generative-model-endpoints-and-fallback.md); that note still owns discovery, transport, and rejection-only fallback.
 
+Applying shared image/video preferences publishes the Host's acknowledged namespace to the shared settings mirror before refreshing the Models page. The composer therefore reflects accepted choices without waiting for a pushed invalidation. Failed writes retain the draft and the previous saved selection.
+
 Applying an explicit pi-ai catalog clears shared generation choices referring to model IDs removed or renamed on that route. The catalog replacement and preference unsets share one revision-checked settings mutation, so validation never observes a dangling selection. Choices on other routes and IDs retained in the edited catalog survive. Cancel and rejected writes preserve stored preferences; a rejected edit remains available for retry.
 
 Gemini discovery normalizes `predict` to image generation and `predictLongRunning` to video, and uses known image family metadata for shared `generateContent` methods. Provider method metadata is validated before applying family hints.
@@ -31,3 +33,5 @@ Gemini discovery normalizes `predict` to image generation and `predictLongRunnin
 Generation lists contain only models marked for their role. A classification describes intended use and does not grant provider access or add missing generation transport. Focused client tests cover both roles, ordinary overrides, existing metadata, and unavailable choices. Keyless assembled Web scenarios cover Fetch, persistence, filtered selectors, reload, both themes, and narrow layouts; live provider entitlement is separate evidence.
 
 Focused deletion checks cover image/video selections, repeated IDs on another provider, renaming, retained IDs, and rejected writes. The assembled Web deletion scenario saves the edited catalog through the real Host and verifies the cleared video selection and retained image selection after reload.
+
+A focused regression holds settings invalidations back and verifies that accepted image/video preferences reach the shared mirror and remain selected after the page refresh. The assembled discovery scenarios verify both selected composer rows before reload.

@@ -42,6 +42,9 @@
   ],
   "license": "MIT",
   "peerDependencies": {
+    "@hydraharness/harness-home-paths": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/schemastery": "workspace:^",
     "@hydraharness/harness-brand": "workspace:^",
     "@hydraharness/harness-storage-domain": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
@@ -54,6 +57,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@hydraharness/harness-home-paths": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/schemastery": "workspace:^",
     "@hydraharness/harness-brand": "workspace:^",
     "@hydraharness/harness-storage-domain": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",

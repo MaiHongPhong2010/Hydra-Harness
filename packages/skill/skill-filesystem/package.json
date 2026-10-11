@@ -41,6 +41,7 @@
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-home-paths": "workspace:^",
     "@hydraharness/harness-skill": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/cordis": "workspace:^"
   },
   "dependencies": {
@@ -52,6 +53,7 @@
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-home-paths": "workspace:^",
     "@hydraharness/harness-skill": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/cordis": "workspace:^"
   }
 }

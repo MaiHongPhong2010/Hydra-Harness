@@ -5,7 +5,7 @@
 
 import type { Context } from '@hydraharness/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@hydraharness/harness-invariants'
-import { deepEqualJson } from './index.ts'
+import { deepEqualJson, type SettingsProvider } from './index.ts'
 
 const PACKAGE_NAME = '@hydraharness/harness-settings'
 
@@ -21,8 +21,8 @@ export const inject = ['invariants']
  * seam's own equality predicate.
  */
 const install: InvariantInstaller = (ctx: Context, fail: InvariantFailure) => {
-  ctx.on('settings/updated', (ns, next, prev) => {
-    const settings = ctx.get('settings')
+  ctx.on('settings/updated', function (this: SettingsProvider | null, ns, next, prev) {
+    const settings = this ?? ctx.get('settings')
     if (settings === undefined) {
       fail(`settings/updated for "${ns}" emitted without a live settings service`)
     }
@@ -36,7 +36,7 @@ const install: InvariantInstaller = (ctx: Context, fail: InvariantFailure) => {
     if (deepEqualJson(next, prev)) {
       fail(`settings/updated for "${ns}" emitted without a resolved-value change`)
     }
-  })
+  }, { global: true })
 }
 
 /**

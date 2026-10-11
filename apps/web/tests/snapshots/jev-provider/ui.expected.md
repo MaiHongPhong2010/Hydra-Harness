@@ -1,6 +1,7 @@
 - dialog "Settings":
   - navigation:
     - text: Settings
+    - searchbox "Search settings"
     - button "General":
       - img
       - text: General
@@ -10,6 +11,9 @@
     - button "Models":
       - img
       - text: Models
+    - button "Accounts":
+      - img
+      - text: Accounts
     - button "Web Search":
       - img
       - text: Web Search
@@ -28,7 +32,11 @@
     - img
     - text: Close
   - heading "Models" [level=2]
-  - paragraph: Sign in with your accounts or enter API keys to use models from these providers.
+  - paragraph: Configure providers, API keys, model catalogs, and default models.
+  - region "Default model":
+    - text: Default model
+    - combobox "Default model"
+    - paragraph: Used by new chats. Existing chats keep their selected model.
   - region "Image and video generation":
     - heading "Image and video generation" [level=3]
     - button "Refresh models"
@@ -39,61 +47,35 @@
     - text: Video model
     - combobox "Video model":
       - option "Automatic fallback" [selected]
+  - region "Decision model":
+    - heading "Decision model" [level=3]
+    - text: Decision model
+    - combobox "Decision model":
+      - option "Off"
+      - option "Jev" [selected]
+    - paragraph: Jev advises browser_decide on candidate actions. It does not execute them.
+    - paragraph: "Model: typesafe-ai/jev"
+    - status: API key missing
+    - button "Configure Jev"
+    - text: API key
+    - textbox "API key"
+    - button "Apply"
+    - button "Cancel"
   - region "API keys":
     - heading "API keys" [level=3]
     - paragraph: Configure provider API keys and optional fallback keys.
     - list
-    - text: Provider
-    - combobox "Provider":
-      - option "amazon-bedrock"
-      - option "ant-ling"
-      - option "anthropic"
-      - option "azure-openai-responses"
-      - option "cerebras"
-      - option "cloudflare-ai-gateway"
-      - option "cloudflare-workers-ai"
-      - option "deepseek"
-      - option "fireworks"
-      - option "github-copilot"
-      - option "google"
-      - option "google-vertex"
-      - option "groq"
-      - option "huggingface"
-      - option "kimi-coding"
-      - option "minimax"
-      - option "minimax-cn"
-      - option "mistral"
-      - option "moonshotai"
-      - option "moonshotai-cn"
-      - option "nvidia"
-      - option "openai"
-      - option "openai-codex"
-      - option "opencode"
-      - option "opencode-go"
-      - option "openrouter"
-      - option "qwen-token-plan"
-      - option "qwen-token-plan-cn"
-      - option "together"
-      - option "vercel-ai-gateway"
-      - option "xai"
-      - option "xiaomi"
-      - option "xiaomi-token-plan-ams"
-      - option "xiaomi-token-plan-cn"
-      - option "xiaomi-token-plan-sgp"
-      - option "zai"
-      - option "zai-coding-cn"
-      - option "Jev" [selected]
-    - heading "Jev" [level=4]
-    - paragraph: Decision provider for choices, scores, and yes/no questions. Browser decisions is enabled separately in Plugins.
-    - text: API key
-    - textbox "API key"
-    - paragraph: "Model: typesafe-ai/jev"
-    - button "Apply"
-    - button "Cancel"
-  - region "Account sign-in":
-    - heading "Account sign-in" [level=3]
-    - paragraph: Connect provider accounts independently of your API keys.
-    - list
-    - button "Add sign-in provider":
+    - button "Add provider":
       - img
-      - text: Add sign-in provider
+      - text: Add provider
+    - button "Add a custom provider":
+      - img
+      - text: Add a custom provider
+  - region "Account-backed models":
+    - heading "Account-backed models" [level=3]
+    - paragraph: Configure catalogs for providers that use connected accounts. Manage sign-in and usage in Accounts.
+    - button "Manage accounts"
+    - list
+    - button "Add provider":
+      - img
+      - text: Add provider

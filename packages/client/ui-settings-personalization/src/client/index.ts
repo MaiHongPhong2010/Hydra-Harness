@@ -41,7 +41,26 @@ export const inject = ['slots', 'locale', 'connection', 'settingsScope']
  */
 export function apply(ctx: ClientContext): void {
   const { api } = ctx.get('connection') as ConnectionHandle
-  const instructions = new InstructionsController(api)
+  const selection = ctx.settingsScope.selection()
+  const documents = new Map<string, InstructionsController>()
+  const document = (): InstructionsController => {
+    const { target } = selection.getSnapshot()
+    const key = `${target.workspaceId ?? 'global'}:${target.layer ?? ''}`
+    let controller = documents.get(key)
+    if (controller === undefined) { controller = new InstructionsController(api, target); documents.set(key, controller) }
+    return controller
+  }
+  let instructions = document()
+  const instructionView = createSnapshotStore(instructions.store.getSnapshot())
+  let stopInstructions = instructions.store.subscribe(() => { instructionView.set(instructions.store.getSnapshot()) })
+  const stopSelection = selection.subscribe(() => {
+    const next = document()
+    if (next === instructions) return
+    stopInstructions()
+    instructions = next
+    instructionView.set(instructions.store.getSnapshot())
+    stopInstructions = instructions.store.subscribe(() => { instructionView.set(instructions.store.getSnapshot()) })
+  })
   const personality = ctx.settingsScope.bind<PersonalitySettings>({ namespace: PERSONALIZATION_NAMESPACE })
   const memory = ctx.settingsScope.bind<MemorySettings>({ namespace: MEMORY_NAMESPACE })
   const personalityDraft = createSnapshotStore<PersonalityDraft>({ value: undefined, saving: false, failed: false })
@@ -49,10 +68,10 @@ export function apply(ctx: ClientContext): void {
   const isDisposed = (): boolean => lifecycle.signal.aborted
 
   ctx.effect(() => ctx.locale.register('settings.personalization', { en }), 'ui-settings-personalization: dictionaries')
-  ctx.effect(() => () => { lifecycle.abort(); instructions.dispose() }, 'ui-settings-personalization: editor lifecycle')
+  ctx.effect(() => () => { lifecycle.abort(); stopInstructions(); stopSelection(); for (const controller of documents.values()) controller.dispose() }, 'ui-settings-personalization: editor lifecycle')
 
   const sectionInjected = (): PersonalizationSectionInjected => ({
-    hooks: { instructions: instructions.store, personality, personalityDraft, memory },
+    hooks: { instructions: instructionView, personality, personalityDraft, memory, selection },
     load: () => instructions.ensure(),
     setDraft: (text: string) => { instructions.setDraft(text) },
     save: () => instructions.save(),

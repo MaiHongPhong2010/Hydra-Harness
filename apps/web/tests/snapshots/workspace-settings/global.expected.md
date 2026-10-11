@@ -1,0 +1,116 @@
+- dialog "Settings":
+  - navigation:
+    - text: Settings
+    - searchbox "Search settings"
+    - button "General":
+      - img
+      - text: General
+    - button "Personalization":
+      - img
+      - text: Personalization
+    - button "Models":
+      - img
+      - text: Models
+    - button "Accounts":
+      - img
+      - text: Accounts
+    - button "Web Search":
+      - img
+      - text: Web Search
+    - button "Usage"
+    - button "Plugins":
+      - img
+      - text: Plugins
+    - button "Agent presets":
+      - img
+      - text: Agent presets
+    - button "Archived sessions":
+      - img
+      - text: Archived sessions
+  - button "Open configuration file"
+  - button "Close":
+    - img
+    - text: Close
+  - heading "General" [level=1]
+  - region "Permissions":
+    - heading "Permissions" [level=2]
+    - text: Default permissions Save the default and apply it to open chats. Changes control the next action.
+    - button "Edit":
+      - text: Edit
+      - img
+    - button "Reset to inherited permission" [disabled]
+    - text: Full access Allow file access and commands without approval in open and new chats.
+    - switch "Full access"
+  - region "General":
+    - heading "General" [level=2]
+    - text: Agent preset Applies to sessions you start from now on. Running sessions keep the preset they began with.
+    - button "Standard mode":
+      - text: Standard mode
+      - img
+    - button "Reset to inherited preset" [disabled]
+    - text: Language
+    - status: Choose the UI language, or follow the browser.
+    - button "Auto":
+      - text: Auto
+      - img
+    - text: Appearance
+    - button "Light":
+      - img
+      - text: Light
+    - button "Dark":
+      - img
+      - text: Dark
+    - button "System" [pressed]:
+      - img
+      - text: System
+    - text: Projectless task folder Each standalone chat gets its own directory. Changing this root affects only new chats.
+    - textbox "Projectless task folder": {{cwd}}\projectless-tasks
+    - button "Choose folder"
+    - text: Compress local chat history Use Zstandard for new sessions after restart. Existing sessions keep their format.
+    - switch "Compress local chat history" [checked]
+    - text: "Speed The current model does not advertise Priority processing. Standard applies here; your saved choice remains available for supported models. Requested tier: standard. Last reported tier: Not reported"
+    - combobox "Speed":
+      - option "Standard" [selected]
+      - option "Priority" [disabled]
+    - text: Suggested prompts Create suggestions from readable project files and connected MCP resources. This sends bounded context to the selected model and consumes tokens.
+    - switch "Suggested prompts"
+    - text: Open source licenses Generated dependency notices bundled with this artifact.
+    - button "View"
+    - text: Plugins Allow optional native and imported plugins, MCP, skills, and hooks. Individual choices are preserved. Required functionality stays available.
+    - switch "Plugins" [checked]
+  - region "Composer":
+    - heading "Composer" [level=2]
+    - text: Plain text composer Keep draft text literal while retaining attached files and reference data.
+    - switch "Plain text composer"
+    - text: Show context window usage Show estimated occupancy of the current context window.
+    - switch "Show context window usage" [checked]
+    - text: Send shortcut Shift+Enter inserts a new line. Ctrl/Cmd+Shift+Enter sends the alternate behavior when Ctrl/Cmd+Enter is the send shortcut.
+    - combobox "Send shortcut":
+      - option "Enter" [selected]
+      - option "Ctrl/Cmd+Enter"
+    - text: Follow-up behavior Queue for the next turn or steer the running turn. The alternate send shortcut uses the other behavior.
+    - combobox "Follow-up behavior":
+      - option "Queue" [selected]
+      - option "Steer"
+  - region "Notifications":
+    - heading "Notifications" [level=2]
+    - text: Turn completion notifications Notify when a live turn ends.
+    - combobox "Turn completion notifications":
+      - option "Never"
+      - option "Background" [selected]
+      - option "Always"
+    - text: Enable permission notifications Show the action to enable display notifications when permission is needed.
+    - switch "Enable permission notifications" [checked]
+    - text: "Display permission: denied"
+    - button "Enable notifications"
+    - text: Enable question notifications Notify when an answer is needed. Click the notification to open its chat.
+    - switch "Enable question notifications" [checked]
+    - text: Notification sound Use the same sound policy for completion and question notifications.
+    - combobox "Notification sound":
+      - option "Default" [selected]
+      - option "Off"
+    - button "Listen"
+  - region "Toys":
+    - heading "Toys" [level=2]
+    - text: Confetti cannon Type /confetti to fire an effect. Reduced motion is respected. History replay never fires it.
+    - switch "Confetti cannon"

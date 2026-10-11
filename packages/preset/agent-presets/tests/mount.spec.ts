@@ -17,7 +17,7 @@ import AgentPresets, {
 } from '@hydraharness/harness-agent-presets'
 import type { Config } from '@hydraharness/harness-agent-presets'
 import type {} from '@hydraharness/harness-agent-presets/types'
-import { bindScopeParent, createScope, scopeOf } from '@hydraharness/harness-scope'
+import { bindScopeParent, createScope, scopeOf, scopeParentOf } from '@hydraharness/harness-scope'
 
 declare module '@hydraharness/cordis' {
   interface Context {
@@ -85,6 +85,69 @@ beforeEach(async () => {
 })
 
 describe('composing an agent from a preset', () => {
+  it('revokes project generations while preserving inherited agents and their origin identity', async () => {
+    const inherited = await agentOn(ctx, 'workspace-inherited', 'standard')
+    const projectRoot = ROOTS[1]!.path
+    await ctx.agentPresets.setProjectRoot(projectRoot, true)
+    const project = await agentOn(ctx, 'workspace-project', 'standard')
+    const child = (await ctx.agents.create({
+      sessionId: SessionId('workspace-project-child'),
+      setup: (agentCtx) => { ctx.agentPresets.composeFrom(agentCtx, project.ctx) },
+    })).agent
+    expect(toolNames(ctx, inherited)).toEqual(['alpha'])
+    expect(toolNames(ctx, project)).toEqual(['shadowed'])
+    expect(ctx.agentPresets.isProjectContext(project.ctx, projectRoot)).toBe(true)
+    expect(ctx.agentPresets.isRetiredProjectContext(project.ctx, projectRoot)).toBe(false)
+    expect(ctx.agentPresets.isProjectContext(child.ctx, projectRoot)).toBe(true)
+    expect(ctx.agentPresets.isProjectContext(inherited.ctx, projectRoot)).toBe(false)
+    expect(ctx.agentPresets.isProjectContext(project.ctx, projectRoot.slice(0, -1))).toBe(false)
+    expect(ctx.agentPresets.isProjectContext(project.ctx, `${projectRoot}-sibling`)).toBe(false)
+    expect(ctx.agentPresets.isProjectContext(ctx, projectRoot)).toBe(false)
+
+    await ctx.agentPresets.setProjectRoot(projectRoot, false)
+    expect(toolNames(ctx, project)).toEqual([])
+    expect(toolNames(ctx, child)).toEqual([])
+    expect(toolNames(ctx, inherited)).toEqual(['alpha'])
+    expect(ctx.agentPresets.isProjectContext(project.ctx, projectRoot)).toBe(true)
+    expect(ctx.agentPresets.isRetiredProjectContext(project.ctx, projectRoot)).toBe(true)
+    expect(toolNames(ctx, await agentOn(ctx, 'workspace-after-revoke', 'standard'))).toEqual(['alpha'])
+    await ctx.agentPresets.setProjectRoot(projectRoot, false)
+    await ctx.agentPresets.setProjectRoot(projectRoot, true)
+    expect(ctx.agentPresets.isRetiredProjectContext(project.ctx, projectRoot)).toBe(true)
+    const fresh = await agentOn(ctx, 'workspace-retrusted', 'standard')
+    expect(ctx.agentPresets.isRetiredProjectContext(fresh.ctx, projectRoot)).toBe(false)
+    expect(toolNames(ctx, fresh)).toEqual(['shadowed'])
+    const nested = createScope(project.ctx, { nested: true }, { parent: scopeOf(project.ctx)! })
+    expect(ctx.agentPresets.isProjectContext(nested.ctx, projectRoot)).toBe(true)
+    expect(ctx.agentPresets.isRetiredProjectContext(nested.ctx, projectRoot)).toBe(true)
+    await nested.dispose()
+  })
+
+  it('parents standing generations to their workspace and isolates identical preset ids', async () => {
+    const first = createScope(ctx, { workspace: 'first' })
+    const second = createScope(ctx, { workspace: 'second' })
+    const ownerA = first.ctx.isolate('agentPresets')
+    const ownerB = second.ctx.isolate('agentPresets')
+    await ownerA.plugin(AgentPresets, { default: 'standard', roots: ROOTS, includeUserRoot: false })
+    await ownerB.plugin(AgentPresets, { default: 'standard', roots: [...ROOTS].reverse(), includeUserRoot: false })
+    const presetsA = ownerA.get('agentPresets')!
+    const presetsB = ownerB.get('agentPresets')!
+    const keyA = await presetsA.standingKeyFor('standard')
+    const keyB = await presetsB.standingKeyFor('standard')
+    expect(keyA).not.toBe(keyB)
+    expect(scopeParentOf(keyA)).toBe(scopeOf(first.ctx))
+    expect(scopeParentOf(keyB)).toBe(scopeOf(second.ctx))
+    const agentA = (await ctx.agents.create({ sessionId: SessionId('workspace-first'), setup: async agentCtx => void await presetsA.mount(agentCtx) })).agent
+    const agentB = (await ctx.agents.create({ sessionId: SessionId('workspace-second'), setup: async agentCtx => void await presetsB.mount(agentCtx) })).agent
+    expect(toolNames(ctx, agentA)).toEqual(['alpha'])
+    expect(toolNames(ctx, agentB)).toEqual(['shadowed'])
+
+    await first.dispose()
+    expect(toolNames(ctx, agentA)).toEqual([])
+    expect(toolNames(ctx, agentB)).toEqual(['shadowed'])
+    await second.dispose()
+  })
+
   it('hands an absolute plugin path to Node as a file URL', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hydra-preset-absolute-plugin-'))
     const presetDir = join(root, 'absolute')
@@ -459,6 +522,8 @@ describe('attributing a service to a subtree', () => {
 
 describe('replacing a composition', () => {
   it('publishes a committed preset selection for remote consumers', async () => {
+    const workspace = createScope(ctx, { workspace: 'selection' })
+    await workspace.ctx.isolate('agentPresets').plugin(AgentPresets, { default: 'standard', roots: ROOTS, includeUserRoot: false })
     const agent = await agentOn(ctx, 'sess-selected', 'standard')
     const selected: Array<[SessionId, string]> = []
     ctx.on('agent-preset/selected', (sessionId, agentPreset) => {

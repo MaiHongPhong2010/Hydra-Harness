@@ -1,0 +1,42 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../runtime"
+    },
+    {
+      "path": "../locale"
+    },
+    {
+      "path": "../ui-settings"
+    },
+    {
+      "path": "../ui-conversation"
+    },
+    {
+      "path": "../ui-primitives"
+    },
+    {
+      "path": "../ui-slots"
+    },
+    {
+      "path": "../../api/remotes/tsconfig.client.json"
+    },
+    {
+      "path": "../../interaction/suggested-prompts"
+    },
+    {
+      "path": "../../runtime-diagnostics/invariants"
+    }
+  ],
+  "include": [
+    "src"
+  ],
+  "compilerOptions": {
+    "outDir": "lib/types",
+    "rootDir": "src"
+  }
+}

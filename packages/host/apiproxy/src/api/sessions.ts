@@ -184,6 +184,8 @@ export interface ModelReasoning {
 
 /** One model displayed inside its provider group. */
 export interface ModelCatalogModel {
+  /** Processing tiers explicitly advertised by the adapter. */
+  serviceTiers?: ('standard' | 'priority')[]
   /** Provider-owned model id. */
   id: string
   /** Provider-supplied display name. */
@@ -338,6 +340,8 @@ export interface SessionsApi {
     sessionId?: SessionId
     agentPreset?: string
     reuseWorkspaceBlank?: true
+    /** Create a distinct task workspace; cannot be combined with an existing session, cwd, or project. */
+    projectless?: true
   }>):
   Promise<RpcResponse<{ sessionId: SessionId; agentPreset?: string }>>
 
@@ -374,6 +378,8 @@ export interface SessionsApi {
    * lookups run independently; subagents reject with `agent-busy`.
    */
   models(request: RpcRequest<{ sessionId: SessionId }>): Promise<RpcResponse<SessionModels>>
+  /** One cached bounded prompt batch for an empty chat; explicit refresh creates a new batch. */
+  suggestions(request: RpcRequest<{ sessionId: SessionId; refresh?: boolean }>): Promise<RpcResponse<{ items: string[]; error?: string }>>
 
   /**
    * Selects the complete model selection for this session. Exact model metadata

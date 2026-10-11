@@ -40,6 +40,7 @@
     "@hydraharness/schemastery": "workspace:^"
   },
   "peerDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-hook-protocol": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
@@ -51,6 +52,7 @@
     "@hydraharness/cordis": "workspace:^"
   },
   "devDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-agent-loop": "workspace:^",
     "@hydraharness/harness-agent-loop-testkit": "workspace:^",

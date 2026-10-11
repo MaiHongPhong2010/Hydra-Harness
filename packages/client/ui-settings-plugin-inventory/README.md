@@ -14,6 +14,8 @@ Marketplace sources accept GitHub shorthand, HTTPS/SSH Git URLs, or local roots.
 
 **Shared search.** `ui-settings-plugins` renders the one search box for the whole Plugins section (see its README); every surface here receives the current text as the `query` owner prop — from the `settings.plugins.tab` slot for the tabs, and forwarded through `settings.plugins.hooks.item` for the imported-hook catalog — and filters its own rows against plugin/skill/hook/marketplace-source text, independent of which tab is active.
 
+Settings lists and edits the global preset plugin configuration. Workspace preset and enablement overrides come from project files. Host plugin installation, core controls, imported bundles, and marketplace sources share the same global Settings panel.
+
 ## Model Experience
 
 None, as this package only visualizes Host-owned plugin state and registers no model-facing input.

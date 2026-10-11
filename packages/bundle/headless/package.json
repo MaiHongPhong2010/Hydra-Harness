@@ -56,18 +56,24 @@
     "@hydraharness/cordis-plugin-loader": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-agent-default-model": "workspace:^",
+    "@hydraharness/harness-agent-presets": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-llm": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
     "@hydraharness/harness-session": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/cordis": "workspace:^"
   },
   "devDependencies": {
     "@hydraharness/cordis-plugin-loader": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-agent-default-model": "workspace:^",
+    "@hydraharness/harness-agent-presets": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-llm": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
     "@hydraharness/harness-session": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/cordis": "workspace:^"
   }
 }

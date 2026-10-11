@@ -32,9 +32,9 @@ In a `cordis.yml`:
     model: deepseek-v4
 ```
 
-The config is parsed **once** at load. `configPath` is **process-level** — a relative path resolves against the process launch cwd at load time, not per-session (`TODO(per-session-hook-config)`). A read/parse failure is contained (logs + registers nothing); an invalid regex matcher on an event that consumes matchers is one such failure and reports its pattern and event. Only sync `type: 'command'` hooks run — a non-command or `async: true` hook is parsed-and-skipped with a warning. A hook accepts `timeout` or the `timeoutSec` alias; one that sets neither runs under the protocol's reference default (`DEFAULT_HOOK_TIMEOUT_MS` from `@hydraharness/harness-hook-protocol`, 10 minutes). Events outside the seven bridge-supported points are dropped at parse.
+The config is parsed once at load; a relative `configPath` resolves against the process launch cwd. Hooks receive events from agents below the mounting context's registration scope; an unscoped mount covers every agent. A read/parse failure logs and registers nothing, including an invalid regex matcher, whose diagnostic names its pattern and event. Only synchronous `type: 'command'` hooks run; non-command and `async: true` handlers are skipped with a warning. `timeout` and `timeoutSec` override the 10-minute protocol default. Events outside the seven supported points are dropped at parse.
 
-The hooks themselves run in the agent's session workspace: for the agent-scoped points the bridge passes the session's `cwd` as the hook process's working directory, so a hook operates in the user's project tree, not the server launch dir.
+Hook commands run in optional `Config.cwd`, or the agent's session `cwd` when omitted. Workspace registries supply the selected root, so relative scripts address that project even when the session started from a child directory.
 
 ## Hook points → typed Decisions
 
@@ -52,7 +52,7 @@ A tool call's payload carries the real `tool_name` (the same value the matcher t
 
 Every agent-scoped stdin payload carries `session_id` and `transcript_path`. The bridge resolves the latter through `ctx.sessionPersistence.locate(session.header)` when available and otherwise sends `null`, preserving the Codex `string | null` shape. Lookup does not create or flush the artifact, so a path can be absent before the first turn-end checkpoint or omit the current open turn.
 
-`SessionStart` — the one emit point — runs detached; each run chain is tracked, and disposing the bridge aborts a still-running hook process, then drains the continuation before the dispose resolves (`createDetachedRuns` in `@hydraharness/harness-hook-protocol`).
+`SessionStart`, `SubagentStart`, and `SubagentStop` run detached. Every hook run is tracked, including blocking prompt/tool/Stop hooks. Disposal aborts active processes and waits for their runs and detached continuations before resolving (`createDetachedRuns` in `@hydraharness/harness-hook-protocol`).
 
 ## Context source
 
@@ -97,4 +97,4 @@ A blocked prompt sends no request and invalidates nothing. Denial, feedback, and
 - **`PostToolUse` is partial:** blocking feedback and JSON `additionalContext` work, but `{"continue": false}` is not enforced, non-shell tool arguments are reduced to `{ command }`, and structured tool output is flattened to text in `tool_response`.
 - **`Stop` is partial:** blocking forces another model turn, but `stop_hook_active` is always `false`, `last_assistant_message` is always `null`, and `{"continue": false}` is not enforced. An unconditionally blocking hook therefore force-continues every step unless it self-limits (`TODO(stop-loop-guard)`).
 - **Common payload and output fields are partial:** every mapped event reports the statically configured `model` and `permission_mode: "default"` instead of current Codex runtime values. `systemMessage` is logged + warned but not surfaced, and `{"continue": false}` is recorded but does not apply Codex's event-specific stop behavior (`TODO(hook-continue-false)`).
-- **Config loading and execution are partial:** one process-level `configPath` is parsed at load; Codex's active user, project, session, system/managed, and plugin layers, trust controls, and inline `config.toml` hook form are not implemented (`TODO(per-session-hook-config)`). Only synchronous `command` handlers run, current metadata such as `statusMessage` and `commandWindows` is ignored, and matching handlers run serially rather than with Codex's concurrent launch semantics. Plugin-bundled commands run with the session cwd; use `PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` for paths inside the installed bundle.
+- **Config loading and execution are partial:** each mount reads one document; [`hooks-registry`](../hooks-registry/README.md) supplies workspace records and reconciliation. Codex's complete native layer discovery and inline `config.toml` hook form are unsupported. Only synchronous `command` handlers run; metadata such as `statusMessage` and `commandWindows` is ignored, and matching handlers run serially. Plugin-bundled commands run with the session cwd; use `PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` for paths inside the installed bundle.

@@ -12,10 +12,10 @@
  * @module @hydraharness/harness-agent-presets/authoring
  */
 
-import { chmod, cp, readdir, readFile, rm, stat } from 'node:fs/promises'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { chmod, cp, lstat, readdir, readFile, rm, stat } from 'node:fs/promises'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { writeFileAtomic } from '@hydraharness/harness-atomic-write'
-import { expandHomePath } from '@hydraharness/harness-home-paths'
+import { canonicalizeWatchPath, expandHomePath } from '@hydraharness/harness-home-paths'
 import { METADATA_FILE, renderPresetMetadata } from './metadata.ts'
 import { PRESET_ID, type AgentPreset, type PresetRoot } from './preset.ts'
 
@@ -83,13 +83,56 @@ export async function readComposition(preset: AgentPreset): Promise<string> {
 async function occupied(path: string): Promise<boolean> {
   let present = true
   try {
-    await stat(path)
-  } catch {
-    // Every stat failure means the same thing here: nothing usable occupies
-    // the path, so the copy may claim it.
+    await lstat(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     present = false
   }
   return present
+}
+
+/** Whether a canonical path belongs to a directory rather than a sibling prefix. */
+function withinDirectory(root: string, path: string): boolean {
+  const offset = relative(root, path)
+  return !isAbsolute(offset) && offset !== '..' && !offset.startsWith(`..${sep}`)
+}
+
+/** Check the real destination before an authoring operation follows directory links. */
+async function confinedRoot(root: string, id: string, workspaceRoot?: string): Promise<string> {
+  const canonical = await canonicalizeWatchPath(root)
+  if (workspaceRoot !== undefined && !withinDirectory(workspaceRoot, canonical)) {
+    throw new PresetNotWritableError(id, 'the preset root resolves outside its workspace')
+  }
+  return canonical
+}
+
+/**
+ * Resolve one preset directory that its authoring root owns, refusing links that escape it.
+ * @param roots - authoring roots; the first user root owns writable presets.
+ * @param preset - preset whose directory or composition an editor will modify.
+ * @param workspaceRoot - optional canonical workspace containing the authoring root.
+ * @returns the writable directory after canonical path checks.
+ * @throws when the preset ships, belongs to another root, or follows an escaping link.
+ */
+export async function authoringDirectory(
+  roots: readonly PresetRoot[], preset: AgentPreset, workspaceRoot?: string,
+): Promise<string> {
+  if (preset.trust !== 'user') throw new PresetNotWritableError(preset.id, 'it ships with the deployment')
+  const root = writableRoot(roots)
+  const dir = join(root, preset.id)
+  if (!isAbsolute(preset.path) || dirname(preset.path) !== dir) {
+    throw new PresetNotWritableError(preset.id, 'it does not live under the writable preset root')
+  }
+  const canonicalRoot = await confinedRoot(root, preset.id, workspaceRoot)
+  const canonicalDir = await canonicalizeWatchPath(dir)
+  const canonicalFile = await canonicalizeWatchPath(preset.path)
+  if (!withinDirectory(canonicalRoot, canonicalDir) || !withinDirectory(canonicalDir, canonicalFile)) {
+    throw new PresetNotWritableError(preset.id, 'its directory or composition resolves outside the writable preset root')
+  }
+  if ((await lstat(dir)).isSymbolicLink()) {
+    throw new PresetNotWritableError(preset.id, 'its directory is a symlink or junction')
+  }
+  return dir
 }
 
 /**
@@ -129,6 +172,7 @@ async function tightenModes(dir: string): Promise<void> {
  * @param source - the resolved preset the copy starts from.
  * @param id - the new preset's id, which becomes its directory name.
  * @param name - display name for the copy; omitted falls back to the id.
+ * @param workspaceRoot - optional canonical workspace containing the destination root.
  * @returns the absolute path of the new preset directory.
  * @throws when the id is unusable or already occupied on disk, or the
  * deployment configures no writable root.
@@ -138,9 +182,12 @@ export async function copyComposition(
   source: AgentPreset,
   id: string,
   name?: string,
+  workspaceRoot?: string,
 ): Promise<string> {
   if (!PRESET_ID.test(id)) throw new InvalidPresetIdError(id)
-  const dir = join(writableRoot(roots), id)
+  const root = writableRoot(roots)
+  await confinedRoot(root, id, workspaceRoot)
+  const dir = join(root, id)
   // The roster check upstream only sees discovered presets; a directory with
   // no composition file still occupies the name and deserves a readable
   // refusal rather than a filesystem error code.
@@ -177,20 +224,14 @@ export async function copyComposition(
  * never re-read, so that session keeps running exactly as it was.
  * @param roots - the configured roots.
  * @param preset - the resolved preset to remove.
+ * @param workspaceRoot - optional canonical workspace containing the authoring root.
  * @throws when the preset ships with the deployment or lies outside the writable root.
  */
 export async function deleteComposition(
   roots: readonly PresetRoot[],
   preset: AgentPreset,
+  workspaceRoot?: string,
 ): Promise<void> {
-  if (preset.trust !== 'user') {
-    throw new PresetNotWritableError(preset.id, 'it ships with the deployment')
-  }
-  const dir = join(writableRoot(roots), preset.id)
-  // Belt and braces over the id pattern: the resolved directory must still be
-  // the one the writable root owns, whatever discovery reported.
-  if (!isAbsolute(preset.path) || !preset.path.startsWith(dir)) {
-    throw new PresetNotWritableError(preset.id, 'it does not live under the writable preset root')
-  }
+  const dir = await authoringDirectory(roots, preset, workspaceRoot)
   await rm(dir, { recursive: true, force: true })
 }

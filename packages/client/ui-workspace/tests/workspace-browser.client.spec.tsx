@@ -98,6 +98,19 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it('keeps standalone chats navigable in Ungrouped', () => {
+    const task = { ...workspace('task', ['task-chat']), kind: 'task' as const }
+    const b = mount({
+      useSessions: hook(sessionState([summary('task-chat', 1, { cwd: task.path })])),
+      useWorkspaces: hook(workspaceState([task])),
+    })
+    expect(screen.queryByText('task', { exact: true })).toBeNull()
+    fireEvent.click(screen.getByText('Ungrouped'))
+    const row = screen.getByRole('treeitem', { name: /task-chat/u })
+    fireEvent.click(row)
+    expect(b.props.open).toHaveBeenCalledWith(sid('task-chat'))
+  })
+
   it('opens a context menu without selecting the row and persists pin/unread actions', () => {
     const b = mount({ useSessions: hook(sessionState([summary('session', 1)])) })
     fireEvent.click(screen.getByText('Ungrouped'))

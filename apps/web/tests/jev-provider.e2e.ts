@@ -26,7 +26,7 @@ async function openModels(page: Page): Promise<Locator> {
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.waitFor({ timeout: 10_000 })
   await dialog.getByRole('button', { name: 'Models', exact: true }).click()
-  await dialog.getByText('Sign in with your accounts or enter API keys to use models from these providers.', { exact: true })
+  await dialog.getByText('Configure providers, API keys, model catalogs, and default models.', { exact: true })
     .waitFor({ timeout: 10_000 })
   await expect.poll(() => dialog.getByRole('region', { name: 'Image and video generation', exact: true })
     .getByRole('button', { name: 'Refresh models', exact: true }).isEnabled()).toBe(true)
@@ -55,16 +55,19 @@ describe('web e2e: optional Jev provider', () => {
     await scaffold?.close()
   })
 
-  it('adds Jev to the Models provider dropdown without a credential', async () => {
+  it('places Jev in Decision after the default and media selectors without a credential', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-jev-provider'))
     const dialog = await openModels(page)
-    const apiKeys = dialog.getByRole('region', { name: 'API keys', exact: true })
-    await apiKeys.getByRole('button', { name: 'Add provider', exact: true }).click()
-    const provider = apiKeys.getByLabel('Provider', { exact: true })
-    expect(await provider.locator('option').allTextContents()).toContain('Jev')
-    await provider.selectOption('plugin:jev')
-    await apiKeys.getByRole('heading', { name: 'Jev', exact: true }).waitFor({ timeout: 10_000 })
-    expect(await apiKeys.getByLabel('API key', { exact: true }).inputValue()).toBe('')
+    const decision = dialog.getByRole('region', { name: 'Decision model', exact: true })
+    const labels = await dialog.getByRole('combobox').evaluateAll(elements => elements.slice(0, 4).map(element => element.getAttribute('aria-label')))
+    expect(labels).toEqual(['Default model', 'Image model', 'Video model', 'Decision model'])
+    expect(await decision.getByRole('combobox', { name: 'Decision model', exact: true }).inputValue()).toBe('jev')
+    await dialog.getByRole('region', { name: 'API keys', exact: true }).getByRole('button', { name: 'Add provider', exact: true }).click()
+    expect(await dialog.getByLabel('Provider', { exact: true }).locator('option').allTextContents()).not.toContain('Jev')
+    await dialog.getByRole('button', { name: 'Accounts', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Models', exact: true }).click()
+    await decision.getByRole('button', { name: 'Configure Jev', exact: true }).click()
+    expect(await decision.getByLabel('API key', { exact: true }).inputValue()).toBe('')
     await compareOrRefreshGolden(
       UI_EXPECTED,
       await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd),
@@ -75,15 +78,13 @@ describe('web e2e: optional Jev provider', () => {
   async function saveKey(key: string): Promise<void> {
     const dialog = page.getByRole('dialog', { name: 'Settings' })
     if (!await dialog.isVisible().catch(() => false)) await openModels(page)
-    const region = page.getByRole('region', { name: 'API keys', exact: true })
-    if (await region.getByLabel('Provider', { exact: true }).count() === 0) {
-      await region.getByRole('button', { name: 'Add provider', exact: true }).click()
+    const region = page.getByRole('region', { name: 'Decision model', exact: true })
+    if (await region.getByLabel('API key', { exact: true }).count() === 0) {
+      await region.getByRole('button', { name: 'Configure Jev', exact: true }).click()
     }
-    await region.getByLabel('Provider', { exact: true }).selectOption('plugin:jev')
     await region.getByLabel('API key', { exact: true }).fill(key)
     await region.getByRole('button', { name: 'Apply', exact: true }).click()
-    await expect.poll(() => region.getByRole('heading', { name: 'Jev', exact: true }).count()).toBe(0)
-    await region.getByRole('button', { name: 'Edit Jev', exact: true }).waitFor()
+    await expect.poll(() => region.getByLabel('API key', { exact: true }).count()).toBe(0)
     const resolved = await scaffold.ctx.credentials.resolve(credentialRef('HYDRA_JEV_UI_TEST_KEY'))
     expect(resolved?.value === key).toBe(true)
     expect((await readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8')).includes(key)).toBe(false)
@@ -113,28 +114,29 @@ describe('web e2e: optional Jev provider', () => {
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     const dialog = await openModels(page)
-    const region = dialog.getByRole('region', { name: 'API keys', exact: true })
-    const edit = region.getByRole('button', { name: 'Edit Jev', exact: true })
+    const region = dialog.getByRole('region', { name: 'Decision model', exact: true })
+    const edit = region.getByRole('button', { name: 'Configure Jev', exact: true })
     await edit.waitFor()
-    expect(await region.getByRole('img', { name: 'API key configured' }).count()).toBe(1)
+    await region.getByText('API key configured', { exact: true }).waitFor()
     await compareOrRefreshGolden(
       SAVED_EXPECTED,
       await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd),
       MODE,
     )
     await edit.click()
-    expect(await region.getByLabel('Provider', { exact: true }).inputValue()).toBe('plugin:jev')
     expect(await region.getByLabel('API key', { exact: true }).inputValue()).toBe('')
     await region.getByRole('button', { name: 'Cancel', exact: true }).click()
     await scaffold.ctx.credentials.unset(credentialRef('HYDRA_JEV_UI_TEST_KEY'))
-    await expect.poll(() => edit.count()).toBe(0)
+    await region.getByText('API key missing', { exact: true }).waitFor()
   })
 
   it('routes the saved credential through the bundled browser decision consumer', async () => {
     await saveKey('jev-browser-fixture')
     const originalFetch = globalThis.fetch
+    let calls = 0
     const mock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       if (input !== 'https://www.jevai.org/api/v1/decisions') return originalFetch(input, init)
+      calls++
       expect(new Headers(init?.headers).get('authorization')).toBe('Bearer jev-browser-fixture')
       return Response.json({ code: 0, message: 'ok', data: {
         answers: { decision: { type: 'choice', choice: 'continue', confidence: 0.93 } },
@@ -150,6 +152,21 @@ describe('web e2e: optional Jev provider', () => {
         signal: new AbortController().signal })
       expect(output.isError).not.toBe(true)
       expect(JSON.stringify(output)).toContain('Jev chose continue (93% confidence).')
+      const select = page.getByRole('combobox', { name: 'Decision model', exact: true })
+      await select.selectOption('off')
+      await page.getByText('Decision preference saved. Applies to new calls.', { exact: true }).waitFor()
+      const disabled = await scaffold.ctx.tools.execute({ agent: handle.agent, callId: CallId('jev-off-call'),
+        name: 'browser_decide', arguments: { state: 'Continue button is visible.', question: 'How to read more?', choices: ['continue', 'stop'] },
+        signal: new AbortController().signal })
+      expect(JSON.stringify(disabled)).toContain('Decision model is Off.')
+      expect(calls).toBe(1)
+      expect(await scaffold.ctx.credentials.resolve(credentialRef('HYDRA_JEV_UI_TEST_KEY'))).toBeDefined()
+      await page.reload({ waitUntil: 'load' })
+      await openModels(page)
+      expect(await page.getByRole('combobox', { name: 'Decision model', exact: true }).inputValue()).toBe('off')
+      await page.getByRole('combobox', { name: 'Decision model', exact: true }).selectOption('jev')
+      await page.getByText('Decision preference saved. Applies to new calls.', { exact: true }).waitFor()
+
     } finally {
       await handle.dispose()
       mock.mockRestore()

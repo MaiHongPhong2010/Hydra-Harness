@@ -16,6 +16,8 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.feedback { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+
 .cubeRow {
   display: flex;
   align-items: stretch;

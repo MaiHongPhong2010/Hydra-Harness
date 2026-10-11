@@ -10,6 +10,8 @@ The service requires a confining `ctx.shell` executor and `ctx.approval`. A tabl
 
 Two optional children ship the product surfaces over the same service: a `permissions` session-projection unit (`src/types.ts` declares the key; the unit folds the three whole-value knob events and views the select — table options plus a current-only `custom` — over the composition defaults) and the `/permission` command (bare invocation reports the current preset and the table; a preset argument switches through `set`). Each child activates only when its registry (`ctx.sessionProjections` / `ctx.commands`) is composed.
 
+When `workspaceConfig` has prepared a session's cwd, fresh sessions and eligible blank-session reuse read the effective workspace `permission.defaultPreset`. The recorded permission selection stays pinned on ordinary resume and fork; changing a workspace default applies to subsequent sessions.
+
 ## Model Experience
 
 Indirectly, through `@hydraharness/harness-user-approval` and `@hydraharness/harness-tool-bash`, which render the approval-policy prompt, switch notice, and sandboxed tool outcomes selected by this service's knob events; `permission/preset` itself is log-only.

@@ -37,7 +37,7 @@ async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry)
   const locale = new LocaleRuntime(ctx)
-  locale.setLocale('en')
+  await locale.setLocale('en')
   ctx.provide('locale', locale)
   // The plugin injects `remote`; forwarded events reach it through the same
   // `$dispatch` handoff the connection sink makes.
@@ -45,7 +45,7 @@ async function bench() {
   ctx.slots.register({
     name: 'root',
     children: {
-      'settings.general.item': { kind: 'list', scope: 'root' },
+      'settings.general.permissions.item': { kind: 'list', scope: 'root' },
     },
   } as never, () => null)
   ctx.provide('connection', {
@@ -93,7 +93,7 @@ async function bench() {
     ctx, fiber, values, commands,
     setResult: (r: { ok: boolean; matched?: boolean }) => { commandResult = r },
     decoration: () => decoration,
-    permissionRow: () => ctx.slots.entries('settings.general.item')
+    permissionRow: () => ctx.slots.entries('settings.general.permissions.item')
       .find(entry => entry.component === PermissionRow),
   }
 }
@@ -105,7 +105,7 @@ describe('ui-permission browser plugin', () => {
     expect(c.name).toBe('permission')
     expect(c.ui.kind).toBe('popupSelect')
     const row = b.permissionRow()!
-    expect(row.options).toEqual({ id: 'permission', order: -20 })
+    expect(row.options).toMatchObject({ id: 'permission', order: -20 })
     const injected = row.inject?.() as PermissionRowInjected | undefined
     expect(injected?.hooks.permission).toBeDefined()
     expect(typeof injected?.load).toBe('function')

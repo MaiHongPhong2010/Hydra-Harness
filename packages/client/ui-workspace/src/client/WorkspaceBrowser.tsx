@@ -848,7 +848,8 @@ export function WorkspaceBrowser({
   t,
 }: WorkspaceBrowserProps) {
   const home = useHostDescription(description => description?.home)
-  const workspaces = useWorkspaces(state => state.items)
+  const allWorkspaces = useWorkspaces(state => state.items)
+  const workspaces = useMemo(() => allWorkspaces.filter(workspace => workspace.kind !== 'task'), [allWorkspaces])
   const workspacePhase = useWorkspaces(state => state.phase)
   const workspacesReady = useWorkspaces(state => state.baselinesReady)
   const archivedSessionIds = useWorkspaces(state => state.archivedSessionIds)

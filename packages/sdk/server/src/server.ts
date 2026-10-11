@@ -6,10 +6,14 @@
  */
 
 import type { Context } from '@hydraharness/cordis'
+import assert from 'node:assert/strict'
 import { resolve } from 'node:path'
-import type { Agent, AgentHandle } from '@hydraharness/harness-agent'
+import { installModelSelection, type Agent, type AgentHandle, type ModelSelection } from '@hydraharness/harness-agent'
+import type {} from '@hydraharness/harness-agent-default-model'
 import { createUserMessage } from '@hydraharness/harness-llm'
-import { carrierKeyOf, type Scoped } from '@hydraharness/harness-scope'
+import { bindScopeParent, carrierKeyOf, scopeOf, type Scoped } from '@hydraharness/harness-scope'
+import type {} from '@hydraharness/harness-agent-presets'
+import type {} from '@hydraharness/harness-workspace-config'
 import { SessionId } from '@hydraharness/harness-session'
 import type SubagentRuntime from '@hydraharness/harness-subagent'
 import type { SubagentRunEndInfo } from '@hydraharness/harness-subagent'
@@ -52,8 +56,8 @@ function successStatus(reason: string, options: HarnessSdkJsonRpcServerOptions):
  */
 export class HarnessSdkJsonRpcServer {
   private cwd = process.cwd()
-  private provider = 'deepseek-official'
-  private model = 'deepseek-official'
+  private provider: string | undefined = 'deepseek-official'
+  private model: string | undefined = 'deepseek-official'
   private maxTokens: number | undefined
   private llmFiber: { dispose(): Promise<void> } | undefined
   private readonly sessions = new Map<string, SessionRecord>()
@@ -109,6 +113,9 @@ export class HarnessSdkJsonRpcServer {
    * @returns server identity for the handshake.
    */
   async initialize(params: InitializeParams): Promise<InitializeResult> {
+    if ((params.provider === undefined) !== (params.model === undefined)) {
+      throw new TypeError('initialize provider and model must be supplied together')
+    }
     if (params.maxTokens !== undefined
       && (!Number.isSafeInteger(params.maxTokens) || params.maxTokens <= 0)) {
       throw new TypeError('initialize maxTokens must be a positive safe integer')
@@ -117,10 +124,9 @@ export class HarnessSdkJsonRpcServer {
     this.provider = params.provider
     this.model = params.model
     this.maxTokens = params.maxTokens
-    if (!this.hasAdapterFor(this.provider)) {
-      if (this.provider !== 'deepseek-official') throw new Error(`no adapter registered for provider "${this.provider}"`)
-      this.llmFiber = await this.ctx.plugin(LlmDeepSeek, {})
-    }
+    const workspaceConfig = this.ctx.get('workspaceConfig')
+    if (this.provider === undefined) await workspaceConfig?.environment(this.cwd)
+    await this.ensureAdapter(this.selectionFor().provider)
     return { serverInfo: { name: 'hydra-harness-sdk-runtime', version: '0.0.1' } }
   }
 
@@ -216,17 +222,28 @@ export class HarnessSdkJsonRpcServer {
   }
 
   private async createSession(sessionId: string): Promise<SessionRecord> {
-    // No preset composition: this server's compositions keep the model-facing
-    // rows in the host plane, so this agent reads them from the global layer. A
-    // deployment that configures a roster has to join one here first
-    // (@hydraharness/harness-agent-presets README, "Composing a child agent").
+    const workspaceConfig = this.ctx.get('workspaceConfig')
+    const environment = workspaceConfig === undefined ? undefined : await workspaceConfig.environment(this.cwd)
+    const presets = environment?.presets ?? this.ctx.get('agentPresets')
+    const presetId = presets?.defaultId
+    const selection = this.selectionFor()
+    if (this.provider === undefined) await this.ensureAdapter(selection.provider)
     const handle = await this.ctx.agents.create({
       sessionId: SessionId(sessionId),
-      meta: { cwd: this.cwd },
+      meta: { cwd: this.cwd, ...presetId === undefined ? {} : { agentPreset: presetId } },
       agentOptions: {
-        provider: this.provider,
-        model: this.model,
+        provider: selection.provider,
+        model: selection.model,
         ...this.maxTokens === undefined ? {} : { maxTokens: this.maxTokens },
+      },
+      setup: async (agentCtx) => {
+        if (presets !== undefined) await presets.mount(agentCtx, presetId)
+        else if (environment !== undefined) {
+          const agentScope = scopeOf(agentCtx)
+          assert(agentScope !== undefined, 'SDK workspace setup requires an agent scope')
+          bindScopeParent(agentScope, environment.scopeKey)
+        }
+        installModelSelection(agentCtx, { current: selection, assembled: undefined })
       },
     })
     const rec: SessionRecord = { handle }
@@ -236,5 +253,22 @@ export class HarnessSdkJsonRpcServer {
 
   private hasAdapterFor(provider: string): boolean {
     return this.ctx.get('llm')?.listProviders().some(entry => entry.id === provider) ?? false
+  }
+
+  /** Resolve a fresh session's route without changing existing sessions. */
+  private selectionFor(): ModelSelection {
+    if (this.provider !== undefined && this.model !== undefined) {
+      return { provider: this.provider, model: this.model }
+    }
+    const selection = this.ctx.get('agentDefaultModel')?.currentSelection()
+    if (selection === undefined) throw new Error('initialize requires provider/model or a configured default model')
+    return selection
+  }
+
+  /** Mount the sole supported fallback adapter or reject an unowned route. */
+  private async ensureAdapter(provider: string): Promise<void> {
+    if (this.hasAdapterFor(provider)) return
+    if (provider !== 'deepseek-official') throw new Error(`no adapter registered for provider "${provider}"`)
+    this.llmFiber = await this.ctx.plugin(LlmDeepSeek, {})
   }
 }

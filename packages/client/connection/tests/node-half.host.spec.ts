@@ -368,6 +368,14 @@ describe('connection node half', () => {
     for (const endpoint of [
       'pluginInventory/list',
       'pluginInventory/setEnabled',
+      'pluginInventory/listMcpServers',
+      'pluginInventory/defineMcpServer',
+      'pluginInventory/setMcpServerEnabled',
+      'pluginInventory/removeMcpServer',
+      'pluginInventory/listHookRecords',
+      'pluginInventory/defineHookRecord',
+      'pluginInventory/setHookRecordEnabled',
+      'pluginInventory/removeHookRecord',
       'pluginInventory/listMarketplaces',
       'pluginInventory/addMarketplace',
       'pluginInventory/removeMarketplace',
@@ -543,6 +551,7 @@ describe('connection node half over a real HTTP server', () => {
       for (const method of [
         'settings.describe', 'settings.openDocument', 'settings.update', 'settings.replace', 'settings.mutate',
         'settings.readInstructions', 'settings.writeInstructions', 'settings.listMemories', 'settings.removeMemory',
+        'settings.workspaceStatus', 'settings.setWorkspaceTrust',
         'credentials.describe', 'credentials.set', 'credentials.unset',
         'authorization.list', 'authorization.begin', 'authorization.state', 'authorization.answer',
         'authorization.cancel', 'authorization.logout',
@@ -551,6 +560,8 @@ describe('connection node half over a real HTTP server', () => {
         // URL the caller picked: an anonymous LAN caller must not reach it.
         'llm.discoverModels',
         'agentPreset.read', 'agentPreset.copy', 'agentPreset.openDocument', 'agentPreset.remove',
+        'pluginInventory/listMcpServers', 'pluginInventory/defineMcpServer', 'pluginInventory/setMcpServerEnabled', 'pluginInventory/removeMcpServer',
+        'pluginInventory/listHookRecords', 'pluginInventory/defineHookRecord', 'pluginInventory/setHookRecordEnabled', 'pluginInventory/removeHookRecord',
       ]) {
         expect([method, await call(port, method, 'harness.example')]).toEqual([method, 403])
       }
@@ -567,6 +578,8 @@ describe('connection node half over a real HTTP server', () => {
       }
       // Loopback reaches everything, configuration included.
       expect(await call(port, 'settings.describe', `127.0.0.1:${String(port)}`)).toBe(404)
+      expect(await call(port, 'pluginInventory/defineMcpServer', `127.0.0.1:${String(port)}`)).toBe(404)
+      expect(await call(port, 'pluginInventory/defineHookRecord', `127.0.0.1:${String(port)}`)).toBe(404)
     } finally {
       await close()
       await dispose()

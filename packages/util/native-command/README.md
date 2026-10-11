@@ -23,3 +23,5 @@ None; this package neither assembles nor sends a provider request.
 ## Known Limitations and Deferred Work
 
 - **No output bounding** — both streams buffer unbounded in memory; every current caller invokes small native tools whose output is a path or an error line. Adopt `@hydraharness/harness-output-retention` bounding before pointing this at commands with meaningful output volume.
+
+The desktop-bridge export routes directory selection and native open operations to an owning Electron parent. Native utility processes use parentPort; WSL uses token-authenticated frames over the child process pipes. Only allowlisted operations are accepted; cancellation removes the request listener and settles the caller.

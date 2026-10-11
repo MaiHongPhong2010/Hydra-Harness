@@ -4,7 +4,7 @@
  * documented on the public interfaces in `./manifest.ts`; this file owns the
  * state tables and the load/materialize machinery.
  */
-import { stripClientSuffix } from './manifest.ts'
+import { parseBootManifest, stripClientSuffix } from './manifest.ts'
 import type {
   BootManifest, BootModuleRow, ClientBundleRegistration, ClientModuleLoader, ClientModuleRecord,
   ClientModuleSystemOptions,
@@ -216,5 +216,18 @@ export class ClientModuleSystem implements ClientModuleLoader {
     if (this.bootstrapIds.has(normalized)) return
     this.factories.delete(normalized)
     this.loadCache.delete(normalized)
+  }
+
+  updateGraph(wire: unknown): BootManifest {
+    const next = parseBootManifest(wire)
+    const rows = new Map<string, BootModuleRow>()
+    for (const row of next.modules) {
+      if (rows.has(row.id)) throw new Error(`client-modules: duplicate graph entry "${row.id}"`)
+      rows.set(row.id, row)
+    }
+    this.graphRows.clear()
+    for (const [id, row] of rows) this.graphRows.set(id, row)
+    Object.assign(this.manifest, next)
+    return this.manifest
   }
 }

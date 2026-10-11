@@ -8,6 +8,8 @@ The Add sign-in provider card duplicates the selected provider's account invento
 
 ## Decision
 
+The [Accounts and Models ownership decision](../architecture/2026-10-11-accounts-models-settings-ownership.md) supersedes this note's account-control placement and Models deletion policy. The authorization service's whole-record reservation, idempotence, and storage-failure rules below still apply to explicit record removal.
+
 The Add card contains login controls and provider settings. The provider's Edit card owns account listing, quota requests, per-account sign-out, and additional login controls. Configured providers remain selectable in Add so another account can be connected without duplicating their inventory.
 
 Models Delete forgets the entire local credential record for every account-backed provider before unsetting its selected profile. It retains browser sign-ins and never calls the provider's logout or token-revocation endpoint. Opening Delete closes that provider's Edit card, discarding its draft and account view and canceling any login attempt that editor owns. A new login obtains fresh credentials; expanding an account in the next Edit requests its current quota report.

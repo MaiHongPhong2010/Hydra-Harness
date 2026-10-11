@@ -8,7 +8,7 @@
 import { Context } from '@hydraharness/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveSlotLabel } from '@hydraharness/harness-client-ui-slots'
-import { SlotRegistry } from '@hydraharness/harness-client-runtime/client'
+import { createSnapshotStore, SlotRegistry } from '@hydraharness/harness-client-runtime/client'
 import { LocaleRuntime } from '@hydraharness/harness-client-locale/client'
 import { TestRemote } from '@hydraharness/harness-client-test-runtime'
 import { apply as settingsApply, inject as settingsInject } from '@hydraharness/harness-client-ui-settings/client'
@@ -122,7 +122,7 @@ function declareRoot(slots: SlotRegistry): () => void {
   return slots.register({
     name: 'root',
     children: {
-      'settings.general.item': { kind: 'list', scope: 'root' },
+      'settings.general.general.item': { kind: 'list', scope: 'root' },
       'settings.section': { kind: 'list', scope: 'root' },
       conversation: { kind: 'single', scope: 'root' },
     },
@@ -145,6 +145,7 @@ function workspacesDouble() {
   const starts: unknown[] = []
   return {
     starts,
+    list: createSnapshotStore({ items: [], recentWorkspaceId: undefined }),
     startSession: (workspaceId?: unknown) => { starts.push(workspaceId ?? null) },
   }
 }
@@ -185,7 +186,7 @@ describe('ui-agent-preset apply', () => {
 
     await ctx.plugin({ inject: [...inject], apply }).await()
 
-    const row = slots.entries('settings.general.item')[0]!
+    const row = slots.entries('settings.general.general.item')[0]!
     expect(row.component).toBe(AgentPresetRow)
     expect(row.options).toMatchObject({ id: 'agent-preset', order: -25 })
     const section = slots.entries('settings.section')[0]!
@@ -209,7 +210,7 @@ describe('ui-agent-preset apply', () => {
     declareRoot(slots)
     await ctx.plugin({ inject: [...inject], apply }).await()
 
-    const row = (slots.entries('settings.general.item')[0]!.inject as unknown as () => AgentPresetRowInjected)()
+    const row = (slots.entries('settings.general.general.item')[0]!.inject as unknown as () => AgentPresetRowInjected)()
     const section = (slots.entries('settings.section')[0]!.inject as unknown as () => AgentPresetSectionInjected)()
 
     expect(row.hooks.agentPreset).not.toBe(section.hooks.agentPresetSection)
@@ -489,14 +490,14 @@ describe('ui-agent-preset apply', () => {
     await ctx.plugin({ inject: [...inject, 'conversation', 'sessions', 'workspaces'], apply }).await()
     const label = (slots.entries('conversation.session.header.actions')[0]!
       .inject as unknown as () => AgentPresetLabelInjected)()
-    const row = (slots.entries('settings.general.item')[0]!
+    const row = (slots.entries('settings.general.general.item')[0]!
       .inject as unknown as () => AgentPresetRowInjected)()
 
     await label.load()
 
     // One roster behind both: the label resolves a name the settings row's own
     // load already fetched, rather than issuing a second read per session.
-    expect(label.hooks.agentPresets).toBe(row.hooks.agentPreset)
+    expect(label.hooks.agentPresets.getSnapshot()).toEqual(row.hooks.agentPreset.getSnapshot())
     expect(label.hooks.agentPresets.getSnapshot().options).toEqual([{ id: 'standard', trust: 'system' }])
   })
 

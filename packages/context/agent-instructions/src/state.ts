@@ -27,6 +27,7 @@ import {
   renderInstructionChanges,
   USER_GLOBAL_DIRECTORY,
   USER_GLOBAL_FILE,
+  WORKSPACE_INSTRUCTION_PATHS,
   type ChangeRenderItem,
   type AgentInstructionChange,
 } from './render.ts'
@@ -254,6 +255,7 @@ export async function reconcileInstructionContext(
     touchedPaths: readonly string[]
     includeBaselineScopes: boolean
     excludedBaselineScopes?: ReadonlySet<string>
+    cwd?: string
     projectRoot?: string
     signal?: AbortSignal
   },
@@ -261,7 +263,7 @@ export async function reconcileInstructionContext(
   const session = agent.session
   const effective = visibleInstructionChanges(agent, options.authorityMessages)
   /* v8 ignore next -- normal agents carry an absolute session cwd. */
-  const cwd = session.header.cwd ?? process.cwd()
+  const cwd = options.cwd ?? session.header.cwd ?? process.cwd()
   // TODO(frozen-project-root): retain the baseline root for the loop instance;
   // recomputing it after marker edits reinterprets the existing relative scope keys.
   const projectRoot = options.projectRoot
@@ -271,6 +273,9 @@ export async function reconcileInstructionContext(
   const addDirScopes = (target: Set<string>, directory: string): void => {
     for (const candidate of resolved.instructionFileCandidates) target.add(candidateScopeKey(directory, candidate))
     for (const candidate of resolved.localInstructionFileCandidates) target.add(candidateScopeKey(directory, candidate))
+    if (directory === '.') {
+      for (const candidate of WORKSPACE_INSTRUCTION_PATHS) target.add(candidateScopeKey(directory, candidate))
+    }
   }
   const addProjectScopes = (target: Set<string>, dir: string): void => {
     addDirScopes(target, relativeScope(projectRoot, dir))

@@ -1,5 +1,5 @@
 - dialog "Internal Testing Notice":
   - heading "Internal Testing Notice" [level=2]
-  - paragraph: Hydra harness 0.1 remains in testing for Harness developers. Many areas need further improvement, and we welcome feedback from the developer community. Hydra harness's core plugins and foundational APIs will continue to evolve rapidly over the coming months.
+  - paragraph: Hydra harness 0.1.1-rc.9 remains in testing for Harness developers. Many areas need further improvement, and we welcome feedback from the developer community. Hydra harness's core plugins and foundational APIs will continue to evolve rapidly over the coming months.
   - paragraph: We look forward to exploring the limits of intelligence with developers around the world, building on open-source, open, reusable, and composable infrastructure. We welcome Harness developers everywhere to join the Hydra plugin ecosystem.
   - button "Continue"

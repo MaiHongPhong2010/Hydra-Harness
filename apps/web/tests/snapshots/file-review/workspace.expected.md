@@ -1,6 +1,6 @@
 - region "Review":
   - strong: Review
-  - text: workspace 1 changes · 1 file +1 −0
+  - text: workspace 4 changes · 4 files +3 −0
   - button "Refresh"
   - combobox "Review scope":
     - option "Session changes"
@@ -15,10 +15,22 @@
   - button "Expand all diffs": Expand all
   - group: Diff preferences
   - button "Copy patch"
-  - text: Showing all 1 changed files
+  - text: Showing all 4 changed files
+  - region ".hydra/.gitignore workspace added":
+    - group: A .hydra/.gitignore +2 −0 Workspace
+  - region ".hydra/AGENTS.md workspace added":
+    - group: A .hydra/AGENTS.md +0 −0 Workspace
+  - region ".hydra/settings.yaml workspace added":
+    - group: A .hydra/settings.yaml +0 −0 Workspace
   - region "review.txt workspace added":
     - group: A review.txt +1 −0 Workspace
   - complementary "Changed files":
     - searchbox "Filter changes by file"
     - tree "File changes":
-      - treeitem "added review.txt" [selected]: A review.txt
+      - treeitem ".hydra" [expanded]:
+        - button ".hydra" [expanded]
+        - group:
+          - treeitem "added .gitignore" [selected]: A .gitignore
+          - treeitem "added AGENTS.md": A AGENTS.md
+          - treeitem "added settings.yaml": A settings.yaml
+      - treeitem "added review.txt": A review.txt

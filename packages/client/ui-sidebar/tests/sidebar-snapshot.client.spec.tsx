@@ -36,7 +36,7 @@ async function bench(options: { locale?: 'en' } = {}) {
   const runtime = await SlotTestRuntime.create()
   runtime.provide('layout', { toggleSidebar: vi.fn() })
   const locale = new LocaleRuntime(runtime.ctx)
-  if (options.locale === 'en') locale.setLocale('en')
+  if (options.locale === 'en') await locale.setLocale('en')
   runtime.provide('locale', locale)
   runtime.slots.installLocale(locale)
   await runtime.declare({ 'sidebar': { kind: 'single', scope: 'root' } })
@@ -85,7 +85,7 @@ describe('sidebar shell snapshots', () => {
     expect(slot.view.getAllByRole('button', { name: 'New session' })).toHaveLength(2)
     // Same fiber, same registration: setLocale with the already-active id
     // must not disturb the mounted copy.
-    act(() => { locale.setLocale('en') })
+    await act(async () => { await locale.setLocale('en') })
     expect(slot.view.getAllByRole('button', { name: 'New session' })).toHaveLength(2)
     await runtime.dispose()
   })

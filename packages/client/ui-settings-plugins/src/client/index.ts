@@ -68,6 +68,7 @@ export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
   const { api } = connection
   const t = ctx.locale.bind(NS)
+  const selectedTarget = () => ctx.settingsScope.selection().getSnapshot().target
   ctx.effect(() => ctx.locale.register(NS, { en }), 'ui-settings-plugins: section dictionaries')
 
   const bash = new BashCardController(ctx.settingsScope.bind({ namespace: SHELL_NS }))
@@ -96,7 +97,7 @@ export function apply(ctx: ClientContext): void {
   } : undefined
   const nativeMcp: NativeMcpSettingsFace['nativeMcp'] = connection.isLoopback ? {
     list: async () => {
-      const result = await ctx.remote.pluginInventory.list()
+      const result = await ctx.remote.pluginInventory.list({})
       if (!result.ok) throw new Error(`pluginInventory.list failed: ${result.error.code}: ${result.error.message}`)
       return result.value
     },
@@ -106,44 +107,48 @@ export function apply(ctx: ClientContext): void {
   // Host processes, which a remote browser must not do.
   const userMcp: UserMcpSettingsFace['userMcp'] = connection.isLoopback ? {
     list: async () => {
-      const result = await ctx.remote.pluginInventory.listMcpServers()
+      const target = selectedTarget()
+      const result = await ctx.remote.pluginInventory.listMcpServers(target)
       if (!result.ok) throw new Error(`pluginInventory.listMcpServers failed: ${result.error.code}: ${result.error.message}`)
       return result.value
     },
     define: async (request) => {
-      const result = await ctx.remote.pluginInventory.defineMcpServer(request)
+      const result = await ctx.remote.pluginInventory.defineMcpServer({ ...request, ...selectedTarget() })
       if (!result.ok) throw new Error(`pluginInventory.defineMcpServer failed: ${result.error.code}: ${result.error.message}`)
       return result.value
     },
     setEnabled: async (name, enabled) => {
-      const result = await ctx.remote.pluginInventory.setMcpServerEnabled({ name, enabled })
+      const result = await ctx.remote.pluginInventory.setMcpServerEnabled({ name, enabled, ...selectedTarget() })
       if (!result.ok) throw new Error(`pluginInventory.setMcpServerEnabled failed: ${result.error.code}: ${result.error.message}`)
       return result.value
     },
     remove: async (name) => {
-      const result = await ctx.remote.pluginInventory.removeMcpServer(name)
+      const target = selectedTarget()
+      const result = await ctx.remote.pluginInventory.removeMcpServer(target.workspaceId === undefined ? name : { name, ...target })
       if (!result.ok) throw new Error(`pluginInventory.removeMcpServer failed: ${result.error.code}: ${result.error.message}`)
       return result.value
     },
   } : undefined
   const userHooks: HooksSettingsFace['userHooks'] = connection.isLoopback ? {
     list: async () => {
-      const result = await ctx.remote.pluginInventory.listHookRecords()
+      const target = selectedTarget()
+      const result = await ctx.remote.pluginInventory.listHookRecords(target)
       if (!result.ok) throw new Error(`pluginInventory.listHookRecords failed: ${result.error.code}: ${result.error.message}`)
       return result.value
     },
     define: async (request) => {
-      const result = await ctx.remote.pluginInventory.defineHookRecord(request)
+      const result = await ctx.remote.pluginInventory.defineHookRecord({ ...request, ...selectedTarget() })
       if (!result.ok) throw new Error(`pluginInventory.defineHookRecord failed: ${result.error.code}: ${result.error.message}`)
       return result.value
     },
     setEnabled: async (name, enabled) => {
-      const result = await ctx.remote.pluginInventory.setHookRecordEnabled({ name, enabled })
+      const result = await ctx.remote.pluginInventory.setHookRecordEnabled({ name, enabled, ...selectedTarget() })
       if (!result.ok) throw new Error(`pluginInventory.setHookRecordEnabled failed: ${result.error.code}: ${result.error.message}`)
       return result.value
     },
     remove: async (name) => {
-      const result = await ctx.remote.pluginInventory.removeHookRecord(name)
+      const target = selectedTarget()
+      const result = await ctx.remote.pluginInventory.removeHookRecord(target.workspaceId === undefined ? name : { name, ...target })
       if (!result.ok) throw new Error(`pluginInventory.removeHookRecord failed: ${result.error.code}: ${result.error.message}`)
       return result.value
     },
@@ -164,7 +169,7 @@ export function apply(ctx: ClientContext): void {
   // whose owning plugin already refreshes it on document commits and
   // reconnects — the tab only derives.
   const configurable = new ConfigurablePluginsTabController(
-    ctx.settingsScope.describe(), () => ctx.slots.entries('settings.plugin.item'))
+    ctx.settingsScope.describe('selected'), () => ctx.slots.entries('settings.plugin.item'))
   ctx.effect(() => () => { configurable.dispose() }, 'ui-settings-plugins: tab directory')
   // A card registered after the first read joins the list without a wire call.
   ctx.effect(
@@ -177,6 +182,7 @@ export function apply(ctx: ClientContext): void {
   let tabs: readonly PluginsSettingsTabEntry[] = []
   const sectionInjected = (): PluginsSettingsSectionInjected => ({
     hooks: {
+      selection: ctx.settingsScope.selection(),
       tabs: {
         getSnapshot: () => {
           const version = ctx.slots.getVersion('settings.plugins.tab')
@@ -239,8 +245,9 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: () => ({
       ...mcp.inject(),
-      ...(importedMcp === undefined ? {} : { importedMcp }),
-      ...(nativeMcp === undefined ? {} : { nativeMcp }),
+      workspace: selectedTarget().workspaceId !== undefined,
+      ...(importedMcp === undefined || selectedTarget().workspaceId !== undefined ? {} : { importedMcp }),
+      ...(nativeMcp === undefined || selectedTarget().workspaceId !== undefined ? {} : { nativeMcp }),
       ...(userMcp === undefined ? {} : { userMcp }),
     }),
   }, McpSettingsTab))
@@ -254,7 +261,7 @@ export function apply(ctx: ClientContext): void {
     order: 25,
     label: () => t('hooksTab'),
     locale: NS,
-    inject: () => (userHooks === undefined ? {} : { userHooks }),
+    inject: () => ({ workspace: selectedTarget().workspaceId !== undefined, ...(userHooks === undefined ? {} : { userHooks }) }),
     children: { 'settings.plugins.hooks.item': { kind: 'list', scope: 'root' } },
   }, HooksSettingsTab))
 

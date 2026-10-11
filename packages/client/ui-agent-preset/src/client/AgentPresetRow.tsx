@@ -10,6 +10,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@hydraharness/harnes
 import type { AgentPresetSettingsState } from './settings-store.ts'
 import { presetDisplayText, type AgentPresetSettingsKey } from './locales.ts'
 import { PresetMenu } from './PresetMenu.tsx'
+import { Button } from '@hydraharness/harness-client-ui-primitives'
 import css from './AgentPresetRow.module.css'
 
 /** Registration-side business face for the host-backed preference. */
@@ -22,11 +23,13 @@ export interface AgentPresetRowInjected {
   load: () => Promise<void>
   /** Persist one preset as the default for later sessions. */
   select: (id: string) => Promise<void>
+  /** Clear the addressed default override. */
+  reset?: () => Promise<void>
 }
 
 /** Full component props. */
 export type AgentPresetRowProps =
-  PropsRuntime<'settings.general.item'>
+  PropsRuntime<'settings.general.general.item'>
   & PropsLocale<'settings.agentPreset'>
   & InjectFace<AgentPresetRowInjected>
 
@@ -35,7 +38,7 @@ export type AgentPresetRowProps =
  * @param props - composed slot props.
  * @returns the row, or null when the deployment composes no presets.
  */
-export function AgentPresetRow({ load, select, useAgentPreset, t }: AgentPresetRowProps) {
+export function AgentPresetRow({ load, select, reset, useAgentPreset, t }: AgentPresetRowProps) {
   const state = useAgentPreset(snapshot => snapshot)
   const [open, setOpen] = useState(false)
 
@@ -77,6 +80,8 @@ export function AgentPresetRow({ load, select, useAgentPreset, t }: AgentPresetR
         onOpenChange={setOpen}
         onSelect={(id) => { void select(id) }}
       />
+      {reset !== undefined && <Button variant="outline" size="sm" disabled={busy || !state.writable || !state.overridden}
+        onClick={() => { void reset() }}>{t('reset')}</Button>}
     </div>
   )
 }

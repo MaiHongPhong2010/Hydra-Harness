@@ -155,12 +155,13 @@ export class WorkspaceRuntime implements IWorkspaces {
       if (!workspace.baselinesReady) return
       const current = this.sessions.list.getSnapshot().current
       const target = workspace.recentWorkspaceId
-      if (current !== undefined || target === undefined) {
+      if (current !== undefined) {
         state = 'done'
         return
       }
       state = 'connecting'
-      void this.connectWorkspace(target).then(
+      const project = workspace.items.find(item => item.workspaceId === target && item.kind !== 'task')
+      void (project === undefined ? this.sessions.create({ projectless: true }) : this.connectWorkspace(project.workspaceId)).then(
         (sessionId) => {
           if (disposed) return
           if (this.sessions.list.getSnapshot().current === undefined) {
@@ -198,10 +199,11 @@ export class WorkspaceRuntime implements IWorkspaces {
     const current = this.sessions.list.getSnapshot().current
     const currentWorkspaceId = current === undefined
       ? undefined
-      : workspace.items.find(item => item.sessionIds.includes(current))?.workspaceId
-    const target = workspaceId ?? currentWorkspaceId ?? workspace.recentWorkspaceId
+      : workspace.items.find(item => item.kind !== 'task' && item.sessionIds.includes(current))?.workspaceId
+    const recent = workspace.items.find(item => item.kind !== 'task' && item.workspaceId === workspace.recentWorkspaceId)?.workspaceId
+    const target = workspaceId ?? currentWorkspaceId ?? (current === undefined ? recent : undefined)
     if (target === undefined) {
-      this.sessions.clear()
+      void this.sessions.create({ projectless: true }).then((id) => { this.sessions.open(id) }, (error: unknown) => { console.warn('New standalone chat failed:', error) })
       return
     }
     void this.connectWorkspace(target).then(

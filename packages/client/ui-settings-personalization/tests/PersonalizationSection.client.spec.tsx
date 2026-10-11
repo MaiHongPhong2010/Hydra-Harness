@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector } from '@hydraharness/harness-client-test-runtime'
 import { createSnapshotStore } from '@hydraharness/harness-client-runtime/client'
 import type { SettingsScopeSnapshot } from '@hydraharness/harness-client-runtime/client'
+import type { SettingsSelectionSnapshot } from '@hydraharness/harness-client-ui-settings/client'
 import { PersonalizationSection } from '../src/client/PersonalizationSection.tsx'
 import type { MemorySettings, PersonalityDraft, PersonalitySettings, PersonalizationSectionInjected, PersonalizationSectionProps } from '../src/client/PersonalizationSection.tsx'
 import type { InstructionsState } from '../src/client/instructions-store.ts'
@@ -39,6 +40,7 @@ function renderSection(
   const personalityStore = createSnapshotStore<SettingsScopeSnapshot<PersonalitySettings>>({ ...PERSONALITY_READY, ...personality })
   const memoryStore = createSnapshotStore<SettingsScopeSnapshot<MemorySettings>>({ ...MEMORY_READY, ...memory })
   const personalityDraft = createSnapshotStore<PersonalityDraft>({ value: undefined, saving: false, failed: false })
+  const selection = createSnapshotStore<SettingsSelectionSnapshot>({ target: {}, loading: false, error: null })
   const actions = {
     load: vi.fn(() => Promise.resolve()),
     setDraft: vi.fn(),
@@ -58,6 +60,7 @@ function renderSection(
     useMemory: bindSnapshotSelector(memoryStore),
     usePersonality: bindSnapshotSelector(personalityStore),
     usePersonalityDraft: bindSnapshotSelector(personalityDraft),
+    useSelection: bindSnapshotSelector(selection),
     t: (key: keyof typeof en) => en[key],
   } as unknown as PersonalizationSectionProps)} />)
   if (expand) fireEvent.click(screen.getByText('Custom instructions', { selector: 'summary' }))

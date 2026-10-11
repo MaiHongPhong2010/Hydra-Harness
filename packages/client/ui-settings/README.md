@@ -8,6 +8,10 @@ The plugin injects `connection` and `remote` and owns the one `settings.describe
 
 `acceptView` ignores a write acknowledgment whose namespace revision is older than the held view, including when a newer invalidation refresh completes before the write response arrives.
 
+The Settings panel addresses the global document. Programmatic callers can request a fixed workspace document; omitted targets remain global. Cached mirrors and revision-checked write queues retain their addressed document. Workspace and trust invalidations refresh matching mirrors; unknown workspace reads report an error without falling back to global settings.
+
+The `settings.section` owner supplies `close` and `openSection(id)`. The latter selects a registered page, clears sidebar search hiding it, and focuses the destination heading; unknown ids leave navigation unchanged. Section data and writes remain with each registrant. See [SettingsSectionOwnerProps](../../../docs/subsystems/settings.md#client-section-navigation).
+
 ## Model Experience
 
 None, as the settings domain base serves browser preference storage and slot declarations; nothing here reaches a model request.

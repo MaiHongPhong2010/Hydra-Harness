@@ -182,6 +182,7 @@ function groupByWorkspace(
   const representatives = conversationRepresentatives(list, archived)
   const included = new Set<SessionId>()
   for (const workspace of workspaces) {
+    if (workspace.kind === 'task') continue
     const members: SessionSummary[] = []
     const owned = new Set(workspace.sessionIds)
     for (const id of workspace.sessionIds) {
@@ -342,6 +343,7 @@ export function deriveSearchResults(
 
   const workspaceBySession = new Map<SessionId, string>()
   for (const workspace of workspaces) {
+    if (workspace.kind === 'task') continue
     for (const sessionId of workspace.sessionIds) {
       if (!workspaceBySession.has(sessionId)) workspaceBySession.set(sessionId, workspace.title)
     }

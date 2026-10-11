@@ -36,7 +36,7 @@ Default roots are resolved in this provider's rank order:
 | 400 | `user-hydra` | `<hydraHome>/skills` |
 | 500 | `user-agents` | `<agentsHome>/skills` |
 
-The project root is the nearest ancestor containing `.git`; without one, the current cwd is used. The user Hydra root skips its `.system` child so system-owned directories are not treated as normal user skills. `includeDefaultRoots: false` omits the project and user rows and the `$HYDRA_BUNDLED_SKILL_DIR` environment default while retaining explicitly configured custom and bundled roots, allowing several uniquely named isolated providers to see only their own roots. This provider supplies project and user skills; another provider may supply built-in system skills.
+When `ctx.workspaceConfig` is available, the project root is its selected canonical workspace root, so a descendant cwd or nested Git repository retains the selected workspace's skills. Without that service, the nearest ancestor containing `.git` selects the root; without a marker, the supplied cwd is used. Project skill discovery requires no workspace execution trust. The user Hydra root skips its `.system` child so system-owned directories are not treated as normal user skills. `includeDefaultRoots: false` omits the project and user rows and the `$HYDRA_BUNDLED_SKILL_DIR` environment default while retaining explicitly configured custom and bundled roots, allowing several uniquely named isolated providers to see only their own roots. This provider supplies project and user skills; another provider may supply built-in system skills.
 
 When `ctx.fs` is available, discovery lists roots through `ctx.fs.listDir`, reads skill files through `ctx.fs.readText`, and probes `.git` through the filesystem service. Full skill loads forward the lookup abort signal to filesystem metadata and content reads. Without a filesystem service, the provider falls back to abortable Node filesystem I/O so minimal local contexts can still load skills. Confirmed missing paths are valid empty state, malformed or non-text entries warn and skip, and unexpected discovery/read failures make the registry snapshot incomplete rather than asserting a misleading deletion.
 
@@ -67,7 +67,7 @@ Watcher invalidation changes later searches and exact loads but appends nothing 
 ## Known Limitations and Deferred Work
 
 - **Discovery is one level deep** — only `<root>/<name>/SKILL.md` and `<root>/<name>.md` are recognized; nested skill trees and package manifests are ignored.
-- **Project scope is the nearest `.git` ancestor** — workspaces without that marker fall back to the supplied cwd, with no alternate project-root marker or monorepo subproject selection.
+- **Minimal compositions use the nearest `.git` ancestor** — without `ctx.workspaceConfig`, workspaces without that marker fall back to the supplied cwd, with no alternate project-root marker or monorepo subproject selection.
 - **Malformed entries disappear with a warning** — model search receives no per-skill diagnostic and cannot distinguish an absent skill from an invalid one; unexpected I/O failures mark the search observation incomplete.
 - **Missing-root observation polls one path segment** — roots absent at startup use `fs.watchFile` at `watchPollIntervalMs` until Chokidar can attach, trading bounded detection latency for reliable creation detection across IDE, Git, and shell workflows.
 - **No body revision protocol** — a loaded body is ordinary retained tool history; later file edits affect later calls but neither rewrite old results nor announce that the body changed.

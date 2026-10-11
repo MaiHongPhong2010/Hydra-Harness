@@ -412,3 +412,16 @@ describe('default transport seam', () => {
     expect([...document.querySelectorAll('script')]).toEqual([])
   })
 })
+
+describe('live contribution graphs', () => {
+  it('adopts live contribution routes and rejects malformed replacements without losing the accepted graph', async () => {
+    const b = bench([row('old')], { old: () => ({ old: true }), added: () => ({ added: true }) })
+    const old = await b.loader.import('old', '', {})
+    b.loader.updateGraph({ rev: 'new', entries: [row('added')] })
+    expect(await b.loader.import('added', '', {})).toEqual({ added: true })
+    expect(await b.loader.import('old', '', {})).toBe(old)
+    expect(() => b.loader.updateGraph({ rev: 'bad', entries: [row('duplicate'), row('duplicate')] })).toThrow('duplicate graph entry')
+    expect(() => b.loader.updateGraph({ rev: 'bad', entries: [{ id: 'broken' }] })).toThrow('string id/url/rev')
+    expect(b.loader.manifest.rev).toBe('new')
+  })
+})

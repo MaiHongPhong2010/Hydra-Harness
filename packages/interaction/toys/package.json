@@ -1,0 +1,65 @@
+{
+  "name": "@hydraharness/harness-toys",
+  "version": "0.1.1-rc.9",
+  "description": "Explicit human-requested transient effects",
+  "type": "module",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MaiHongPhong2010/Hydra-Harness.git",
+    "directory": "packages/interaction/toys"
+  },
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "hydra": {
+    "plugin": {
+      "application": "Fire confetti on an explicit human command."
+    }
+  },
+  "peerDependencies": {
+    "@hydraharness/cordis": "workspace:^",
+    "@hydraharness/harness-session": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/harness-commands": "workspace:^",
+    "@hydraharness/harness-optional-plugins": "workspace:^",
+    "@hydraharness/harness-brand": "workspace:^",
+    "@hydraharness/harness-invariants": "workspace:^"
+  },
+  "dependencies": {
+    "@hydraharness/schemastery": "workspace:^"
+  },
+  "devDependencies": {
+    "@hydraharness/cordis": "workspace:^",
+    "@hydraharness/harness-session": "workspace:^",
+    "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/harness-commands": "workspace:^",
+    "@hydraharness/harness-optional-plugins": "workspace:^",
+    "@hydraharness/harness-brand": "workspace:^",
+    "@hydraharness/harness-invariants": "workspace:^"
+  }
+}

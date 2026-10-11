@@ -57,6 +57,7 @@ function requestProposal(header: EpochHeader): LlmCallConfig {
   const proposal = { ...header.config }
   if (header.adapterDefaults.reasoningEffort === true) delete proposal.reasoningEffort
   if (header.adapterDefaults.maxTokens === true) delete proposal.maxTokens
+  if (header.adapterDefaults.serviceTier === true) { delete proposal.serviceTier; delete proposal.requestedServiceTier }
   return proposal
 }
 

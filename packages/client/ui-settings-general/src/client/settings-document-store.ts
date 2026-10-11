@@ -63,7 +63,7 @@ export class SettingsDocumentStore {
       state.error = null
     })
     try {
-      const response = await this.api.settings.openDocument({})
+      const response = await this.api.settings.openDocument(this.describeFace.target ?? {})
       if (!response.result.ok) throw new Error(response.result.error.message)
     } catch (error) {
       this.store.update((state) => { state.error = messageOf(error) })

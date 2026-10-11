@@ -1,0 +1,3 @@
+- button "Explain this project"
+- button "Run its tests"
+- button "Refresh suggestions"

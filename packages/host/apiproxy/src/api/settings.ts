@@ -7,6 +7,22 @@
  */
 
 import type { RpcRequest, RpcResponse } from './rpc.ts'
+import type { WorkspaceId } from './workspace.ts'
+import type { SessionId } from '@hydraharness/harness-session/types'
+import type { SettingsTarget } from '@hydraharness/harness-workspace-config/types'
+export type { SettingsTarget } from '@hydraharness/harness-workspace-config/types'
+
+/** Host-owned trust decision for one registered workspace. */
+export interface WorkspaceSettingsStatus {
+  /** Registered workspace whose canonical root owns the decision. */
+  workspaceId: WorkspaceId
+  /** Whether the Host permits project execution. */
+  trusted: boolean
+  /** Whether the Host has recorded an accept, refusal, or revocation for this root. */
+  trustDecided: boolean
+  /** Whether the project has settings or presets requiring a trust decision. */
+  hasProjectConfig: boolean
+}
 
 /** One schema-declared secret slot inside a redacted namespace value. */
 export interface SettingsSecretView {
@@ -17,16 +33,18 @@ export interface SettingsSecretView {
 }
 
 /** Wire view of one registered settings namespace. */
-export interface SettingsNamespaceView {
+export interface SettingsNamespaceView extends SettingsTarget {
+  /** Per-live-session outcomes returned only by a permission broadcast write. */
+  permissionResults?: { sessionId: SessionId; ok: boolean; error?: string }[]
   /** Namespace key (`llm-deepseek`, `llm-pi-ai`, …). */
   ns: string
   /** Serialized schemastery schema envelope (`schema.toJSON()`); rehydrate with `new Schema(json)`. */
   schema: unknown
-  /** Redacted resolved value (schema defaults → composition base → user layer). */
+  /** Redacted resolved value after applying the selected file over its inherited settings. */
   value: unknown
-  /** Redacted composition base layer, when the registrant declared one. */
+  /** Redacted inherited value, or the composition base for a user-global namespace. */
   base?: unknown
-  /** Redacted raw user section, when one exists; a field's presence here marks it user-overridden. */
+  /** Redacted raw section in the selected file; field presence marks a file override. */
   user?: unknown
   /** When the owner applies changes. */
   applies: 'live' | 'restart'
@@ -50,10 +68,10 @@ export type SettingsPathOpView =
   | { op: 'unset'; path: string[] }
 
 /**
- * The personalization custom-instructions document (`$HYDRA_HOME/AGENTS.md`,
- * the same fixed user-global file `@hydraharness/harness-agent-instructions` discovers).
+ * Instructions from the fixed Hydra-home file or a registered workspace's
+ * shared/personal `.hydra` file. The browser supplies an identity, never a path.
  */
-export interface InstructionsDocumentView {
+export interface InstructionsDocumentView extends SettingsTarget {
   /** Raw file content; the empty string when the file does not exist yet. */
   content: string
   /**
@@ -81,10 +99,11 @@ export interface SettingsApi {
    * Host path. This method is loopback-only; `writable: false` (read-only
    * provider) tells the client to disable every write control.
    */
-  describe(request: RpcRequest<{}>): Promise<RpcResponse<{
+  describe(request: RpcRequest<SettingsTarget>): Promise<RpcResponse<SettingsTarget & {
     writable: boolean
     hasDocument: boolean
     namespaces: SettingsNamespaceView[]
+    trusted?: boolean
   }>>
 
   /**
@@ -94,8 +113,8 @@ export interface SettingsApi {
    * no path, so the browser cannot choose an arbitrary Host filesystem target.
    */
   openDocument(
-    request: RpcRequest<{}>, signal: AbortSignal,
-  ): Promise<RpcResponse<{ opened: true }>>
+    request: RpcRequest<SettingsTarget>, signal: AbortSignal,
+  ): Promise<RpcResponse<SettingsTarget & { opened: true }>>
 
   /**
    * Merge a patch into one namespace's user layer (validate → persist →
@@ -104,7 +123,9 @@ export interface SettingsApi {
    * merge preserves the stored value. Responds with the namespace's new
    * redacted view; a schema or storage rejection is `settings-rejected`.
    */
-  update(request: RpcRequest<{ ns: string; patch: object; expectedRevision?: number }>): Promise<RpcResponse<SettingsNamespaceView>>
+  update(
+    request: RpcRequest<SettingsTarget & { ns: string; patch: object; expectedRevision?: number }>,
+  ): Promise<RpcResponse<SettingsNamespaceView>>
 
   /**
    * Replace one namespace's user section wholesale — the removal/reset path a
@@ -113,7 +134,9 @@ export interface SettingsApi {
    * fold the descriptor's `user` layer (and re-supply any secret it wants to
    * keep) or accept the reset.
    */
-  replace(request: RpcRequest<{ ns: string; section: object; expectedRevision?: number }>): Promise<RpcResponse<SettingsNamespaceView>>
+  replace(
+    request: RpcRequest<SettingsTarget & { ns: string; section: object; expectedRevision?: number }>,
+  ): Promise<RpcResponse<SettingsNamespaceView>>
 
   /**
    * Apply path-addressed edits to one namespace's user section, resolved
@@ -122,9 +145,17 @@ export interface SettingsApi {
    * descriptor: it names the field it means, so a secret the wire never
    * returned cannot be deleted as a side effect. `replace` remains the
    * deliberate wholesale reset.
+   * `applyPermissionToOpenSessions` is accepted only for a global permission
+   * default selection. It validates the live targets before persisting and returns
+   * each target's outcome; unrelated and archived sessions are never loaded.
    */
   mutate(
-    request: RpcRequest<{ ns: string; ops: SettingsPathOpView[]; expectedRevision?: number }>,
+    request: RpcRequest<SettingsTarget & {
+      ns: string
+      ops: SettingsPathOpView[]
+      expectedRevision?: number
+      applyPermissionToOpenSessions?: boolean
+    }>,
   ): Promise<RpcResponse<SettingsNamespaceView>>
 
   /**
@@ -132,7 +163,7 @@ export interface SettingsApi {
    * loopback-only. Absent file content reads as the empty string, never a
    * missing-service error — there is no provider to be absent.
    */
-  readInstructions(request: RpcRequest<{}>): Promise<RpcResponse<InstructionsDocumentView>>
+  readInstructions(request: RpcRequest<SettingsTarget>): Promise<RpcResponse<InstructionsDocumentView>>
 
   /**
    * Replace the personalization custom-instructions document wholesale, under
@@ -143,8 +174,22 @@ export interface SettingsApi {
    * is loopback-only.
    */
   writeInstructions(
-    request: RpcRequest<{ content: string; expectedRevision?: string }>,
+    request: RpcRequest<SettingsTarget & { content: string; expectedRevision?: string }>,
   ): Promise<RpcResponse<InstructionsDocumentView>>
+
+  /**
+   * Read the Host trust decision; unknown workspace identities are rejected.
+   * @param request - Registered workspace to inspect.
+   * @returns Trust and project-configuration status without Host paths.
+   */
+  workspaceStatus(request: RpcRequest<{ workspaceId: WorkspaceId }>): Promise<RpcResponse<WorkspaceSettingsStatus>>
+
+  /**
+   * Persist or revoke trust for this canonical workspace root.
+   * @param request - Registered workspace and its desired trust state.
+   * @returns The committed trust state and project-configuration status.
+   */
+  setWorkspaceTrust(request: RpcRequest<{ workspaceId: WorkspaceId; trusted: boolean }>): Promise<RpcResponse<WorkspaceSettingsStatus>>
 
   /** List memories held in the local Hydra-home memory file. */
   listMemories(request: RpcRequest<{}>): Promise<RpcResponse<{ entries: MemoryEntryView[] }>>

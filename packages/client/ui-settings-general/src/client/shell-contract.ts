@@ -12,6 +12,8 @@ import type { HostObservable, InjectFace, PropsRenderSlots, PropsRuntime } from 
 import type {} from '@hydraharness/harness-client-ui-sidebar/client'
 // Type-only: pulls the settings slot declarations the shell renders into.
 import type {} from '@hydraharness/harness-client-ui-settings/client'
+import type { WorkspaceId, WorkspaceSettingsStatus } from '@hydraharness/harness-api-remotes/client'
+import type { GeneralItem } from './GeneralSection.tsx'
 
 /** One nav row projected from a settings.section registration's options. */
 export interface SettingsSectionRow {
@@ -32,7 +34,17 @@ export interface SettingsOnboardingStep {
  * the shell reads no locale state and subscribes through the bound hook.
  */
 export type SettingsRootInjected = {
+  /** Localized navigation search and empty-state labels. */
+  searchCopy: { label: string; empty: string }
+  /** Read whether selected project commands await a trust decision. */
+  workspaceStatus: (workspaceId: WorkspaceId) => Promise<WorkspaceSettingsStatus>
+  /** Record explicit acceptance or refusal on the Host. */
+  trustWorkspace: (workspaceId: WorkspaceId, trusted: boolean) => Promise<void>
+  /** Localized trust dialog copy. */
+  trustCopy: { title: string; description: string; allow: string; cancel: string }
   hooks: {
+    /** General preference labels used by navigation search. */
+    generalItems: HostObservable<readonly GeneralItem[]>
     /** settings.section ledger projected into ordered nav rows. */
     sections: HostObservable<readonly SettingsSectionRow[]>
     /** settings.onboarding ledger projected into coordinator order. */

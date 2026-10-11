@@ -89,6 +89,8 @@ Every adapter that puts a credential in an HTTP header judges it the same way be
 
 Two adapters implement `LlmAdapter` on different internals: [`@hydraharness/harness-llm-deepseek`](../llm-deepseek) uses direct fetch with `eventsource-parser` SSE framing for the `deepseek-official` route, while [`@hydraharness/harness-llm-pi-ai`](../llm-pi-ai) dynamically resolves configured provider/model pairs through `@earendil-works/pi-ai`. Both follow the `StreamChunk` conventions in `types.ts`: usage precedes finish and tool arguments remain raw strings. Adapter implementations may throw or emit a failure finish internally; `LlmRuntime` exposes both as a terminal failure finish. See [the twin LLM adapters](../../../.agents/notes/implemented/architecture/2026-06-13-twin-llm-adapters.md) for the adapter rationale and [the terminal-failure decision](../../../.agents/notes/implemented/architecture/2026-07-29-terminal-llm-stream-failures.md) for the service boundary.
 
+The llm-speed namespace requests Standard or Priority. resolveCall advertises and resolves serviceTier against the selected adapter metadata; unsupported global Priority retains requestedServiceTier but uses the normal route. Explicit unsupported request tiers reject. Resolved headers log requested and sent tiers; finish chunks retain the actual tier when the adapter reports it. Chat, subagent, and compaction calls share this resolution.
+
 ## Model Experience
 
 None, as the service adds no model-bound text, schema, or message; it only materializes and logs an adapter-configured reasoning effort.

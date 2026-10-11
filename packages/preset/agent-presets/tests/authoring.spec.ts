@@ -6,7 +6,7 @@
  * stays read-only.
  */
 
-import { chmod, mkdtemp, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, mkdir, readFile, stat, symlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -14,9 +14,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Context } from '@hydraharness/cordis'
 import Loader from '@hydraharness/cordis-plugin-loader'
 import Include from '@hydraharness/cordis-plugin-include'
+import { createScope } from '@hydraharness/harness-scope'
 import { beforeEach, describe, expect, it } from 'vitest'
 import AgentPresets, {
-  COMPOSITION_FILE, copyComposition, METADATA_FILE,
+  authoringDirectory, COMPOSITION_FILE, copyComposition, METADATA_FILE,
 } from '@hydraharness/harness-agent-presets'
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
@@ -60,6 +61,51 @@ beforeEach(async () => {
 })
 
 describe('copying a preset', () => {
+  it('confines workspace authoring even while project discovery is untrusted', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'hydra-workspace-presets-'))
+    await seedPreset(userRoot, 'global-personal')
+    const scope = createScope(ctx, { workspace: workspaceRoot })
+    const owner = scope.ctx.isolate('agentPresets')
+    await owner.plugin(AgentPresets, {
+      default: 'standard', roots: [...ctx.agentPresets.roots], includeUserRoot: false, workspaceRoot,
+    })
+    const presets = owner.get('agentPresets')!
+    await presets.copy('standard', 'local-copy')
+    const projectRoot = join(workspaceRoot, '.hydra', 'agent-presets')
+    expect(existsSync(join(projectRoot, 'local-copy', COMPOSITION_FILE))).toBe(true)
+    expect(existsSync(join(userRoot, 'local-copy'))).toBe(false)
+    await expect(presets.remove('global-personal')).rejects.toThrow(/writable preset root/)
+    await expect(presets.authoringDirectory('global-personal')).rejects.toThrow(/writable preset root/)
+    expect(existsSync(join(userRoot, 'global-personal', COMPOSITION_FILE))).toBe(true)
+    await presets.setProjectRoot(projectRoot, true)
+    expect(await presets.authoringDirectory('local-copy')).toBe(join(projectRoot, 'local-copy'))
+    await presets.remove('local-copy')
+    expect(existsSync(join(projectRoot, 'local-copy'))).toBe(false)
+    await scope.dispose()
+  })
+
+  it('refuses a workspace preset root linked outside the workspace before copying', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'hydra-workspace-presets-link-'))
+    const outside = await mkdtemp(join(tmpdir(), 'hydra-workspace-presets-outside-'))
+    await mkdir(join(workspaceRoot, '.hydra'))
+    const root = join(workspaceRoot, '.hydra', 'agent-presets')
+    await symlink(outside, root, process.platform === 'win32' ? 'junction' : 'dir')
+    await expect(copyComposition([{ path: root, trust: 'user' }], await ctx.agentPresets.resolve('standard'), 'escape', undefined, workspaceRoot))
+      .rejects.toThrow(/outside its workspace/)
+    expect(existsSync(join(outside, 'escape'))).toBe(false)
+  })
+
+  it('refuses a preset directory linked outside its authoring root', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'hydra-preset-outside-'))
+    await seedPreset(outside, 'protected')
+    const dir = join(userRoot, 'linked')
+    await symlink(join(outside, 'protected'), dir, process.platform === 'win32' ? 'junction' : 'dir')
+    await expect(authoringDirectory([{ path: userRoot, trust: 'user' }], {
+      id: 'linked', trust: 'user', path: join(dir, COMPOSITION_FILE),
+    })).rejects.toThrow(/outside the writable preset root/)
+    expect(existsSync(join(outside, 'protected', COMPOSITION_FILE))).toBe(true)
+  })
+
   it('copies a shipped preset into the user root and lists it', async () => {
     await ctx.agentPresets.copy('standard', 'mine')
 

@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { boot, loadOverlayPatches } from '@hydraharness/harness-app-boot'
 import { CallId, createUserMessage, LlmAdapter, type GenerateOptions, type Message, type StreamChunk } from '@hydraharness/harness-llm'
 import { SessionId } from '@hydraharness/harness-session'
+import { bindScopeParent, scopeOf } from '@hydraharness/harness-scope'
+import type {} from '@hydraharness/harness-workspace-config'
 import type {} from '@hydraharness/harness-plugin-runtime'
 import type {} from '@hydraharness/harness-tools'
 import type {} from '@hydraharness/harness-hooks-registry'
@@ -76,6 +78,7 @@ try {
     const handle = await ctx.agents.create({
       sessionId: SessionId(`capability-fixture-${index}`), meta: { cwd: process.cwd() },
       agentOptions: { provider: 'capability-fixture', model: 'fixture' },
+      setup: (agentCtx) => { bindScopeParent(scopeOf(agentCtx)!, ctx.workspaceConfig.userEnvironment().scopeKey) },
     })
     try {
       handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: `Check ${state}` }], source: { kind: 'user' } }))

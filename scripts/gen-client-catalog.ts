@@ -386,9 +386,9 @@ function firstSentence(doc: string): string {
   return (match?.[1] ?? flat).trim()
 }
 
-/** Render one value as a single-quoted TypeScript literal. */
+/** Normalize source line endings so generated TypeScript is portable across checkouts. */
 function quote(value: string): string {
-  return `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('\n', '\\n')}'`
+  return `'${value.replace(/\r\n?/g, '\n').replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('\n', '\\n')}'`
 }
 
 /** Render a readonly string-array literal. */

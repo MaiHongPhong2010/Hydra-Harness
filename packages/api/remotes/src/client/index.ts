@@ -1,6 +1,7 @@
 /** Platform-neutral assembly of generated Host Remote contributions. */
 
 import type { Context } from '@hydraharness/cordis'
+import type {} from '@hydraharness/harness-toys/types'
 import commandsRemote from '@hydraharness/harness-commands/remote'
 import goalsRemote from '@hydraharness/harness-goal/remote'
 import dynamicRemote from '@hydraharness/harness-cordis-host-runner/remote'
@@ -61,6 +62,8 @@ export type {} from '@hydraharness/harness-authorization/types'
 export type {} from '@hydraharness/harness-llm/types'
 export type {} from '@hydraharness/harness-agent-presets/types'
 export type {} from '@hydraharness/harness-settings/types'
+export type {} from '@hydraharness/harness-workspace-config/types'
+export type { SettingsTarget } from '@hydraharness/harness-workspace-config/types'
 export type {} from '@hydraharness/harness-skill/types'
 export type {} from '@hydraharness/harness-fs-review/client'
 export type { ReviewMode, WorkspaceReview, WorkspaceReviewFile } from '@hydraharness/harness-fs-review/client'
@@ -79,7 +82,8 @@ export type {
   MessageId, ModelCatalogFailure, ModelProviderGroup, ModelReasoningEffort, ModelSelection,
   MuxFrame, PromptContentPart, QuestionResponsePayload, QueueAction, RpcError, RpcId, RpcReceipt,
   RpcRequest, RpcResponse, RpcResult, SessionId, SessionModels, SessionSearchItem,
-  ConversationRevision, SessionVersionState, SessionSummary, SettingsNamespaceView, SettingsPathOpView, SkillEntry, StreamChunk,
+  ConversationRevision, SessionVersionState, SessionSummary, SettingsNamespaceView, SettingsPathOpView,
+  WorkspaceSettingsStatus, SkillEntry, StreamChunk,
   SubagentAddress, SubagentCatalog, JobView, ToolCallView, ToolEventView, ToolResultView,
   WorkspaceId, WorkspaceView,
 } from '@hydraharness/harness-client-connection/client'

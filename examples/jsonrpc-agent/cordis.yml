@@ -6,6 +6,18 @@
   config:
     maxTokensAsSuccess: !!js "process.env.HYDRA_MAX_TOKENS_AS_SUCCESS === undefined ? true : JSON.parse(process.env.HYDRA_MAX_TOKENS_AS_SUCCESS)"
 
+- id: agent-default-model
+  name: '@hydraharness/harness-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash
+
+- id: settings
+  name: '@hydraharness/harness-settings-file'
+
+- id: workspace-config
+  name: '@hydraharness/harness-workspace-config'
+
 # The DeepSeek adapter. Shipped default: full thinking at max effort on every
 # request; exact-model resolution materializes request defaults before logging.
 # The model arrives per session over JSON-RPC, so it is not pinned here.

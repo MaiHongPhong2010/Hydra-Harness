@@ -105,20 +105,12 @@ afterAll(async () => {
 it.each(['antigravity', 'gemini-api'])('opens %s OAuth first and requests a quota project only for the API service', async (provider) => {
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.waitFor()
-  await dialog.getByRole('button', { name: 'Models', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Accounts', exact: true }).click()
   const section = dialog
-  if (provider === 'gemini-api') {
-    await scaffold.ctx.settings.mutate(settingsNamespace('llm-account-auth'), [
-      { op: 'set', path: ['providers', provider], value: {} },
-    ])
-    await dialog.getByRole('region', { name: 'API keys', exact: true })
-      .getByRole('button', { name: 'Edit Google Gemini API OAuth (gemini-api)', exact: true }).click()
-  } else {
-    await section.getByRole('button', { name: 'Add sign-in provider', exact: true }).click()
-    await section.getByLabel('Provider', { exact: true }).selectOption('google')
-  }
+  await section.getByLabel('Provider', { exact: true }).selectOption('llm-account-auth/antigravity')
+  await section.getByLabel('Sign-in method', { exact: true }).selectOption(provider === 'gemini-api' ? 'gemini-api' : 'oauth')
   await expect.poll(() => section.getByRole('button', { name: 'Add account', exact: true }).isEnabled()).toBe(true)
-  if (provider === 'gemini-api') await section.getByText('Usage unavailable from provider', { exact: true }).waitFor()
+  await section.getByText('google@example.test · fixture-project', { exact: true }).waitFor()
   await compareOrRefreshGolden(join(dirname(golden), `${provider}-login.expected.md`),
     await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), webSnapshotMode())
   const requestCount = requests.length
@@ -129,7 +121,6 @@ it.each(['antigravity', 'gemini-api'])('opens %s OAuth first and requests a quot
   expect(auth.hostname).toBe('accounts.google.com')
   await link.scrollIntoViewIfNeeded()
   expect(await section.getByLabel(/Google Cloud project ID/).count()).toBe(0)
-  expect(await section.getByRole('list', { name: 'Accounts', exact: true }).count()).toBe(0)
   await page.screenshot({ path: join(shots, `${provider}-login-light.png`) })
   const callback = new URL(auth.searchParams.get('redirect_uri')!)
   callback.searchParams.set('state', auth.searchParams.get('state')!)
@@ -140,9 +131,9 @@ it.each(['antigravity', 'gemini-api'])('opens %s OAuth first and requests a quot
     await section.getByLabel(/Google Cloud project ID/).fill('fixture-project')
     await section.getByRole('button', { name: 'Continue', exact: true }).click()
   }
-  await section.getByText('Account connected. Apply to save provider settings.', { exact: true }).waitFor()
+  await section.getByText('Account connected. Configure or enable this provider in Models.', { exact: true }).waitFor()
   expect(requests.slice(requestCount).some(request => request.path.includes('/models'))).toBe(provider === 'gemini-api')
-  await section.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await section.getByRole('button', { name: 'Manage models', exact: true }).click()
   await scaffold.ctx.authorization.removeAccount(accountRecordKey('antigravity'),
     (provider === 'gemini-api' ? 'login@example.test:fixture-project' : 'login@example.test') as never)
   expect(tripwire.pageErrors).toEqual([])
@@ -153,16 +144,11 @@ it('configures Google services explicitly, shares account removal, and sends bot
   if (!await dialog.isVisible()) await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await dialog.getByRole('button', { name: 'Models', exact: true }).click()
   const section = dialog
-  await section.getByRole('button', { name: 'Add sign-in provider', exact: true }).click()
-  const selection = section.getByLabel('Provider', { exact: true })
-  await selection.selectOption('google')
-  expect((await selection.locator('option').allTextContents()).filter(name => name === 'Google')).toHaveLength(1)
-  expect(await section.getByRole('list', { name: 'Accounts', exact: true }).count()).toBe(0)
-  expect(await section.getByText('google@example.test · fixture-project', { exact: true }).count()).toBe(0)
-  expect(await section.getByRole('region', { name: 'Account sign-in', exact: true }).getByRole('combobox').count()).toBe(1)
-  expect(await section.getByText('google@example.test · fixture-project', { exact: true }).count()).toBe(0)
-  await section.getByRole('button', { name: 'Apply', exact: true }).click()
-  await section.getByRole('button', { name: 'Edit Google Antigravity (antigravity)', exact: true }).waitFor()
+  const catalogs = dialog.getByRole('region', { name: 'Account-backed models', exact: true })
+  await catalogs.getByRole('button', { name: 'Add provider', exact: true }).click()
+  await catalogs.getByLabel('Provider', { exact: true }).selectOption('antigravity')
+  await catalogs.getByRole('button', { name: 'Apply', exact: true }).click()
+  await catalogs.getByRole('button', { name: 'Edit Google Antigravity (antigravity)', exact: true }).waitFor()
   const ns = settingsNamespace('llm-account-auth')
   await scaffold.ctx.settings.mutate(ns, [
     { op: 'set', path: ['providers', 'gemini-api'], value: { endpoint, models: [{ id: 'gemini-fixture' }, { id: 'gemini-3.1-flash-image' }] } },
@@ -185,7 +171,7 @@ it('configures Google services explicitly, shares account removal, and sends bot
   expect(api?.authorization).toBe('Bearer shared-google-access')
   expect(api?.project).toBe('fixture-project')
   await section.getByRole('button', { name: 'Edit Google Gemini API OAuth (gemini-api)', exact: true }).click()
-  await section.getByText('google@example.test · fixture-project', { exact: true }).waitFor()
+  expect(await section.getByRole('button', { name: 'Sign out google@example.test · fixture-project', exact: true }).count()).toBe(0)
   await section.locator('details > summary').click()
   expect(await section.getByRole('checkbox', { name: 'Image gemini-3.1-flash-image', exact: true }).isChecked()).toBe(true)
   geminiDiscoveryFailure = true
@@ -208,7 +194,7 @@ it('configures Google services explicitly, shares account removal, and sends bot
   await picker.getByRole('button', { name: 'Add selected', exact: true }).click()
   const acknowledged = page.waitForResponse(response => response.url().endsWith('/api/settings.mutate')
     && response.request().postData()?.includes('Shared AG image') === true)
-  await section.getByRole('button', { name: 'Apply', exact: true }).click()
+  await catalogs.getByRole('button', { name: 'Apply', exact: true }).click()
   expect((await (await acknowledged).json() as { result: { ok: boolean } }).result.ok).toBe(true)
   await section.getByRole('button', { name: 'Edit Google Gemini API OAuth (gemini-api)', exact: true }).waitFor()
   const saved = scaffold.ctx.settings.describe().find(section => section.ns === ns)?.value as {
@@ -243,7 +229,7 @@ it('configures Google services explicitly, shares account removal, and sends bot
   await expect.poll(() => page.locator('body').getAttribute('data-ds-dark-theme')).toBe('')
   await dialog.getByRole('button', { name: 'Models', exact: true }).click()
   await section.getByRole('button', { name: 'Edit Google Gemini API OAuth (gemini-api)', exact: true }).click()
-  await section.getByText('google@example.test · fixture-project', { exact: true }).waitFor()
+  expect(await section.getByRole('button', { name: 'Sign out google@example.test · fixture-project', exact: true }).count()).toBe(0)
   await section.locator('details > summary').click()
   await section.getByRole('button', { name: 'Fetch', exact: true }).click()
   await picker.waitFor()
@@ -255,17 +241,18 @@ it('configures Google services explicitly, shares account removal, and sends bot
   await page.setViewportSize({ width: 1680, height: 1000 })
   await page.screenshot({ path: join(shots, 'shared-google-dark.png') })
   await page.setViewportSize({ width: 560, height: 1000 })
-  await section.getByText('google@example.test · fixture-project', { exact: true }).scrollIntoViewIfNeeded()
-  expect(await section.getByRole('button', { name: 'Sign out google@example.test · fixture-project', exact: true })
-    .evaluate(button => button.getBoundingClientRect().height)).toBeLessThanOrEqual(40)
+  await section.getByRole('button', { name: 'Manage accounts', exact: true }).click()
+  await section.getByLabel('Provider', { exact: true }).selectOption('llm-account-auth/antigravity')
+  const signOut = section.getByRole('button', { name: 'Sign out google@example.test · fixture-project', exact: true })
+  await signOut.scrollIntoViewIfNeeded()
+  expect(await signOut.evaluate(button => button.getBoundingClientRect().height)).toBeLessThanOrEqual(40)
   await page.screenshot({ path: join(shots, 'shared-google-narrow.png') })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.setViewportSize({ width: 1680, height: 1000 })
-  await section.getByRole('button', { name: 'Sign out google@example.test · fixture-project', exact: true }).click()
+  const modelBefore = scaffold.ctx.settings.describe().find(view => view.ns === ns)?.value
+  await signOut.click()
   await section.getByText('No accounts connected.', { exact: true }).waitFor()
-  await section.getByRole('button', { name: 'Cancel', exact: true }).click()
-  await section.getByRole('button', { name: 'Edit Google Antigravity (antigravity)', exact: true }).click()
-  await section.getByText('No accounts connected.', { exact: true }).waitFor()
+  expect(scaffold.ctx.settings.describe().find(view => view.ns === ns)?.value).toEqual(modelBefore)
   expect(tripwire.warnings).toEqual([])
   expect(tripwire.pageErrors).toEqual([])
 }, 90_000)

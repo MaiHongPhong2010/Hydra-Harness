@@ -212,7 +212,8 @@ export interface DesktopTerminalApi {
    * @param workspaceId - Owning workspace; omitted for a workspace-free terminal in the desktop launch directory.
    * @returns Running state; rejects an unavailable workspace or a different owner for a live terminal.
    */
-  start(terminalId: DesktopTerminalId, size: { cols: number; rows: number }, workspaceId?: WorkspaceId): Promise<{ running: boolean }>
+  start(terminalId: DesktopTerminalId, size: { cols: number; rows: number }, workspaceId?: WorkspaceId,
+    cwd?: string): Promise<{ running: boolean }>
   /**
    * Stop the terminal and wait for its process to exit.
    * @param terminalId - Independent terminal instance.
@@ -228,6 +229,7 @@ export interface DesktopTerminalApi {
 export type DesktopPanelShortcut = RightPanelKind
 
 export interface DesktopPanelApi {
+  open?(kind: DesktopPanelShortcut): Promise<void>
   onShortcut(listener: (shortcut: DesktopPanelShortcut) => void): () => void
   /** The native browser closed itself, as when the user closes its last tab. */
   onClose(listener: (kind: DesktopPanelShortcut) => void): () => void
@@ -246,6 +248,7 @@ declare global {
       files?: DesktopFilesApi
       panels?: DesktopPanelApi
       chrome?: DesktopChromeApi
+      preferences?: import('./desktop-preferences.ts').NativePreferencesApi
     }
   }
 }
@@ -260,6 +263,7 @@ type RightPanelTab = {
   number: number
   terminalId: DesktopTerminalId
   workspaceId: WorkspaceId | undefined
+  cwd?: string | undefined
 } | {
   kind: Exclude<RightPanelKind, 'terminal'>
   sessionId?: SessionId | undefined
@@ -345,6 +349,7 @@ export function DesktopPanelControls(props: {
   browserOpen: boolean
   terminalOpen: boolean
   browserExpanded: boolean
+  bottomControl?: boolean
   onToggleBrowser: () => void
   onToggleTerminal: () => void
   onToggleExpanded: () => void
@@ -354,9 +359,9 @@ export function DesktopPanelControls(props: {
       <IconButton label="Expand right panel" active={props.browserExpanded} onClick={props.onToggleExpanded}>
         <PanelIcon panel="expanded" />
       </IconButton>
-      <IconButton label="Toggle bottom terminal" active={props.terminalOpen} onClick={props.onToggleTerminal}>
+      {props.bottomControl !== false && <IconButton label="Toggle bottom terminal" active={props.terminalOpen} onClick={props.onToggleTerminal}>
         <PanelIcon panel="bottom" />
-      </IconButton>
+      </IconButton>}
       <IconButton label="Toggle right panel" active={props.browserOpen} onClick={props.onToggleBrowser}>
         <PanelIcon panel="right" />
       </IconButton>
@@ -370,6 +375,13 @@ export function DesktopBrowserPanel(props: {
   workspaceId?: WorkspaceId | undefined
   sessionTitle?: string | undefined
   onOpen: () => void
+  fullView?: boolean | undefined
+  mainSessionId?: SessionId | undefined
+  renderMainChat?: (() => ReactNode) | undefined
+  terminalLocation?: 'bottom' | 'right' | undefined
+  onBottomTerminal?: ((cwd?: string) => void) | undefined
+  terminalRequest?: { sequence: number; cwd?: string | undefined } | undefined
+  fileDestination?: 'editor' | 'terminal' | 'system' | undefined
 } & ({
   /** Stable bottom workspace ordinal; each terminal tab has its own ordinal within it. */
   terminalGroup: number
@@ -390,7 +402,7 @@ export function DesktopBrowserPanel(props: {
   const [{ tabs, activeId }, setPanel] = useState<{ tabs: RightPanelTab[]; activeId: string }>(() => {
     const first: RightPanelTab = terminalGroup === undefined ? INITIAL_TAB : {
       id: 'terminal', kind: 'terminal', label: 'Terminal', number: 1,
-      terminalId: `bottom-${terminalGroup}-1`, workspaceId: props.workspaceId,
+      terminalId: `bottom-${terminalGroup}-1`, workspaceId: props.workspaceId, cwd: props.terminalRequest?.cwd,
     }
     return { tabs: [first], activeId: first.id }
   })
@@ -421,7 +433,11 @@ export function DesktopBrowserPanel(props: {
     setFilesWorkspaceId(props.workspaceId)
   }, [filesDirty, filesSaving, filesWorkspaceId, props.workspaceId])
 
-  const selectPanel = useCallback((kind: RightPanelKind) => {
+  const selectPanel = useCallback((kind: RightPanelKind, cwd?: string) => {
+    if (kind === 'terminal' && terminalGroup === undefined && props.terminalLocation === 'bottom' && props.onBottomTerminal !== undefined) {
+      props.onBottomTerminal(cwd)
+      return
+    }
     if (kind === 'side-chat' && creatingRef.current) return
     onOpen()
     setPanelError(undefined)
@@ -468,6 +484,7 @@ export function DesktopBrowserPanel(props: {
             ? ordinal === 1 ? 'right' : `right-${ordinal}`
             : `bottom-${terminalGroup}-${ordinal}`,
           workspaceId: props.workspaceId,
+          cwd,
         }
         return { tabs: [...current.tabs, tab], activeId: tab.id }
       })
@@ -478,11 +495,28 @@ export function DesktopBrowserPanel(props: {
         : [...current.tabs, { id: kind, kind, label: kind.charAt(0).toUpperCase() + kind.slice(1) }],
       activeId: kind,
     }))
-  }, [createSideSession, onOpen, props.workspaceId, terminalGroup])
+  }, [createSideSession, onOpen, props.workspaceId, terminalGroup, props.terminalLocation, props.onBottomTerminal])
+  const terminalRequest = useRef(props.terminalRequest?.sequence)
+  useEffect(() => {
+    const request = props.terminalRequest
+    if (request === undefined || request.sequence === terminalRequest.current || terminalGroup === undefined) return
+    terminalRequest.current = request.sequence
+    selectPanel('terminal', request.cwd)
+  }, [props.terminalRequest, selectPanel, terminalGroup])
+
+  useEffect(() => {
+    const sessionId = props.mainSessionId
+    if (sessionId === undefined || terminalGroup !== undefined) return
+    const id = `chat:${sessionId}`
+    setPanel(current => ({ tabs: current.tabs.some(tab => tab.id === id) ? current.tabs.map(tab => tab.id === id ? { ...tab, label: props.sessionTitle ?? 'Chat' } : tab)
+      : [...current.tabs, { id, kind: 'side-chat', sessionId, label: props.sessionTitle ?? 'Chat' }],
+    activeId: current.tabs.some(tab => tab.id === id) ? current.activeId : id }))
+  }, [props.mainSessionId, props.sessionTitle, terminalGroup])
 
   useEffect(() => terminalGroup === undefined ? window.hydraDesktop?.panels?.onShortcut((shortcut) => {
-    selectPanel(shortcut)
-  }) : undefined, [selectPanel, terminalGroup])
+    if (shortcut === 'terminal' && props.terminalLocation === 'bottom' && props.onBottomTerminal !== undefined) props.onBottomTerminal()
+    else selectPanel(shortcut)
+  }) : undefined, [selectPanel, terminalGroup, props.terminalLocation, props.onBottomTerminal])
 
   // Closing the active tab unmounts the control holding focus; the tab that
   // takes over receives it instead of the document body.
@@ -512,6 +546,7 @@ export function DesktopBrowserPanel(props: {
   }
 
   const closeTab = async (id: string) => {
+    if (id === `chat:${props.mainSessionId ?? ''}`) return
     if (id === 'files' && filesSaving) return
     if (id === 'files' && filesDirty && !window.confirm('Discard unsaved file changes?')) return
     const closingTab = tabs.find(tab => tab.id === id)
@@ -666,7 +701,7 @@ export function DesktopBrowserPanel(props: {
                 className={css.tabClose}
                 aria-label={`Close ${tab.label}`}
                 title={`Close ${tab.label} (Delete)`}
-                disabled={(tab.kind === 'files' && filesSaving) || (tab.kind === 'terminal' && closingTerminals.has(tab.terminalId))}
+                disabled={tab.id === `chat:${props.mainSessionId ?? ''}` || (tab.kind === 'files' && filesSaving) || (tab.kind === 'terminal' && closingTerminals.has(tab.terminalId))}
                 onClick={() => { void closeTab(tab.id) }}
               >
                 <IconCloseOutline16 size={12} />
@@ -700,15 +735,19 @@ export function DesktopBrowserPanel(props: {
                 focusSearch={filesFocus}
                 onDirtyChange={setFilesDirty}
                 onSavingChange={setFilesSaving}
+                destination={props.fileDestination}
+                onOpenTerminal={(cwd) => { selectPanel('terminal', cwd) }}
               />
             )}
             {tab.kind === 'side-chat' && tab.sessionId !== undefined && props.terminalGroup === undefined && (
-              <div className={css.sideChat}>{props.renderSideChat(tab.sessionId)}</div>
+              <div className={css.sideChat}>{tab.sessionId === props.mainSessionId && props.renderMainChat !== undefined
+                ? props.renderMainChat() : props.renderSideChat(tab.sessionId)}</div>
             )}
             {tab.kind === 'terminal' && <DesktopTerminalPanel
               open={props.open && tab.id === activeId && !closingTerminals.has(tab.terminalId)}
               terminalId={tab.terminalId}
               workspaceId={tab.workspaceId}
+              cwd={tab.cwd}
               terminalLabel={tab.label.replace('Terminal', terminalGroup === undefined ? 'Right terminal' : 'Bottom terminal')}
               sessionTitle={props.sessionTitle}
               onNewTerminal={() => { selectPanel('terminal') }}

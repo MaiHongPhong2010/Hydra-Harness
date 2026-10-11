@@ -7,6 +7,7 @@
 import { createSnapshotStore } from '@hydraharness/harness-client-runtime/client'
 import type { SnapshotStore } from '@hydraharness/harness-client-runtime/client'
 import type { IApiClient } from '@hydraharness/harness-api-remotes/client'
+import type { SettingsTarget } from '@hydraharness/harness-client-ui-settings/client'
 
 type InstructionsFace = Pick<IApiClient, 'settings'>
 
@@ -40,7 +41,7 @@ export class InstructionsController {
   private disposed = false
   private loading: Promise<void> | undefined
 
-  constructor(private readonly api: InstructionsFace) {}
+  constructor(private readonly api: InstructionsFace, private readonly target: SettingsTarget = {}) {}
 
   /** Refresh a clean editor on entry, retaining unsaved edits and pending saves. */
   ensure(): Promise<void> {
@@ -63,7 +64,7 @@ export class InstructionsController {
     this.store.update((draft) => { draft.status = 'loading'; draft.error = null })
     let response
     try {
-      response = await this.api.settings.readInstructions({})
+      response = await this.api.settings.readInstructions(this.target)
     } catch (error: unknown) {
       this.fail(error)
       return
@@ -99,6 +100,7 @@ export class InstructionsController {
     let response
     try {
       response = await this.api.settings.writeInstructions({
+        ...this.target,
         content: state.draft,
         ...state.revision === undefined ? {} : { expectedRevision: state.revision },
       })

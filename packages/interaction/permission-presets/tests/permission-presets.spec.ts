@@ -78,6 +78,20 @@ describe('effectivePermissionPreset', () => {
 })
 
 describe('PermissionPresetService', () => {
+  it('pins the prepared workspace default without changing another workspace', async () => {
+    const ctx = await mountedStore()
+    ctx.provide('workspaceConfig', {
+      currentEnvironment: (cwd: string) => cwd === '/workspace-a'
+        ? { settings: { get: () => ({ defaultPreset: 'danger-full-access' }) } }
+        : undefined,
+    })
+    const first = ctx.sessions.create(SessionId('workspace-a'), { meta: { cwd: '/workspace-a' } })
+    const second = ctx.sessions.create(SessionId('workspace-b'), { meta: { cwd: '/workspace-b' } })
+    expect(effectivePermissionPreset(first.events)).toBe('danger-full-access')
+    expect(effectivePermissionPreset(second.events)).toBe('workspace-write')
+    await ctx.fiber.dispose()
+  })
+
   it('advertises the preset table in declaration order and resolves bundles', async () => {
     const ctx = await mounted()
     expect(ctx.permissionPresets.names).toEqual(['workspace-write', 'danger-full-access'])

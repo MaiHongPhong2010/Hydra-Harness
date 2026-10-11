@@ -479,6 +479,31 @@ The full presentation field docs live in [`packages/core/tools/src/presentation.
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxsuggestedprompts--suggestedprompts"></a>
+
+### `ctx.suggestedPrompts` — `SuggestedPrompts`
+
+Reads sources once per empty chat or explicit refresh and owns all model input logs.
+
+```ts cordis-catalog
+/** Attaches an effect-scoped, permission-scoped resource reader.
+ * @param source - one owning plugin's permitted resource reader.
+ * @returns effect-scoped removal.
+ */
+registerSource(source: PromptSuggestionSource): () => Promise<void>
+
+/** Reuses the empty chat's bounded batch unless the caller requests a refresh.
+ * @param agent - empty chat.
+ * @param refresh - replace its cached batch.
+ * @returns bounded draft choices; failures preserve composer use.
+ */
+batch(agent: Agent, refresh: boolean): Promise<SuggestedPromptBatch>
+```
+
+Types: [Agent](core.md) · [PromptSuggestionSource](../../packages/interaction/suggested-prompts/README.md) · [SuggestedPromptBatch](../../packages/interaction/suggested-prompts/README.md)
+
+Source: [`packages/interaction/suggested-prompts/src/index.ts`](../../packages/interaction/suggested-prompts/src/index.ts)
+
 <a id="ctxtools--toolruntime"></a>
 
 ### `ctx.tools` — `ToolRuntime`

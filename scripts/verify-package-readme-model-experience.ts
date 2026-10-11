@@ -43,6 +43,10 @@ const NO_MODEL_EXPERIENCE_SECTION: Readonly<Record<string, string>> = {
  * blocks. A package moves on or off this list with its context behavior.
  */
 const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
+  'packages/client/ui-suggested-prompts': { kind: 'none', reason: 'The renderer displays Host-owned suggestions and fills the draft without sending it.' },
+  'packages/host/optional-plugins': { kind: 'indirect', reason: 'The invocation policy controls contributions whose owning plugins render model context.' },
+  'packages/interaction/notifications': { kind: 'none', reason: 'Live notification delivery adds no model input or transcript content.' },
+  'packages/interaction/toys': { kind: 'none', reason: 'The explicit human command emits a transient visual effect without model input.' },
   'packages/llm/llm-call-log': { kind: 'none', reason: 'Diagnostic session events do not change model requests or output.' },
   'packages/fs/fs-review': { kind: 'none', reason: 'Snapshot evidence and human review actions add no model-visible input or output.' },
   'packages/client/ui-review': { kind: 'none', reason: 'The browser renders host review evidence without changing model requests.' },

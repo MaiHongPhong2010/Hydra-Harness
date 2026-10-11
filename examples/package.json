@@ -120,6 +120,19 @@
     "@hydraharness/harness-web-fetch-http": "workspace:*",
     "@hydraharness/harness-workflow-worker-thread": "workspace:*",
     "@hydraharness/harness-agent-instructions": "workspace:*",
-    "@hydraharness/harness-research-policy": "workspace:^"
+    "@hydraharness/harness-research-policy": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:*",
+    "@hydraharness/harness-agent-default-model": "workspace:*",
+    "@hydraharness/harness-agent-presets": "workspace:*",
+    "@hydraharness/harness-workspace": "workspace:*",
+    "@hydraharness/harness-storage": "workspace:*",
+    "@hydraharness/harness-storage-json": "workspace:*",
+    "@hydraharness/harness-storage-domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@hydraharness/cordis": "workspace:*",
+    "@hydraharness/harness-hooks-registry": "workspace:*",
+    "@hydraharness/harness-mcp-registry": "workspace:*",
+    "@hydraharness/harness-settings": "workspace:*"
   }
 }

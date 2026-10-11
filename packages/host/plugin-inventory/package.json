@@ -58,6 +58,7 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/harness-app-boot": "workspace:^",
     "@hydraharness/harness-atomic-write": "workspace:^",
     "@hydraharness/harness-brand": "workspace:^",
@@ -66,12 +67,15 @@
     "@hydraharness/harness-mcp-registry": "workspace:^",
     "@hydraharness/harness-plugin-runtime": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/harness-typert-protocol": "workspace:^",
     "@hydraharness/cordis": "workspace:^",
     "@hydraharness/cordis-plugin-include": "workspace:^",
     "@hydraharness/cordis-plugin-loader": "workspace:^"
   },
   "devDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
+    "@hydraharness/harness-agent-presets": "workspace:^",
     "@hydraharness/harness-app-boot": "workspace:^",
     "@hydraharness/harness-atomic-write": "workspace:^",
     "@hydraharness/harness-brand": "workspace:^",
@@ -80,6 +84,7 @@
     "@hydraharness/harness-mcp-registry": "workspace:^",
     "@hydraharness/harness-plugin-runtime": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/harness-settings-file": "workspace:^",
     "@hydraharness/harness-typert-protocol": "workspace:^",
     "@hydraharness/cordis": "workspace:^",

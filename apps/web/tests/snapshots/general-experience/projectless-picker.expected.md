@@ -1,0 +1,4 @@
+- button "Choose workspace":
+  - img
+  - text: Choose workspace
+  - img

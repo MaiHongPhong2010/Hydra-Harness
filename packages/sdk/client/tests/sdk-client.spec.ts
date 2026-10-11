@@ -54,6 +54,16 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 describe('HydraHarness', () => {
+  it('projects auxiliary suggestion logs and the actual tier without changing response extraction', async () => {
+    const result = await harnessWith({ FAKE_GENERAL_SETTINGS: '1', FAKE_TEXT: 'answer' }).run('hello')
+    const auxiliary = result.events.filter(event => event.type.startsWith('suggestions/'))
+    expect(auxiliary.map(event => ({ type: event.type, data: event.data }))).toEqual([
+      { type: 'suggestions/request', data: { config: { provider: 'mock', model: 'model-a', serviceTier: 'priority', requestedServiceTier: 'priority' }, system: 'Return prompts', context: 'Project README' } },
+      { type: 'suggestions/result', data: { items: ['Explain this project'] } },
+    ])
+    expect(result.events.find(event => event.type === 'assistant/chunk')?.data).toMatchObject({ chunk: { type: 'finish', serviceTier: 'default' } })
+    expect(result.finalResponse).toBe('answer')
+  })
   it('preserves same-session version records without changing response extraction', async () => {
     const result = await harnessWith({ FAKE_VERSION_CONTROLS: '1', FAKE_TEXT: 'answer' }).run('hello', { sessionId: 'main' })
     expect(result.sessionId).toBe('main')
@@ -225,6 +235,16 @@ describe('HydraHarness', () => {
       model: 'custom-model',
       maxTokens: 4096,
     }])
+  })
+
+  it('omits model and provider so the runtime can select global defaults', async () => {
+    const dir = await tempDir('sdk-client-default-model-')
+    const recordFile = join(dir, 'init.jsonl')
+    const harness = new HydraHarness({ launch: fakeLaunch({ FAKE_RECORD_INIT: recordFile }), cwd: dir })
+    cleanups.push(() => harness.close())
+    await harness.start()
+    await harness.close()
+    expect(JSON.parse((await readFile(recordFile, 'utf8')).trim())).toEqual({ cwd: dir })
   })
 
   it('resolves a relative launch cwd to an absolute workspace before the handshake', async () => {

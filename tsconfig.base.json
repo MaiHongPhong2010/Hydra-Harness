@@ -1,7 +1,4 @@
 {
-  // Doubles as the resolution facade for vite-tsconfig-paths (vitest configs
-  // point here). NEVER add include/files to this file: it would leak into
-  // every extending package project and narrow the facade's match-all scope.
   "compilerOptions": {
     "target": "es2024",
     "module": "esnext",
@@ -23,109 +20,323 @@
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["node"],
-    // Source-level resolution for every repo-local graph. Project references,
-    // not declaration path aliases, keep each package/vendor source compiled
-    // under its own tsconfig boundary.
+    "types": [
+      "node"
+    ],
     "paths": {
-      "@hydraharness/harness-client-ui-review": ["./packages/client/ui-review/src/index.ts"],
-      "@hydraharness/harness-client-ui-review/client": ["./packages/client/ui-review/src/client/index.ts"],
-      "@hydraharness/harness-client-file-upload": ["./packages/client/file-upload/src/index.ts"],
-      "@hydraharness/harness-fs-review": ["./packages/fs/fs-review/src/index.ts"],
-      "@hydraharness/harness-fs-review/client": ["./packages/fs/fs-review/src/client.ts"],
-      "@hydraharness/harness-fs-review/*": ["./packages/fs/fs-review/src/*"],
-      "@hydraharness/harness-web-search-http": ["./packages/web/web-search-http/src/index.ts"],
-      "@hydraharness/harness-web-search-http/*": ["./packages/web/web-search-http/src/*"],
-      "@hydraharness/cordis": ["./vendor/cordis/src"],
-      "@hydraharness/cosmokit": ["./vendor/cosmokit/src"],
-      "@hydraharness/schemastery": ["./vendor/schemastery/src"],
+      "@hydraharness/harness-workspace/types": [
+        "./packages/workspace/workspace/src/types.ts"
+      ],
+      "@hydraharness/harness-workspace-config": [
+        "./packages/workspace/workspace-config/src/index.ts"
+      ],
+      "@hydraharness/harness-workspace-config/types": [
+        "./packages/workspace/workspace-config/src/types.ts"
+      ],
+      "@hydraharness/harness-workspace-config/*": [
+        "./packages/workspace/workspace-config/src/*"
+      ],
+      "@hydraharness/harness-client-ui-review": [
+        "./packages/client/ui-review/src/index.ts"
+      ],
+      "@hydraharness/harness-client-ui-review/client": [
+        "./packages/client/ui-review/src/client/index.ts"
+      ],
+      "@hydraharness/harness-client-file-upload": [
+        "./packages/client/file-upload/src/index.ts"
+      ],
+      "@hydraharness/harness-fs-review": [
+        "./packages/fs/fs-review/src/index.ts"
+      ],
+      "@hydraharness/harness-fs-review/client": [
+        "./packages/fs/fs-review/src/client.ts"
+      ],
+      "@hydraharness/harness-fs-review/*": [
+        "./packages/fs/fs-review/src/*"
+      ],
+      "@hydraharness/harness-web-search-http": [
+        "./packages/web/web-search-http/src/index.ts"
+      ],
+      "@hydraharness/harness-web-search-http/*": [
+        "./packages/web/web-search-http/src/*"
+      ],
+      "@hydraharness/cordis": [
+        "./vendor/cordis/src"
+      ],
+      "@hydraharness/cosmokit": [
+        "./vendor/cosmokit/src"
+      ],
+      "@hydraharness/schemastery": [
+        "./vendor/schemastery/src"
+      ],
       "@hydraharness/cordis-plugin-loader": ["./vendor/loader/src"],
-      "@hydraharness/cordis-plugin-include": ["./vendor/include/src"],
-      "@hydraharness/cordis-plugin-group": ["./vendor/group/src"],
-      "@hydraharness/cordis-plugin-timer": ["./vendor/timer/src"],
-      "@hydraharness/cordis-plugin-hmr": ["./vendor/hmr/src"],
-      "@hydraharness/cordis-plugin-logger-console": ["./vendor/logger-console/src"],
-      "@hydraharness/node-addon-landlock-run": ["./native/landlock-run/packages/entry/src/index.ts"],
-      "@hydraharness/harness-invariants": ["./packages/runtime-diagnostics/invariants/src/index.ts"],
-      "@hydraharness/harness-research-policy": ["./packages/guard/research-policy/src"],
-      "@hydraharness/harness-research-policy/invariant": ["./packages/guard/research-policy/src/invariant.ts"],
-      "@hydraharness/harness-tool-call-timeout-policy": ["./packages/guard/timeout-policy/src"],
-      "@hydraharness/harness-tool-call-timeout-policy/invariant": ["./packages/guard/timeout-policy/src/invariant.ts"],
-      "@hydraharness/harness-typert-registry": ["./packages/typert/registry/src/index.ts"],
-      "@hydraharness/harness-typert-registry/client": ["./packages/typert/registry/src/client/index.ts"],
-      "@hydraharness/harness-api-gateway": ["./packages/api/gateway/src/index.ts"],
-      "@hydraharness/harness-api-gateway/client": ["./packages/api/gateway/src/client/index.ts"],
-      "@hydraharness/harness-api-gateway/invariant": ["./packages/api/gateway/src/invariant.ts"],
-      "@hydraharness/harness-api-gateway/types": ["./packages/api/gateway/src/types.ts"],
-      "@hydraharness/harness-typert-protocol": ["./packages/typert/protocol/src/index.ts"],
-      "@hydraharness/harness-typert-protocol/types": ["./packages/typert/protocol/src/types.ts"],
-      "@hydraharness/harness-typert-loader": ["./packages/typert/loader/src/index.ts"],
-      "@hydraharness/harness-session/invariant": ["./packages/core/session/src/invariant.ts"],
-      "@hydraharness/harness-typert-registry/types": ["./packages/typert/registry/src/types.ts"],
-      "@hydraharness/harness-typert-generator": ["./packages/typert/generator/src/index.ts"],
-      "@hydraharness/harness-attachment/types": ["./packages/attachment/attachment/src/types.ts"],
-      "@hydraharness/harness-session/types": ["./packages/core/session/src/types.ts"],
-      "@hydraharness/harness-session/surface": ["./packages/core/session/src/surface.ts"],
-      "@hydraharness/harness-session-projection/types": ["./packages/session/session-projection/src/types.ts"],
-      "@hydraharness/harness-tool-todo/types": ["./packages/todo/tool-todo/src/types.ts"],
-      "@hydraharness/harness-tool-todo/client": ["./packages/todo/tool-todo/src/client.ts"],
-      "@hydraharness/harness-session-title/types": ["./packages/session/session-title/src/types.ts"],
-      "@hydraharness/harness-session-title/client": ["./packages/session/session-title/src/client.ts"],
-      "@hydraharness/harness-session-stats/types": ["./packages/session/session-stats/src/types.ts"],
-      "@hydraharness/harness-session-stats/client": ["./packages/session/session-stats/src/client.ts"],
-      "@hydraharness/harness-plan-mode/types": ["./packages/plan/plan-mode/src/types.ts"],
-      "@hydraharness/harness-plan-mode/client": ["./packages/plan/plan-mode/src/client.ts"],
-      "@hydraharness/harness-agent-presets/types": ["./packages/preset/agent-presets/src/types.ts"],
-      "@hydraharness/harness-pwsh-local": ["./packages/shell/pwsh-local/src/index.ts"],
-      "@hydraharness/harness-tool-pwsh": ["./packages/shell/tool-pwsh/src/index.ts"],
-      "@hydraharness/harness-shell-env": ["./packages/shell/shell-env/src/index.ts"],
-      "@hydraharness/harness-cordis-host-runner": ["./packages/extensions/cordis-host-runner/src/index.ts"],
-      "@hydraharness/harness-cordis-host-runner/types": ["./packages/extensions/cordis-host-runner/src/types.ts"],
-      "@hydraharness/harness-goal/types": ["./packages/goal/goal/src/types.ts"],
-      "@hydraharness/harness-goal/client": ["./packages/goal/goal/src/client.ts"],
-      "@hydraharness/harness-llm/types": ["./packages/llm/llm/src/types.ts"],
-      "@hydraharness/harness-llm/brand": ["./packages/llm/llm/src/brand.ts"],
-      "@hydraharness/harness-llm/model-endpoints": ["./packages/llm/llm/src/model-endpoints.ts"],
-      "@hydraharness/harness-llm/proxy": ["./packages/llm/llm/src/proxy.ts"],
-      "@hydraharness/harness-llm-retry/types": ["./packages/llm/llm-retry/src/types.ts"],
-      "@hydraharness/harness-llm-call-log/types": ["./packages/llm/llm-call-log/src/types.ts"],
-      "@hydraharness/harness-workflow/types": ["./packages/workflow/workflow/src/types.ts"],
-      "@hydraharness/harness-tool-workflow/types": ["./packages/workflow/tool-workflow/src/types.ts"],
-      "@hydraharness/harness-llm/message": ["./packages/llm/llm/src/message.ts"],
-      "@hydraharness/harness-commands/brand": ["./packages/interaction/commands/src/brand.ts"],
-      "@hydraharness/harness-commands/types": ["./packages/interaction/commands/src/types.ts"],
-      "@hydraharness/harness-jobs/brand": ["./packages/jobs/jobs/src/brand.ts"],
-      "@hydraharness/harness-credentials/types": ["./packages/credentials/credentials/src/types.ts"],
-      "@hydraharness/harness-authorization/types": ["./packages/credentials/authorization/src/types.ts"],
-      "@hydraharness/harness-settings/types": ["./packages/settings/settings/src/types.ts"],
-      "@hydraharness/harness-mcp-registry/types": ["./packages/mcp/mcp-registry/src/types.ts"],
-      "@hydraharness/harness-hooks-registry/types": ["./packages/hooks/hooks-registry/src/types.ts"],
-      "@hydraharness/harness-mcp-registry": ["./packages/mcp/mcp-registry/src"],
-      "@hydraharness/harness-hooks-registry": ["./packages/hooks/hooks-registry/src"],
-      "@hydraharness/harness-plugin-runtime": ["./packages/host/plugin-runtime/src"],
-      "@hydraharness/harness-plugin-runtime/types": ["./packages/host/plugin-runtime/src/types.ts"],
-      "@hydraharness/harness-hooks-codex/config": ["./packages/hooks/hooks-codex/src/config.ts"],
-      "@hydraharness/harness-hooks-claude-code/config": ["./packages/hooks/hooks-claude-code/src/config.ts"],
-      "@hydraharness/harness-personalization": ["./packages/context/personalization/src"],
-      "@hydraharness/harness-api-remotes/types": ["./packages/api/remotes/src/types.ts"],
-      "@hydraharness/harness-api-remotes/invariant": ["./packages/api/remotes/src/invariant.ts"],
-      "@hydraharness/harness-compaction/checkpoint": ["./packages/compaction/compaction/src/checkpoint.ts"],
-      "@hydraharness/harness-compaction/types": ["./packages/compaction/compaction/src/types.ts"],
-      "@hydraharness/harness-file-reference/grammar": ["./packages/context/file-reference/src/grammar.ts"],
-      "@hydraharness/harness-file-reference/types": ["./packages/context/file-reference/src/types.ts"],
-      "@hydraharness/harness-session-reference/types": ["./packages/context/session-reference/src/types.ts"],
-      "@hydraharness/harness-tools/presentation": ["./packages/core/tools/src/presentation.ts"],
-      "@hydraharness/harness-tools/types": ["./packages/core/tools/src/types.ts"],
-      "@hydraharness/harness-tool-subagent-control/list-agents": ["./packages/subagent/tool-subagent-control/src/list-agents.ts"],
-      "@hydraharness/harness-user-approval/types": ["./packages/interaction/user-approval/src/types.ts"],
-      "@hydraharness/harness-user-questions/types": ["./packages/interaction/user-questions/src/types.ts"],
-      "@hydraharness/harness-agent/types": ["./packages/core/agent/src/types.ts"],
-      "@hydraharness/harness-agent/brand": ["./packages/core/agent/src/brand.ts"],
-      "@hydraharness/harness-agent/invariant": ["./packages/core/agent/src/invariant.ts"],
-      "@hydraharness/harness-scope/invariant": ["./packages/core/scope/src/invariant.ts"],
-      "@hydraharness/harness-agent-loop/invariant": ["./packages/core/agent-loop/src/invariant.ts"],
-      "@hydraharness/harness-experimental-agent-team/invariant": ["./packages/experimental/agent-team/src/invariant.ts"],
-      "@hydraharness/harness-experimental-tool-agent-team/invariant": ["./packages/experimental/tool-agent-team/src/invariant.ts"],
+      "@hydraharness/cordis-plugin-include": [
+        "./vendor/include/src"
+      ],
+      "@hydraharness/cordis-plugin-group": [
+        "./vendor/group/src"
+      ],
+      "@hydraharness/cordis-plugin-timer": [
+        "./vendor/timer/src"
+      ],
+      "@hydraharness/cordis-plugin-hmr": [
+        "./vendor/hmr/src"
+      ],
+      "@hydraharness/cordis-plugin-logger-console": [
+        "./vendor/logger-console/src"
+      ],
+      "@hydraharness/node-addon-landlock-run": [
+        "./native/landlock-run/packages/entry/src/index.ts"
+      ],
+      "@hydraharness/harness-invariants": [
+        "./packages/runtime-diagnostics/invariants/src/index.ts"
+      ],
+      "@hydraharness/harness-research-policy": [
+        "./packages/guard/research-policy/src"
+      ],
+      "@hydraharness/harness-research-policy/invariant": [
+        "./packages/guard/research-policy/src/invariant.ts"
+      ],
+      "@hydraharness/harness-tool-call-timeout-policy": [
+        "./packages/guard/timeout-policy/src"
+      ],
+      "@hydraharness/harness-tool-call-timeout-policy/invariant": [
+        "./packages/guard/timeout-policy/src/invariant.ts"
+      ],
+      "@hydraharness/harness-typert-registry": [
+        "./packages/typert/registry/src/index.ts"
+      ],
+      "@hydraharness/harness-typert-registry/client": [
+        "./packages/typert/registry/src/client/index.ts"
+      ],
+      "@hydraharness/harness-api-gateway": [
+        "./packages/api/gateway/src/index.ts"
+      ],
+      "@hydraharness/harness-api-gateway/client": [
+        "./packages/api/gateway/src/client/index.ts"
+      ],
+      "@hydraharness/harness-api-gateway/invariant": [
+        "./packages/api/gateway/src/invariant.ts"
+      ],
+      "@hydraharness/harness-api-gateway/types": [
+        "./packages/api/gateway/src/types.ts"
+      ],
+      "@hydraharness/harness-typert-protocol": [
+        "./packages/typert/protocol/src/index.ts"
+      ],
+      "@hydraharness/harness-typert-protocol/types": [
+        "./packages/typert/protocol/src/types.ts"
+      ],
+      "@hydraharness/harness-typert-loader": [
+        "./packages/typert/loader/src/index.ts"
+      ],
+      "@hydraharness/harness-session/invariant": [
+        "./packages/core/session/src/invariant.ts"
+      ],
+      "@hydraharness/harness-typert-registry/types": [
+        "./packages/typert/registry/src/types.ts"
+      ],
+      "@hydraharness/harness-typert-generator": [
+        "./packages/typert/generator/src/index.ts"
+      ],
+      "@hydraharness/harness-attachment/types": [
+        "./packages/attachment/attachment/src/types.ts"
+      ],
+      "@hydraharness/harness-session/types": [
+        "./packages/core/session/src/types.ts"
+      ],
+      "@hydraharness/harness-session/surface": [
+        "./packages/core/session/src/surface.ts"
+      ],
+      "@hydraharness/harness-session-projection/types": [
+        "./packages/session/session-projection/src/types.ts"
+      ],
+      "@hydraharness/harness-tool-todo/types": [
+        "./packages/todo/tool-todo/src/types.ts"
+      ],
+      "@hydraharness/harness-tool-todo/client": [
+        "./packages/todo/tool-todo/src/client.ts"
+      ],
+      "@hydraharness/harness-session-title/types": [
+        "./packages/session/session-title/src/types.ts"
+      ],
+      "@hydraharness/harness-session-title/client": [
+        "./packages/session/session-title/src/client.ts"
+      ],
+      "@hydraharness/harness-session-stats/types": [
+        "./packages/session/session-stats/src/types.ts"
+      ],
+      "@hydraharness/harness-session-stats/client": [
+        "./packages/session/session-stats/src/client.ts"
+      ],
+      "@hydraharness/harness-plan-mode/types": [
+        "./packages/plan/plan-mode/src/types.ts"
+      ],
+      "@hydraharness/harness-plan-mode/client": [
+        "./packages/plan/plan-mode/src/client.ts"
+      ],
+      "@hydraharness/harness-agent-presets/types": [
+        "./packages/preset/agent-presets/src/types.ts"
+      ],
+      "@hydraharness/harness-pwsh-local": [
+        "./packages/shell/pwsh-local/src/index.ts"
+      ],
+      "@hydraharness/harness-tool-pwsh": [
+        "./packages/shell/tool-pwsh/src/index.ts"
+      ],
+      "@hydraharness/harness-shell-env": [
+        "./packages/shell/shell-env/src/index.ts"
+      ],
+      "@hydraharness/harness-cordis-host-runner": [
+        "./packages/extensions/cordis-host-runner/src/index.ts"
+      ],
+      "@hydraharness/harness-cordis-host-runner/types": [
+        "./packages/extensions/cordis-host-runner/src/types.ts"
+      ],
+      "@hydraharness/harness-goal/types": [
+        "./packages/goal/goal/src/types.ts"
+      ],
+      "@hydraharness/harness-goal/client": [
+        "./packages/goal/goal/src/client.ts"
+      ],
+      "@hydraharness/harness-llm/types": [
+        "./packages/llm/llm/src/types.ts"
+      ],
+      "@hydraharness/harness-llm/brand": [
+        "./packages/llm/llm/src/brand.ts"
+      ],
+      "@hydraharness/harness-llm/model-endpoints": [
+        "./packages/llm/llm/src/model-endpoints.ts"
+      ],
+      "@hydraharness/harness-llm/proxy": [
+        "./packages/llm/llm/src/proxy.ts"
+      ],
+      "@hydraharness/harness-llm-retry/types": [
+        "./packages/llm/llm-retry/src/types.ts"
+      ],
+      "@hydraharness/harness-llm-call-log/types": [
+        "./packages/llm/llm-call-log/src/types.ts"
+      ],
+      "@hydraharness/harness-workflow/types": [
+        "./packages/workflow/workflow/src/types.ts"
+      ],
+      "@hydraharness/harness-tool-workflow/types": [
+        "./packages/workflow/tool-workflow/src/types.ts"
+      ],
+      "@hydraharness/harness-llm/message": [
+        "./packages/llm/llm/src/message.ts"
+      ],
+      "@hydraharness/harness-commands/brand": [
+        "./packages/interaction/commands/src/brand.ts"
+      ],
+      "@hydraharness/harness-commands/types": [
+        "./packages/interaction/commands/src/types.ts"
+      ],
+      "@hydraharness/harness-jobs/brand": [
+        "./packages/jobs/jobs/src/brand.ts"
+      ],
+      "@hydraharness/harness-credentials/types": [
+        "./packages/credentials/credentials/src/types.ts"
+      ],
+      "@hydraharness/harness-authorization/types": [
+        "./packages/credentials/authorization/src/types.ts"
+      ],
+      "@hydraharness/harness-settings/types": [
+        "./packages/settings/settings/src/types.ts"
+      ],
+      "@hydraharness/harness-mcp-registry/types": [
+        "./packages/mcp/mcp-registry/src/types.ts"
+      ],
+      "@hydraharness/harness-hooks-registry/types": [
+        "./packages/hooks/hooks-registry/src/types.ts"
+      ],
+      "@hydraharness/harness-mcp-registry": [
+        "./packages/mcp/mcp-registry/src"
+      ],
+      "@hydraharness/harness-hooks-registry": [
+        "./packages/hooks/hooks-registry/src"
+      ],
+      "@hydraharness/harness-plugin-runtime": [
+        "./packages/host/plugin-runtime/src"
+      ],
+      "@hydraharness/harness-plugin-runtime/types": [
+        "./packages/host/plugin-runtime/src/types.ts"
+      ],
+      "@hydraharness/harness-hooks-codex/config": [
+        "./packages/hooks/hooks-codex/src/config.ts"
+      ],
+      "@hydraharness/harness-hooks-claude-code/config": [
+        "./packages/hooks/hooks-claude-code/src/config.ts"
+      ],
+      "@hydraharness/harness-personalization": [
+        "./packages/context/personalization/src"
+      ],
+      "@hydraharness/harness-api-remotes/types": [
+        "./packages/api/remotes/src/types.ts"
+      ],
+      "@hydraharness/harness-api-remotes/invariant": [
+        "./packages/api/remotes/src/invariant.ts"
+      ],
+      "@hydraharness/harness-compaction/checkpoint": [
+        "./packages/compaction/compaction/src/checkpoint.ts"
+      ],
+      "@hydraharness/harness-compaction/types": [
+        "./packages/compaction/compaction/src/types.ts"
+      ],
+      "@hydraharness/harness-file-reference/grammar": [
+        "./packages/context/file-reference/src/grammar.ts"
+      ],
+      "@hydraharness/harness-file-reference/types": [
+        "./packages/context/file-reference/src/types.ts"
+      ],
+      "@hydraharness/harness-session-reference/types": [
+        "./packages/context/session-reference/src/types.ts"
+      ],
+      "@hydraharness/harness-tools/presentation": [
+        "./packages/core/tools/src/presentation.ts"
+      ],
+      "@hydraharness/harness-tools/types": [
+        "./packages/core/tools/src/types.ts"
+      ],
+      "@hydraharness/harness-tool-subagent-control/list-agents": [
+        "./packages/subagent/tool-subagent-control/src/list-agents.ts"
+      ],
+      "@hydraharness/harness-user-approval/types": [
+        "./packages/interaction/user-approval/src/types.ts"
+      ],
+      "@hydraharness/harness-user-questions/types": [
+        "./packages/interaction/user-questions/src/types.ts"
+      ],
+      "@hydraharness/harness-notifications": [
+        "./packages/interaction/notifications/src/index.ts"
+      ],
+      "@hydraharness/harness-notifications/types": [
+        "./packages/interaction/notifications/src/types.ts"
+      ],
+      "@hydraharness/harness-optional-plugins": [
+        "./packages/host/optional-plugins/src/index.ts"
+      ],
+      "@hydraharness/harness-agent/types": [
+        "./packages/core/agent/src/types.ts"
+      ],
+      "@hydraharness/harness-agent/brand": [
+        "./packages/core/agent/src/brand.ts"
+      ],
+      "@hydraharness/harness-agent/invariant": [
+        "./packages/core/agent/src/invariant.ts"
+      ],
+      "@hydraharness/harness-scope/invariant": [
+        "./packages/core/scope/src/invariant.ts"
+      ],
+      "@hydraharness/harness-agent-loop/invariant": [
+        "./packages/core/agent-loop/src/invariant.ts"
+      ],
+      "@hydraharness/harness-experimental-agent-team/invariant": [
+        "./packages/experimental/agent-team/src/invariant.ts"
+      ],
+      "@hydraharness/harness-experimental-tool-agent-team/invariant": [
+        "./packages/experimental/tool-agent-team/src/invariant.ts"
+      ],
       "@hydraharness/harness-*/invariant": [
         "./packages/core/*/src/invariant.ts",
         "./packages/prompt/*/src/invariant.ts",
@@ -173,95 +384,240 @@
         "./packages/identity/*/src/invariant.ts",
         "./packages/test-support/*/src/invariant.ts"
       ],
-      // host/client package names prefix the group dir (hydra-client-<dir>), so
-      // the generic hydra-*/invariant list above cannot map them; strip the
-      // group prefix with a dedicated wildcard per group instead.
-      "@hydraharness/harness-host-*/invariant": ["./packages/host/*/src/invariant.ts"],
-      "@hydraharness/harness-client-*/invariant": ["./packages/client/*/src/invariant.ts"],
-      "@hydraharness/harness-headless/startup": ["./packages/bundle/headless/src/startup.ts"],
-      "@hydraharness/harness-web-app/startup": ["./packages/bundle/web-app/src/startup.ts"],
-      "@hydraharness/harness-client-*/client": ["./packages/client/*/src/client"],
-       // One wildcard maps every @hydraharness/harness-<name> to its source. Package
-      // dir names are unique across groups, so first-on-disk-wins resolution is
-      // unambiguous; adding a package under an existing group needs no edit
-      // here. The aggregates' project references (tsconfig.host.json /
-      // tsconfig.client.json) stay explicit â€” TS project references have no
-      // wildcard form.
-      "@hydraharness/harness-host-apiproxy": ["./packages/host/apiproxy/src"],
-      "@hydraharness/harness-host-directory-picker": ["./packages/host/directory-picker/src"],
-      "@hydraharness/harness-host-directory-picker/*": ["./packages/host/directory-picker/src/*"],
-      "@hydraharness/harness-host-directory-picker-browse": ["./packages/host/directory-picker-browse/src"],
-      "@hydraharness/harness-host-directory-picker-browse/*": ["./packages/host/directory-picker-browse/src/*"],
-      "@hydraharness/harness-host-directory-picker-native": ["./packages/host/directory-picker-native/src"],
-      "@hydraharness/harness-host-directory-picker-native/*": ["./packages/host/directory-picker-native/src/*"],
-      "@hydraharness/harness-host-directory-picker-auto": ["./packages/host/directory-picker-auto/src"],
-      "@hydraharness/harness-host-directory-picker-auto/*": ["./packages/host/directory-picker-auto/src/*"],
-      "@hydraharness/harness-host-apiproxy/client": ["./packages/host/apiproxy/src/fetch/client.ts"],
-      "@hydraharness/harness-host-apiproxy/*": ["./packages/host/apiproxy/src/*"],
-      "@hydraharness/harness-host-webserver": ["./packages/host/webserver/src"],
-      "@hydraharness/harness-host-frontend-static": ["./packages/host/frontend-static/src"],
-      "@hydraharness/harness-host-plugin-inventory": ["./packages/host/plugin-inventory/src"],
-      "@hydraharness/harness-host-plugin-inventory/types": ["./packages/host/plugin-inventory/src/types.ts"],
-      "@hydraharness/harness-client-ui-slots": ["./packages/client/ui-slots/src"],
-      "@hydraharness/harness-client-ui-attachment": ["./packages/client/ui-attachment/src"],
-      "@hydraharness/harness-client-ui-primitives": ["./packages/client/ui-primitives/src"],
-      "@hydraharness/harness-client-ui-renderer": ["./packages/client/ui-renderer/src"],
-      "@hydraharness/harness-client-ui-renderer/client": ["./packages/client/ui-renderer/src/client"],
-      "@hydraharness/harness-client-ui-renderer/invariant": ["./packages/client/ui-renderer/src/invariant.ts"],
-      "@hydraharness/harness-client-connection": ["./packages/client/connection/src"],
-      "@hydraharness/harness-api-remotes": ["./packages/api/remotes/src"],
-      "@hydraharness/harness-api-remotes/client": ["./packages/api/remotes/src/client/index.ts"],
-      "@hydraharness/harness-client-hmr": ["./packages/client/hmr/src"],
-      "@hydraharness/harness-client-modules": ["./packages/client/modules/src"],
-      "@hydraharness/harness-client-runtime": ["./packages/client/runtime/src"],
-      "@hydraharness/harness-client-runtime/client": ["./packages/client/runtime/src/client"],
-      "@hydraharness/harness-cordis-client-runner": ["./packages/extensions/cordis-client-runner/src"],
-      "@hydraharness/harness-cordis-client-runner/client": ["./packages/extensions/cordis-client-runner/src/client"],
-      "@hydraharness/harness-cordis-client-runner/invariant": ["./packages/extensions/cordis-client-runner/src/invariant.ts"],
-      "@hydraharness/harness-client-ui-cordis": ["./packages/extensions/ui-cordis/src"],
-      "@hydraharness/harness-client-ui-cordis/client": ["./packages/extensions/ui-cordis/src/client"],
-      "@hydraharness/harness-client-ui-cordis/invariant": ["./packages/extensions/ui-cordis/src/invariant.ts"],
-      "@hydraharness/harness-client-test-runtime": ["./packages/test-support/client-runtime/src"],
-      "@hydraharness/harness-client-test-runtime/invariant": ["./packages/test-support/client-runtime/src/invariant.ts"],
-      "@hydraharness/harness-client-ui-layout": ["./packages/client/ui-layout/src"],
-      "@hydraharness/harness-client-ui-sidebar": ["./packages/client/ui-sidebar/src"],
-      "@hydraharness/harness-client-ui-brand-official": ["./packages/client/ui-brand-official/src"],
-      "@hydraharness/harness-client-ui-conversation": ["./packages/client/ui-conversation/src"],
-      "@hydraharness/harness-client-ui-tool": ["./packages/client/ui-tool/src"],
-      "@hydraharness/harness-client-ui-deliverables": ["./packages/client/ui-deliverables/src"],
-      "@hydraharness/harness-client-ui-workflow-run": ["./packages/client/ui-workflow-run/src"],
-      "@hydraharness/harness-client-ui-input-trigger": ["./packages/client/ui-input-trigger/src"],
-      "@hydraharness/harness-client-ui-reference": ["./packages/client/ui-reference/src"],
-      "@hydraharness/harness-client-ui-commands": ["./packages/client/ui-commands/src"],
-      "@hydraharness/harness-client-ui-model-selection": ["./packages/client/ui-model-selection/src"],
-      "@hydraharness/harness-client-ui-goal": ["./packages/client/ui-goal/src"],
-      "@hydraharness/harness-client-ui-message-feedback": ["./packages/client/ui-message-feedback/src"],
-      "@hydraharness/harness-client-ui-agent-preset": ["./packages/client/ui-agent-preset/src"],
-      "@hydraharness/harness-client-ui-permission-presets": ["./packages/client/ui-permission-presets/src"],
-      "@hydraharness/harness-client-ui-skill": ["./packages/client/ui-skill/src"],
-      "@hydraharness/harness-client-ui-subagent": ["./packages/client/ui-subagent/src"],
-      "@hydraharness/harness-client-ui-settings-plugins": ["./packages/client/ui-settings-plugins/src"],
-      "@hydraharness/harness-client-ui-jobs": ["./packages/client/ui-jobs/src"],
-      "@hydraharness/harness-client-ui-plan": ["./packages/client/ui-plan/src"],
-      "@hydraharness/harness-client-ui-user-questions": ["./packages/client/ui-user-questions/src"],
-      "@hydraharness/harness-client-ui-trajectory": ["./packages/client/ui-trajectory/src"],
-      "@hydraharness/harness-client-ui-workspace": ["./packages/client/ui-workspace/src"],
-      "@hydraharness/harness-client-ui-theme": ["./packages/client/ui-theme/src"],
-      "@hydraharness/harness-client-ui-settings": ["./packages/client/ui-settings/src"],
-      "@hydraharness/harness-client-ui-settings-general": ["./packages/client/ui-settings-general/src"],
-      "@hydraharness/harness-client-ui-settings-personalization": ["./packages/client/ui-settings-personalization/src"],
-      "@hydraharness/harness-client-ui-settings-models": ["./packages/client/ui-settings-models/src"],
-      "@hydraharness/harness-client-ui-jev": ["./packages/client/ui-jev/src"],
-      "@hydraharness/harness-client-ui-settings-plugin-inventory": ["./packages/client/ui-settings-plugin-inventory/src"],
-      "@hydraharness/harness-client-locale": ["./packages/client/locale/src"],
-      "@hydraharness/harness-client-web": ["./packages/client/web/src"],
-      // sdk/ folders are role-named without their npm-side sdk/jsonrpc prefixes,
-      // so the generic wildcard cannot map these three package names.
-      "@hydraharness/harness-sdk-client": ["./packages/sdk/client/src"],
-      "@hydraharness/harness-sdk-protocol": ["./packages/sdk/protocol/src"],
-      "@hydraharness/harness-sdk-jsonrpc-server": ["./packages/sdk/server/src"],
-      "@hydraharness/harness-experimental-agent-team": ["./packages/experimental/agent-team/src"],
-      "@hydraharness/harness-experimental-tool-agent-team": ["./packages/experimental/tool-agent-team/src"],
+      "@hydraharness/harness-host-*/invariant": [
+        "./packages/host/*/src/invariant.ts"
+      ],
+      "@hydraharness/harness-client-*/invariant": [
+        "./packages/client/*/src/invariant.ts"
+      ],
+      "@hydraharness/harness-headless/startup": [
+        "./packages/bundle/headless/src/startup.ts"
+      ],
+      "@hydraharness/harness-web-app/startup": [
+        "./packages/bundle/web-app/src/startup.ts"
+      ],
+      "@hydraharness/harness-client-*/client": [
+        "./packages/client/*/src/client"
+      ],
+      "@hydraharness/harness-host-apiproxy": [
+        "./packages/host/apiproxy/src"
+      ],
+      "@hydraharness/harness-host-directory-picker": [
+        "./packages/host/directory-picker/src"
+      ],
+      "@hydraharness/harness-host-directory-picker/*": [
+        "./packages/host/directory-picker/src/*"
+      ],
+      "@hydraharness/harness-host-directory-picker-browse": [
+        "./packages/host/directory-picker-browse/src"
+      ],
+      "@hydraharness/harness-host-directory-picker-browse/*": [
+        "./packages/host/directory-picker-browse/src/*"
+      ],
+      "@hydraharness/harness-host-directory-picker-native": [
+        "./packages/host/directory-picker-native/src"
+      ],
+      "@hydraharness/harness-host-directory-picker-native/*": [
+        "./packages/host/directory-picker-native/src/*"
+      ],
+      "@hydraharness/harness-host-directory-picker-auto": [
+        "./packages/host/directory-picker-auto/src"
+      ],
+      "@hydraharness/harness-host-directory-picker-auto/*": [
+        "./packages/host/directory-picker-auto/src/*"
+      ],
+      "@hydraharness/harness-host-apiproxy/client": [
+        "./packages/host/apiproxy/src/fetch/client.ts"
+      ],
+      "@hydraharness/harness-host-apiproxy/*": [
+        "./packages/host/apiproxy/src/*"
+      ],
+      "@hydraharness/harness-host-webserver": [
+        "./packages/host/webserver/src"
+      ],
+      "@hydraharness/harness-host-frontend-static": [
+        "./packages/host/frontend-static/src"
+      ],
+      "@hydraharness/harness-host-plugin-inventory": [
+        "./packages/host/plugin-inventory/src"
+      ],
+      "@hydraharness/harness-host-plugin-inventory/types": [
+        "./packages/host/plugin-inventory/src/types.ts"
+      ],
+      "@hydraharness/harness-client-ui-slots": [
+        "./packages/client/ui-slots/src"
+      ],
+      "@hydraharness/harness-client-ui-attachment": [
+        "./packages/client/ui-attachment/src"
+      ],
+      "@hydraharness/harness-client-ui-primitives": [
+        "./packages/client/ui-primitives/src"
+      ],
+      "@hydraharness/harness-client-ui-renderer": [
+        "./packages/client/ui-renderer/src"
+      ],
+      "@hydraharness/harness-client-ui-renderer/client": [
+        "./packages/client/ui-renderer/src/client"
+      ],
+      "@hydraharness/harness-client-ui-renderer/invariant": [
+        "./packages/client/ui-renderer/src/invariant.ts"
+      ],
+      "@hydraharness/harness-client-connection": [
+        "./packages/client/connection/src"
+      ],
+      "@hydraharness/harness-api-remotes": [
+        "./packages/api/remotes/src"
+      ],
+      "@hydraharness/harness-api-remotes/client": [
+        "./packages/api/remotes/src/client/index.ts"
+      ],
+      "@hydraharness/harness-client-hmr": [
+        "./packages/client/hmr/src"
+      ],
+      "@hydraharness/harness-client-modules": [
+        "./packages/client/modules/src"
+      ],
+      "@hydraharness/harness-client-runtime": [
+        "./packages/client/runtime/src"
+      ],
+      "@hydraharness/harness-client-runtime/client": [
+        "./packages/client/runtime/src/client"
+      ],
+      "@hydraharness/harness-cordis-client-runner": [
+        "./packages/extensions/cordis-client-runner/src"
+      ],
+      "@hydraharness/harness-cordis-client-runner/client": [
+        "./packages/extensions/cordis-client-runner/src/client"
+      ],
+      "@hydraharness/harness-cordis-client-runner/invariant": [
+        "./packages/extensions/cordis-client-runner/src/invariant.ts"
+      ],
+      "@hydraharness/harness-client-ui-cordis": [
+        "./packages/extensions/ui-cordis/src"
+      ],
+      "@hydraharness/harness-client-ui-cordis/client": [
+        "./packages/extensions/ui-cordis/src/client"
+      ],
+      "@hydraharness/harness-client-ui-cordis/invariant": [
+        "./packages/extensions/ui-cordis/src/invariant.ts"
+      ],
+      "@hydraharness/harness-client-test-runtime": [
+        "./packages/test-support/client-runtime/src"
+      ],
+      "@hydraharness/harness-client-test-runtime/invariant": [
+        "./packages/test-support/client-runtime/src/invariant.ts"
+      ],
+      "@hydraharness/harness-client-ui-layout": [
+        "./packages/client/ui-layout/src"
+      ],
+      "@hydraharness/harness-client-ui-sidebar": [
+        "./packages/client/ui-sidebar/src"
+      ],
+      "@hydraharness/harness-client-ui-brand-official": [
+        "./packages/client/ui-brand-official/src"
+      ],
+      "@hydraharness/harness-client-ui-conversation": [
+        "./packages/client/ui-conversation/src"
+      ],
+      "@hydraharness/harness-client-ui-tool": [
+        "./packages/client/ui-tool/src"
+      ],
+      "@hydraharness/harness-client-ui-deliverables": [
+        "./packages/client/ui-deliverables/src"
+      ],
+      "@hydraharness/harness-client-ui-workflow-run": [
+        "./packages/client/ui-workflow-run/src"
+      ],
+      "@hydraharness/harness-client-ui-input-trigger": [
+        "./packages/client/ui-input-trigger/src"
+      ],
+      "@hydraharness/harness-client-ui-reference": [
+        "./packages/client/ui-reference/src"
+      ],
+      "@hydraharness/harness-client-ui-commands": [
+        "./packages/client/ui-commands/src"
+      ],
+      "@hydraharness/harness-client-ui-model-selection": [
+        "./packages/client/ui-model-selection/src"
+      ],
+      "@hydraharness/harness-client-ui-goal": [
+        "./packages/client/ui-goal/src"
+      ],
+      "@hydraharness/harness-client-ui-message-feedback": [
+        "./packages/client/ui-message-feedback/src"
+      ],
+      "@hydraharness/harness-client-ui-agent-preset": [
+        "./packages/client/ui-agent-preset/src"
+      ],
+      "@hydraharness/harness-client-ui-permission-presets": [
+        "./packages/client/ui-permission-presets/src"
+      ],
+      "@hydraharness/harness-client-ui-skill": [
+        "./packages/client/ui-skill/src"
+      ],
+      "@hydraharness/harness-client-ui-subagent": [
+        "./packages/client/ui-subagent/src"
+      ],
+      "@hydraharness/harness-client-ui-settings-plugins": [
+        "./packages/client/ui-settings-plugins/src"
+      ],
+      "@hydraharness/harness-client-ui-jobs": [
+        "./packages/client/ui-jobs/src"
+      ],
+      "@hydraharness/harness-client-ui-plan": [
+        "./packages/client/ui-plan/src"
+      ],
+      "@hydraharness/harness-client-ui-user-questions": [
+        "./packages/client/ui-user-questions/src"
+      ],
+      "@hydraharness/harness-client-ui-trajectory": [
+        "./packages/client/ui-trajectory/src"
+      ],
+      "@hydraharness/harness-client-ui-workspace": [
+        "./packages/client/ui-workspace/src"
+      ],
+      "@hydraharness/harness-client-ui-theme": [
+        "./packages/client/ui-theme/src"
+      ],
+      "@hydraharness/harness-client-ui-settings": [
+        "./packages/client/ui-settings/src"
+      ],
+      "@hydraharness/harness-client-ui-settings-general": [
+        "./packages/client/ui-settings-general/src"
+      ],
+      "@hydraharness/harness-client-ui-settings-personalization": [
+        "./packages/client/ui-settings-personalization/src"
+      ],
+      "@hydraharness/harness-client-ui-settings-models": [
+        "./packages/client/ui-settings-models/src"
+      ],
+      "@hydraharness/harness-client-ui-jev": [
+        "./packages/client/ui-jev/src"
+      ],
+      "@hydraharness/harness-client-ui-settings-plugin-inventory": [
+        "./packages/client/ui-settings-plugin-inventory/src"
+      ],
+      "@hydraharness/harness-client-locale": [
+        "./packages/client/locale/src"
+      ],
+      "@hydraharness/harness-client-web": [
+        "./packages/client/web/src"
+      ],
+      "@hydraharness/harness-sdk-client": [
+        "./packages/sdk/client/src"
+      ],
+      "@hydraharness/harness-sdk-protocol": [
+        "./packages/sdk/protocol/src"
+      ],
+      "@hydraharness/harness-sdk-jsonrpc-server": [
+        "./packages/sdk/server/src"
+      ],
+      "@hydraharness/harness-experimental-agent-team": [
+        "./packages/experimental/agent-team/src"
+      ],
+      "@hydraharness/harness-experimental-tool-agent-team": [
+        "./packages/experimental/tool-agent-team/src"
+      ],
       "@hydraharness/harness-*": [
         "./packages/core/*/src",
         "./packages/prompt/*/src",
@@ -314,6 +670,27 @@
         "./packages/test-support/*/src",
         "./packages/host/*/src",
         "./packages/client/*/src"
+      ],
+      "@hydraharness/harness-suggested-prompts": [
+        "./packages/interaction/suggested-prompts/src/index.ts"
+      ],
+      "@hydraharness/harness-suggested-prompts/types": [
+        "./packages/interaction/suggested-prompts/src/types.ts"
+      ],
+      "@hydraharness/harness-client-ui-suggested-prompts": [
+        "./packages/client/ui-suggested-prompts/src/index.ts"
+      ],
+      "@hydraharness/harness-client-ui-suggested-prompts/client": [
+        "./packages/client/ui-suggested-prompts/src/client/index.ts"
+      ],
+      "@hydraharness/harness-native-command/desktop-bridge": [
+        "./packages/util/native-command/src/desktop-bridge.ts"
+      ],
+      "@hydraharness/harness-toys": [
+        "./packages/interaction/toys/src/index.ts"
+      ],
+      "@hydraharness/harness-toys/types": [
+        "./packages/interaction/toys/src/types.ts"
       ]
     }
   }

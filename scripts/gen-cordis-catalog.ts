@@ -58,6 +58,8 @@ export const SERVICE_PAGE: Record<string, string> = {
   commands: 'commands.md',
   compaction: 'compaction.md',
   importedPlugins: 'extensions.md',
+  optionalPlugins: 'extensions.md',
+  suggestedPrompts: 'tools.md',
   mcpServers: 'extensions.md',
   hookRecords: 'extensions.md',
   cordisInspect: 'extensions.md',
@@ -109,6 +111,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   web: 'web.md',
   workflowEngine: 'workflow.md',
   workspaceRegistry: 'workspace.md',
+  workspaceConfig: 'workspace.md',
 }
 
 /**
@@ -174,6 +177,8 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
   'approval': 'approval.md',
   'browser': 'browser.md',
   'commands': 'commands.md',
+  'notifications': 'commands.md',
+  'toys': 'commands.md',
   'cordis': 'extensions.md',
   'authorization': 'credentials.md',
   'credentials': 'credentials.md',
@@ -194,6 +199,8 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
   'tools': 'tools.md',
   'webserver': 'web-server.md',
   'workflow': 'workflow.md',
+  'workspace': 'workspace.md',
+  'workspace-config': 'workspace.md',
 }
 
 /**
@@ -225,6 +232,10 @@ export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
  * appear on more than one page.
  */
 export const LINK_MAP: Readonly<Record<string, string>> = {
+  NotificationRequest: '../../packages/interaction/notifications/README.md',
+  ConfettiRequest: '../../packages/interaction/toys/README.md',
+  PromptSuggestionSource: '../../packages/interaction/suggested-prompts/README.md',
+  SuggestedPromptBatch: '../../packages/interaction/suggested-prompts/README.md',
   Agent: 'core.md',
   AgentCancelCause: 'core.md',
   AgentFactory: 'core.md',
@@ -492,6 +503,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   SettingsNamespace: 'settings.md',
   SettingsRegisterOptions: 'settings.md',
   SettingsScope: 'settings.md',
+  SettingsProvider: 'settings.md',
   SettingsDescriptor: 'settings.md',
   SettingsPathOp: 'settings.md',
   SettingsDescribeOptions: 'settings.md',
@@ -542,6 +554,9 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   DomainFacility: 'storage.md',
   Workspace: 'workspace.md',
   WorkspaceId: 'workspace.md',
+  WorkspaceConfigLayer: 'workspace.md',
+  SettingsTarget: 'workspace.md',
+  WorkspaceEnvironment: 'workspace.md',
   WebBootGraph: 'client-modules.md',
   SessionTelemetryRecord: 'session-telemetry.md',
   WorkflowRunInfo: 'workflow.md',

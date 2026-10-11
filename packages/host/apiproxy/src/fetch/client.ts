@@ -28,6 +28,7 @@ import {
   sessionHistoryValueSchema,
   sessionListValueSchema,
   sessionModelsValueSchema,
+  sessionSuggestionsValueSchema,
   sessionPromptValueSchema,
   sessionRenameValueSchema,
   sessionSearchValueSchema,
@@ -62,6 +63,7 @@ import {
   settingsDescribeValueSchema, settingsMutateValueSchema, settingsOpenDocumentValueSchema,
   settingsListMemoriesValueSchema, settingsReadInstructionsValueSchema, settingsRemoveMemoryValueSchema,
   settingsReplaceValueSchema, settingsUpdateValueSchema, settingsWriteInstructionsValueSchema,
+  settingsWorkspaceStatusValueSchema, settingsSetWorkspaceTrustValueSchema,
 } from '../api/settings.schema.ts'
 import {
   credentialsDescribeValueSchema, credentialsSetValueSchema, credentialsUnsetValueSchema,
@@ -110,6 +112,7 @@ export interface IApiClient {
     delete(payload: RequestPayload<'session.delete'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.delete'>>>
     history(payload: RequestPayload<'session.history'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.history'>>>
     models(payload: RequestPayload<'session.models'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.models'>>>
+    suggestions(payload: RequestPayload<'session.suggestions'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.suggestions'>>>
     selectModel(payload: RequestPayload<'session.selectModel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.selectModel'>>>
     rename(payload: RequestPayload<'session.rename'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.rename'>>>
     fork(payload: RequestPayload<'session.fork'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.fork'>>>
@@ -174,6 +177,8 @@ export interface IApiClient {
     mutate(payload: RequestPayload<'settings.mutate'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'settings.mutate'>>>
     readInstructions(payload: RequestPayload<'settings.readInstructions'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'settings.readInstructions'>>>
     writeInstructions(payload: RequestPayload<'settings.writeInstructions'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'settings.writeInstructions'>>>
+    workspaceStatus(payload: RequestPayload<'settings.workspaceStatus'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'settings.workspaceStatus'>>>
+    setWorkspaceTrust(payload: RequestPayload<'settings.setWorkspaceTrust'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'settings.setWorkspaceTrust'>>>
     listMemories(payload: RequestPayload<'settings.listMemories'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'settings.listMemories'>>>
     removeMemory(payload: RequestPayload<'settings.removeMemory'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'settings.removeMemory'>>>
   }
@@ -219,6 +224,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'session.delete': sessionDeleteValueSchema,
   'session.history': sessionHistoryValueSchema,
   'session.models': sessionModelsValueSchema,
+  'session.suggestions': sessionSuggestionsValueSchema,
   'session.selectModel': sessionSelectModelValueSchema,
   'session.rename': sessionRenameValueSchema,
   'session.fork': sessionForkValueSchema,
@@ -265,6 +271,8 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'settings.mutate': settingsMutateValueSchema,
   'settings.readInstructions': settingsReadInstructionsValueSchema,
   'settings.writeInstructions': settingsWriteInstructionsValueSchema,
+  'settings.workspaceStatus': settingsWorkspaceStatusValueSchema,
+  'settings.setWorkspaceTrust': settingsSetWorkspaceTrustValueSchema,
   'settings.listMemories': settingsListMemoriesValueSchema,
   'settings.removeMemory': settingsRemoveMemoryValueSchema,
   'credentials.describe': credentialsDescribeValueSchema,
@@ -489,6 +497,7 @@ export abstract class AbstractApiClient implements IApiClient {
     delete: (payload, signal) => this.callUnary('session.delete', payload, signal),
     history: (payload, signal) => this.callUnary('session.history', payload, signal),
     models: (payload, signal) => this.callUnary('session.models', payload, signal),
+    suggestions: (payload, signal) => this.callUnary('session.suggestions', payload, signal),
     selectModel: (payload, signal) => this.callUnary('session.selectModel', payload, signal),
     rename: (payload, signal) => this.callUnary('session.rename', payload, signal),
     fork: (payload, signal) => this.callUnary('session.fork', payload, signal),
@@ -572,6 +581,8 @@ export abstract class AbstractApiClient implements IApiClient {
     mutate: (payload, signal) => this.callUnary('settings.mutate', payload, signal),
     readInstructions: (payload, signal) => this.callUnary('settings.readInstructions', payload, signal),
     writeInstructions: (payload, signal) => this.callUnary('settings.writeInstructions', payload, signal),
+    workspaceStatus: (payload, signal) => this.callUnary('settings.workspaceStatus', payload, signal),
+    setWorkspaceTrust: (payload, signal) => this.callUnary('settings.setWorkspaceTrust', payload, signal),
     listMemories: (payload, signal) => this.callUnary('settings.listMemories', payload, signal),
     removeMemory: (payload, signal) => this.callUnary('settings.removeMemory', payload, signal),
   }

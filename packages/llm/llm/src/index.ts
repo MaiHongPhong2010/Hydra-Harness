@@ -34,6 +34,8 @@ import { normalizeApiKey } from './api-key.ts'
 import type { FileAttachmentRef } from '@hydraharness/harness-attachment'
 import { contentHasFile, fileHandleText, projectFilesToText } from './content.ts'
 import { isGenerationRejection, supportsConversation } from './model-endpoints.ts'
+import z from '@hydraharness/schemastery'
+import { installSettingsSection, settingsNamespace } from '@hydraharness/harness-settings'
 
 export * from './attribution.ts'
 export * from './brand.ts'
@@ -305,8 +307,13 @@ export class LlmRuntime extends Service {
     (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>
   >()
 
+  private speed: () => { tier: 'standard' | 'priority' } = () => ({ tier: 'standard' })
+
   constructor(ctx: Context) {
     super(ctx, 'llm')
+    installSettingsSection<{ tier: 'standard' | 'priority' }>(ctx, settingsNamespace('llm-speed'), z.object({ tier: z.union(['standard', 'priority']).default('standard') }), { tier: 'standard' }, {
+      setSource: (current) => { this.speed = current }, onChange: () => {},
+    })
   }
 
   /** Notify topology observers without letting one broken listener veto the commit. */
@@ -570,6 +577,7 @@ export class LlmRuntime extends Service {
         ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
         ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
         ...model.endpoints === undefined ? {} : { endpoints: [...model.endpoints] },
+        ...model.serviceTiers === undefined ? {} : { serviceTiers: [...model.serviceTiers] },
       })
     }
     return models
@@ -751,6 +759,7 @@ export class LlmRuntime extends Service {
       ...resolved.description === undefined ? {} : { description: resolved.description },
       ...inputModalities === undefined ? {} : { inputModalities },
       ...resolved.endpoints === undefined ? {} : { endpoints: [...resolved.endpoints] },
+      ...resolved.serviceTiers === undefined ? {} : { serviceTiers: [...resolved.serviceTiers] },
       ...context === undefined ? {} : { context: { contextWindow: context.contextWindow } },
       ...defaultMaxTokens === undefined ? {} : { defaultMaxTokens },
     }
@@ -847,6 +856,16 @@ export class LlmRuntime extends Service {
         if (requested !== effective) resolvedConfig = { ...defaulted, reasoningEffort: effective }
       }
     }
+    if (config.serviceTier !== undefined && !info.serviceTiers?.includes(config.serviceTier)) throw new LlmError('The selected model does not support this processing tier.', 'UNSUPPORTED_SERVICE_TIER')
+    const requestedTier = config.serviceTier ?? this.speed().tier
+    if (config.serviceTier !== undefined || info.serviceTiers?.includes(requestedTier) === true || requestedTier === 'priority') resolvedConfig = {
+      ...resolvedConfig, requestedServiceTier: requestedTier,
+      ...info.serviceTiers?.includes(requestedTier) ? { serviceTier: requestedTier } : {},
+    }
+    else if (resolvedConfig.requestedServiceTier !== undefined) {
+      const { serviceTier: _tier, requestedServiceTier: _requested, ...standard } = resolvedConfig
+      resolvedConfig = standard
+    }
     return {
       config: resolvedConfig,
       ...info.context === undefined ? {} : { context: info.context },
@@ -869,6 +888,8 @@ export class LlmRuntime extends Service {
       ? undefined
       : deepFreeze(structuredClone(resolved.context))
     const adapterDefaults = deepFreeze<LlmCallConfigAdapterDefaults>({
+      ...config.serviceTier === undefined && (resolvedConfig.serviceTier !== undefined || resolvedConfig.requestedServiceTier !== undefined)
+        ? { serviceTier: true } : {},
       ...config.reasoningEffort === undefined && resolvedConfig.reasoningEffort !== undefined
         ? { reasoningEffort: true }
         : {},

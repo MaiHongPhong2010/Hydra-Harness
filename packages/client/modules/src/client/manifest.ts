@@ -289,6 +289,13 @@ export interface ClientModuleLoader {
    * @param id - entry name to invalidate.
    */
   invalidate(id: string): void
+  /**
+   * Validate and adopt the latest Host graph before loading added contributions.
+   * Already materialized modules remain available until their owning fibers unload.
+   * @param wire - untrusted graph received over the same-origin event channel.
+   * @returns the accepted manifest; malformed graphs leave the existing one intact.
+   */
+  updateGraph(wire: unknown): BootManifest
 }
 
 /** Internal construction inputs assembled by the modules bundle's bootstrap export. */

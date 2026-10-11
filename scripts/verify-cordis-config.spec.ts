@@ -15,6 +15,11 @@ import {
 } from './verify-cordis-config.ts'
 
 describe('verify-cordis-config metadata expressions', () => {
+  it('keeps required functionality separate from restart-only metadata', () => {
+    expect(metadataExpressionErrors({ pluginType: 'normal', pluginRequired: true }, '[0]')).toEqual([])
+    expect(metadataExpressionErrors({ pluginType: 'core', pluginRequired: false }, '[0]')).toEqual([])
+    expect(metadataExpressionErrors({ pluginRequired: 'core' }, '[0]')).toEqual(['[0].pluginRequired: must be boolean'])
+  })
   it('validates plugin lifecycle metadata and rejects the snake_case spelling', () => {
     for (const pluginType of [undefined, 'core', 'normal']) {
       expect(metadataExpressionErrors({ pluginType, pluginGroup: 'settings-ui' }, '[0]')).toEqual([])

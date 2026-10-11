@@ -86,7 +86,8 @@
     "commander": "^15.0.0",
     "@hydraharness/cordis": "workspace:^",
     "js-yaml": "^4.2.0",
-    "node-addon-require-builtin": "^0.1.4"
+    "node-addon-require-builtin": "^0.1.4",
+    "@hydraharness/harness-native-command": "workspace:^"
   },
   "optionalDependencies": {
     "electron": "^44.0.0"
@@ -99,12 +100,15 @@
     "@hydraharness/harness-llm": "workspace:^",
     "@hydraharness/harness-llm-mock-server": "workspace:^",
     "@hydraharness/harness-loader-smoke": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
     "@hydraharness/harness-session": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
     "@hydraharness/harness-subagent": "workspace:^",
     "@hydraharness/harness-system-prompt": "workspace:^",
     "@hydraharness/harness-tools": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@types/js-yaml": "^4.0.9",
-    "execa": "^10.0.0"
+    "execa": "^10.0.0",
+    "@hydraharness/harness-native-command": "workspace:^"
   }
 }

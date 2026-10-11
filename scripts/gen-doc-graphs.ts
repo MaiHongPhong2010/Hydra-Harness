@@ -99,6 +99,16 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'optionalPlugins', pkg: 'optional-plugins', title: 'Optional plugin invocation policy', mode: 'core',
+    consumers: ['tools', 'skill', 'hooks-codex', 'hooks-claude-code', 'plugin-inventory', 'mcp-registry', 'hooks-registry'],
+    note: 'Rejects new optional work immediately and drains admitted operations before contribution removal.',
+  },
+  {
+    key: 'suggestedPrompts', pkg: 'suggested-prompts', title: 'Bounded empty-chat suggestions', mode: 'core',
+    consumers: ['apiproxy', 'mcp-client'],
+    note: 'Reads permission-scoped sources, logs auxiliary model requests, and returns draft choices without submitting them.',
+  },
+  {
     key: 'jev',
     pkg: 'jev',
     title: 'Optional unary Jev decision capability',
@@ -254,8 +264,16 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'workspace',
     title: 'Workspace entity registry',
     mode: 'core',
-    consumers: ['apiproxy'],
+    consumers: ['host-apiproxy', 'workspace-config'],
     note: 'Owns WorkspaceId-branded records over the domain facility; stable sessionIds accounts drive Host RPC and GUI projections.',
+  },
+  {
+    key: 'workspaceConfig',
+    pkg: 'workspace-config',
+    title: 'Workspace configuration environments',
+    mode: 'core',
+    consumers: ['acp', 'agent-instructions', 'headless', 'host-apiproxy', 'host-plugin-inventory', 'permission-presets', 'sdk-jsonrpc-server', 'skill-filesystem'],
+    note: 'Owns settings layers, execution trust, and standing runtime environments per canonical workspace root; consumers resolve session composition and project context without changing Host-wide services.',
   },
   {
     key: 'sessionQuery',

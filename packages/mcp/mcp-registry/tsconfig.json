@@ -6,6 +6,7 @@
   },
   "include": ["src"],
   "references": [
+    { "path": "../../host/optional-plugins" },
     {
       "path": "../../../vendor/cosmokit"
     },
@@ -20,6 +21,9 @@
     },
     {
       "path": "../../core/tools"
+    },
+    {
+      "path": "../../core/scope"
     },
     {
       "path": "../../settings/settings"

@@ -7,6 +7,7 @@
 import { relative } from 'node:path'
 import z from '@hydraharness/schemastery'
 import { resolveHydraHome } from '@hydraharness/harness-home-paths'
+import { WORKSPACE_INSTRUCTION_PATHS } from './render.ts'
 
 const DEFAULT_PROJECT_ROOT_MARKERS = ['.git'] as const
 const DEFAULT_INSTRUCTION_FILE_CANDIDATES = ['AGENTS.md', 'CLAUDE.md'] as const
@@ -18,7 +19,7 @@ const RESERVED_PATH_SEGMENTS = new Set(['', '.', '..'])
 export interface Config {
   /** Harness home containing the fixed user-global `AGENTS.md`; defaults to `$HYDRA_HOME` or `~/.hydra`. */
   hydraHome?: string
-  /** Directory entries that identify the project root while walking upward from the session cwd. */
+  /** Directory entries identifying the project root when `ctx.workspaceConfig` is absent. */
   projectRootMarkers?: string[]
   /** UTF-8 byte cap for one rendered baseline or dynamic batch; non-positive or non-finite disables loading. */
   maxBytes: number
@@ -78,6 +79,7 @@ export function workspaceBaselineIdentity(
     maxSourceBytes: config.maxSourceBytes,
     instructionFileCandidates: config.instructionFileCandidates,
     localInstructionFileCandidates: config.localInstructionFileCandidates,
+    workspaceInstructionPaths: WORKSPACE_INSTRUCTION_PATHS,
   })
 }
 

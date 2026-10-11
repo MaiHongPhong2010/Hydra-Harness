@@ -29,7 +29,7 @@ export interface McpServerView {
   readonly args?: readonly string[]
   /** Working directory of a stdio record; absent when the record leaves it empty. */
   readonly cwd?: string
-  /** Endpoint of a `streamable-http` record without URL userinfo; absent for stdio. */
+  /** Endpoint without URL userinfo, query or fragment; absent for stdio. */
   readonly url?: string
   /** Declared child-environment names, values withheld. */
   readonly envNames: readonly string[]
@@ -48,7 +48,7 @@ export interface McpServerSnapshot {
 /**
  * Complete definition of one server. A write replaces the named record
  * wholesale, so an omitted optional field clears the stored one — except
- * `env` and `headers`, whose omission keeps the stored values a redacted
+ * `env`, `headers` and `url`, whose omission keeps the stored values a redacted
  * caller never received.
  */
 export interface McpServerDefinitionRequest {
@@ -62,9 +62,9 @@ export interface McpServerDefinitionRequest {
   readonly args?: readonly string[]
   /** Child environment merged over the scrubbed ambient environment. */
   readonly env?: Readonly<Record<string, string>>
-  /** Working directory for a stdio record; empty runs in the harness process directory. */
+  /** Working directory; omitted/relative values use the registry's owning cwd when configured. */
   readonly cwd?: string
-  /** Endpoint for a `streamable-http` record; required by that transport. */
+  /** HTTP endpoint; required on create, omission on replace preserves its stored secret values. */
   readonly url?: string
   readonly headers?: Readonly<Record<string, string>>
   readonly toolCallTimeoutMs?: number

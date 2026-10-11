@@ -6,6 +6,7 @@ import type {
 } from '@hydraharness/harness-client-ui-slots'
 import { Input } from '@hydraharness/harness-client-ui-primitives'
 import type { PluginsSettingsLocaleKey } from './locales.ts'
+import type { SettingsSelectionSnapshot } from '@hydraharness/harness-client-ui-settings/client'
 import css from './PluginsSettingsSection.module.css'
 
 /** One tab projected from a `settings.plugins.tab` contribution. */
@@ -20,6 +21,7 @@ export interface PluginsSettingsSectionInjected {
   hooks: {
     /** Ordered, locale-aware projection of the Plugins tab ledger. */
     tabs: HostObservable<readonly PluginsSettingsTabEntry[]>
+    selection: HostObservable<SettingsSelectionSnapshot>
   }
 }
 
@@ -31,11 +33,13 @@ export type PluginsSettingsSectionProps =
   & InjectFace<PluginsSettingsSectionInjected>
 
 /** Render one Plugins page whose contents arrive from feature-owned tabs. */
-export function PluginsSettingsSection({ t, renderSlot, useTabs }: PluginsSettingsSectionProps) {
+export function PluginsSettingsSection({ t, renderSlot, useTabs, useSelection }: PluginsSettingsSectionProps) {
   const tabsId = useId()
   const searchId = useId()
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
-  const rows = useTabs(value => value)
+  const allRows = useTabs(value => value)
+  const workspace = useSelection(value => value.target.workspaceId !== undefined)
+  const rows = workspace ? allRows.filter(row => row.id === 'all' || row.id === 'mcp' || row.id === 'hooks') : allRows
   const [activeId, setActiveId] = useState<string>()
   const [query, setQuery] = useState('')
   const [visitedIds, setVisitedIds] = useState<ReadonlySet<string>>(() => new Set())

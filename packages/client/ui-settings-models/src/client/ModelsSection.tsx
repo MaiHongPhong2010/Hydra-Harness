@@ -6,9 +6,9 @@
 
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import type { IApiClient } from '@hydraharness/harness-api-remotes/client'
+import type { IApiClient, SettingsNamespaceView } from '@hydraharness/harness-api-remotes/client'
 import { Button, IconPlusOutline16, Modal } from '@hydraharness/harness-client-ui-primitives'
-import type { HostObservable, InjectFace, PropsRenderSlots } from '@hydraharness/harness-client-ui-slots'
+import type { HostObservable, InjectFace, PropsRenderSlots, PropsRuntime } from '@hydraharness/harness-client-ui-slots'
 import { isManagedFallbackRef } from './FallbackKeysEditor.tsx'
 import { CustomProviderCard } from './CustomProviderCard.tsx'
 import { GenerationModels } from './GenerationModels.tsx'
@@ -24,6 +24,8 @@ import {
   OFFICIAL_DEEPSEEK_SETTINGS_NS, WELCOME_NOTICE_SETTINGS_NAMESPACE,
 } from '../onboarding-copy.ts'
 import styles from './ModelsSection.module.css'
+import type { SettingsSelectionSnapshot } from '@hydraharness/harness-client-ui-settings/client'
+import type { SnapshotStore } from '@hydraharness/harness-client-runtime/client'
 
 /** Injected dependencies of {@link ModelsSection} (slot `inject`). */
 export interface ModelsSectionInjected {
@@ -32,8 +34,9 @@ export interface ModelsSectionInjected {
   hooks: {
     /** Page snapshot bound by the UI renderer as useSnapshot. */
     snapshot: ModelsSettingsStore['store']
-    /** Live count of optional provider contributions. */
-    providerOptions: HostObservable<number>
+    selection: SnapshotStore<SettingsSelectionSnapshot>
+    /** Live count of decision contributions. */
+    decisions: HostObservable<number>
   }
   /** Wire faces the editor writes through. */
   api: Pick<IApiClient, 'settings' | 'credentials' | 'llm' | 'authorization'>
@@ -41,15 +44,21 @@ export interface ModelsSectionInjected {
   schema: SettingsSchemaOperations
   /** Section copy. */
   t: (key: keyof typeof en) => string
+  /** Fold acknowledged model preferences into their shared settings mirror. */
+  acceptSettings: (view: SettingsNamespaceView) => void
 }
 
 /**
  * Props delivered by the slot outlet: the inject face spread flat (the
  * renderer erases the share boundary at the render call).
  */
-export type ModelsSectionProps = Partial<InjectFace<ModelsSectionInjected> & PropsRenderSlots<'settings.models.provider-option'>>
+export type ModelsSectionProps = Partial<InjectFace<ModelsSectionInjected> & PropsRenderSlots<'settings.models.decision'>
+  & PropsRuntime<'settings.section'>>
 
-type ModelsSectionFace = Omit<InjectFace<ModelsSectionInjected>, 'useProviderOptions'> & Partial<Pick<InjectFace<ModelsSectionInjected>, 'useProviderOptions'>> & PropsRenderSlots<'settings.models.provider-option'>
+type OptionalModelHooks = 'useDecisions' | 'useSelection' | 'acceptSettings'
+type ModelsSectionFace = Omit<InjectFace<ModelsSectionInjected>, OptionalModelHooks>
+  & Partial<Pick<InjectFace<ModelsSectionInjected>, OptionalModelHooks>> & PropsRenderSlots<'settings.models.decision'>
+  & Pick<ModelsSectionProps, 'openSection'>
 
 /** Provider identity shared by row actions and confirmation copy. */
 export interface ProviderIdentity {
@@ -101,19 +110,19 @@ function hidesOfficialDeepSeek(target: {
 }
 
 /**
- * Remove one configured provider, its saved accounts, and page-managed credentials. Credential
+ * Remove one configured provider and page-managed API keys; connected accounts are kept. Credential
  * removal comes first so a second-step failure leaves the provider row visible
  * and the whole operation safely retryable; both unsets are idempotent.
  * Nested profiles unset their user-layer path. The shipped official DeepSeek
  * route records a durable hide flag instead of unsetting the composition
  * section, which would fight the base document and recreate the row.
- * @param api - settings, credential, and authorization wire faces.
+ * @param api - settings and credential wire faces.
  * @param controller - the page store to refresh.
  * @param target - the provider's settings address and managed credentials.
  * @returns the failure message, or undefined once the write and reload landed.
  */
 export async function removeProviderProfile(
-  api: Pick<IApiClient, 'settings' | 'credentials' | 'authorization'>,
+  api: Pick<IApiClient, 'settings' | 'credentials'>,
   controller: ModelsSettingsStore,
   target: {
     provider?: string
@@ -127,15 +136,7 @@ export async function removeProviderProfile(
   const selections = namespace?.value as Record<string, { provider?: string } | undefined> | undefined
   const generationFields = target.settingsNs === 'llm-pi-ai'
     ? (['imageModel', 'videoModel'] as const).filter(field => selections?.[field]?.provider === target.settingsPath[1]) : []
-  const provider = target.provider ?? target.settingsPath[1]
-  const accountKey = provider === undefined ? undefined : providerAccountKey(target.settingsNs, provider)
-  const recordKey = accountKey ?? (target.settingsNs === 'llm-pi-ai' && provider !== undefined
-    ? `${target.settingsNs}/${provider}` : undefined)
   try {
-    if (recordKey !== undefined) {
-      const removed = await api.authorization.logout({ key: recordKey })
-      if (!removed.result.ok) return removed.result.error.message
-    }
     for (const ref of [...target.credentialRef === undefined ? [] : [target.credentialRef], ...(target.credentialRefs ?? [])]) {
       const credential = await api.credentials.unset({ ref })
       if (!credential.result.ok) return credential.result.error.message
@@ -230,23 +231,28 @@ export function providerCopy(template: string, target: ProviderIdentity): string
  * @returns the section, or null while the shell has not injected yet.
  */
 export function ModelsSection(props: ModelsSectionProps): ReactNode {
-  const { controller, useSnapshot, useProviderOptions, api, schema, t, renderSlot } = props
+  const {
+    controller, useSnapshot, useDecisions, useSelection, acceptSettings, api, schema, t, renderSlot, openSection,
+  } = props
   if (controller === undefined || useSnapshot === undefined || api === undefined
     || schema === undefined || t === undefined) return null
   const optionalRenderSlot = renderSlot ?? (() => null) as ModelsSectionFace['renderSlot']
   return <Loaded injected={{
     controller, useSnapshot, api, schema, t, renderSlot: optionalRenderSlot,
-    ...useProviderOptions === undefined ? {} : { useProviderOptions },
+    ...openSection === undefined ? {} : { openSection },
+    ...useDecisions === undefined ? {} : { useDecisions },
+    ...useSelection === undefined ? {} : { useSelection },
+    ...acceptSettings === undefined ? {} : { acceptSettings },
   }} />
 }
 
 function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   const { controller, api, schema, t, renderSlot } = injected
   const state = injected.useSnapshot(snapshot => snapshot)
-  const providerOptionCount = injected.useProviderOptions?.(count => count) ?? 0
+  const workspace = injected.useSelection?.(snapshot => snapshot.target.workspaceId !== undefined) ?? false
+  const decisionCount = injected.useDecisions?.(count => count) ?? 0
   const [editing, setEditing] = useState<EditorTarget | undefined>(undefined)
-  const [adding, setAdding] = useState(false)
-  const [addingOption, setAddingOption] = useState<string | undefined>(undefined)
+  const [adding, setAdding] = useState<'apiKeys' | 'accountLogin' | false>(false)
   const [deleteTarget, setDeleteTarget] = useState<EditorTarget | undefined>(undefined)
   const [deleting, setDeleting] = useState(false)
   const [deleteFailure, setDeleteFailure] = useState<string | undefined>(undefined)
@@ -273,7 +279,6 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   const closeEditor = (changed: boolean, target: ProviderIdentity): void => {
     setEditing(undefined)
     setAdding(false)
-    setAddingOption(undefined)
     setDeclaring(false)
     persistSaved(changed, target)
   }
@@ -330,320 +335,291 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
   // there is nothing to declare and the entry point stays disabled.
   const protocols = protocolChoices(state.namespaces.get('llm-pi-ai'), schema)
   const generationNamespace = state.namespaces.get('llm-pi-ai')
+  const catalogRevision = JSON.stringify([...state.namespaces].map(([ns, view]) => [ns, view.revision]))
 
   return (
     <div className={styles['section']}>
       <h2 className={styles['title']}>{t('title')}</h2>
       <p className={styles['intro']}>{t('intro')}</p>
-      {generationNamespace !== undefined && <GenerationModels
-        namespace={generationNamespace} schema={schema} api={api} readOnly={!state.writable}
-        catalogRevision={JSON.stringify([...state.namespaces].map(([ns, view]) => [ns, view.revision]))}
-        onSaved={() => controller.load()} t={t} />}
-      {!state.writable && state.status === 'ready' ? <p className={styles['notice']}>{t('readOnly')}</p> : null}
-      {savedIdentity === undefined
-        ? null
-        : (
-          <p className={styles['savedNotice']} role="status" aria-live="polite">
-            {providerCopy(t('savedProvider'), savedIdentity)}
-          </p>
-        )}
-      {(['apiKeys', 'accountLogin'] as const).map((group) => {
-        const accountGroup = group === 'accountLogin'
-        const rows = state.rows.filter((row) => {
-          const geminiApiOAuth = row.entry.settingsNs === 'llm-account-auth' && row.entry.provider === 'gemini-api'
-          if (geminiApiOAuth) return !accountGroup && row.configured
-          return (providerAccountKey(row.entry.settingsNs, row.entry.provider) !== undefined) === accountGroup
-        })
-        if (accountGroup && rows.length === 0) return null
-        const configured = rows.filter(row => row.configured)
-        // Account providers remain selectable after their profile exists: the
-        // editor is also where a second account is added.
-        const selectable = accountGroup
-          ? rows
-          : rows.filter(row => providerAccountKey(row.entry.settingsNs, row.entry.provider) === undefined
-            && ((!row.configured && row.entry.settingsNs !== '') || row.entry.provider === editing?.provider))
-        const addTarget = adding && rows.some(row => row.entry.provider === editing?.provider) ? editing : undefined
-        const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.settingsNs)
-        const showAdd = addTarget !== undefined || (!accountGroup && adding && editing === undefined)
-        const googleRow = accountGroup ? selectable.find(row => row.entry.provider === 'antigravity') : undefined
-        const googleSelected = googleRow !== undefined && googleRow.entry.provider === addTarget?.provider
-        return (
-          <section key={group} className={styles['providerGroup']} aria-label={t(group)}>
-            <h3 className={styles['title']}>{t(group)}</h3>
-            <p className={styles['intro']}>{t(accountGroup ? 'accountLoginHint' : 'apiKeysHint')}</p>
-            <ul className={styles['rows']}>
-              {configured.map((row) => {
-                const target = targetOf(row)
-                const namespace = state.namespaces.get(target.settingsNs)
-                /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
-                if (namespace === undefined) return null
-                const open = !adding && editing?.provider === row.entry.provider
-                const credentialConfigured = row.accountCount === undefined
-                  ? row.credential?.configured === true || Object.values(row.fallbackCredentials).some(state => state?.configured === true)
-                  : row.accountCount > 0
-                const credentialMissing = row.accountCount === undefined
-                  ? !credentialConfigured && (row.credential?.configured === false
+      {workspace
+        ? <p className={styles['notice']}>{t('workspaceModelHint')}</p>
+        : <>
+          {(generationNamespace !== undefined || state.namespaces.has('agent-default-model')) && <GenerationModels
+            namespace={generationNamespace} defaultNamespace={state.namespaces.get('agent-default-model')} schema={schema} api={api} readOnly={!state.writable}
+            catalogRevision={catalogRevision}
+            onSaved={(view) => { injected.acceptSettings?.(view); return controller.load() }} t={t} />}
+          <section className={styles['providerGroup']} aria-label={t('decisionModel')}>
+            <h3 className={styles['title']}>{t('decisionModel')}</h3>
+            {decisionCount > 0 ? renderSlot('settings.models.decision', {
+              readOnly: !state.writable, credentials: state.credentials,
+              openSection: injected.openSection ?? (() => {}),
+            }) : <>
+              <label className={styles['field']}>
+                <span className={styles['fieldLabel']}>{t('decisionModel')}</span>
+                <select data-hydra-control="field" className={styles['input']} disabled aria-label={t('decisionModel')} value="off">
+                  <option value="off">{t('decisionOff')}</option>
+                </select>
+              </label>
+              <p className={styles['advancedHint']}>{t('decisionUnavailable')}</p>
+              <Button variant="outline" onClick={() => { injected.openSection?.('plugins') }}>{t('managePlugins')}</Button>
+            </>}
+          </section>
+          {!state.writable && state.status === 'ready' ? <p className={styles['notice']}>{t('readOnly')}</p> : null}
+          {savedIdentity === undefined
+            ? null
+            : (
+              <p className={styles['savedNotice']} role="status" aria-live="polite">
+                {providerCopy(t('savedProvider'), savedIdentity)}
+              </p>
+            )}
+          {(['apiKeys', 'accountLogin'] as const).map((group) => {
+            const accountGroup = group === 'accountLogin'
+            const rows = state.rows.filter(row =>
+              (providerAccountKey(row.entry.settingsNs, row.entry.provider) !== undefined) === accountGroup)
+            if (accountGroup && rows.length === 0) return null
+            const configured = rows.filter(row => row.configured)
+            const selectable = rows.filter(row =>
+              (!row.configured && row.entry.settingsNs !== '') || row.entry.provider === editing?.provider)
+            const addTarget = adding && rows.some(row => row.entry.provider === editing?.provider) ? editing : undefined
+            const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.settingsNs)
+            const showAdd = addTarget !== undefined || (adding === group && editing === undefined)
+            return (
+              <section key={group} className={styles['providerGroup']} aria-label={t(group)}>
+                <h3 className={styles['title']}>{t(group)}</h3>
+                <p className={styles['intro']}>{t(accountGroup ? 'accountLoginHint' : 'apiKeysHint')}</p>
+                {accountGroup ? <Button variant="outline" onClick={() => { injected.openSection?.('accounts') }}>{t('manageAccounts')}</Button> : null}
+                {accountGroup && rows.some(row => row.accountCount === undefined) && state.credentialError !== null
+                  ? <p className={styles['error']} role="alert">{state.credentialError}</p> : null}
+                <ul className={styles['rows']}>
+                  {configured.map((row) => {
+                    const target = targetOf(row)
+                    const namespace = state.namespaces.get(target.settingsNs)
+                    /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
+                    if (namespace === undefined) return null
+                    const open = !adding && editing?.provider === row.entry.provider
+                    const credentialConfigured = row.accountCount === undefined
+                      ? row.credential?.configured === true
+                        || Object.values(row.fallbackCredentials).some(state => state?.configured === true)
+                      : row.accountCount > 0
+                    const credentialMissing = row.accountCount === undefined
+                      ? !credentialConfigured && (row.credential?.configured === false
                     || Object.values(row.fallbackCredentials).some(state => state?.configured === false))
-                  : row.accountCount === 0
-                const configuredLabel = t(row.accountCount === undefined ? 'credentialConfigured' : 'accountConfigured')
-                const missingLabel = t(row.accountCount === undefined ? 'credentialMissing' : 'accountMissing')
-                return (
-                  <li key={row.entry.provider} className={styles['rowCard']}>
-                    <div className={styles['rowHead']}>
-                      <span className={styles['rowIdentity']}>
-                        <span className={styles['rowName']}>{row.entry.displayName}</span>
-                        {/* Only the adapter can tell a hand-declared route from a
+                      : row.accountCount === 0
+                    const configuredLabel = t(row.accountCount === undefined ? 'credentialConfigured' : 'accountConfigured')
+                    const missingLabel = t(row.accountCount === undefined ? 'credentialMissing' : 'accountMissing')
+                    return (
+                      <li key={row.entry.provider} className={styles['rowCard']}>
+                        <div className={styles['rowHead']}>
+                          <span className={styles['rowIdentity']}>
+                            <span className={styles['rowName']}>{row.entry.displayName}</span>
+                            {/* Only the adapter can tell a hand-declared route from a
                             shipped one it also has a stored profile for, so the tag
                             follows its answer and stays off when it gives none. */}
-                        {row.entry.declared === true
-                          ? <span className={styles['rowTag']}>{t('customTag')}</span>
-                          : null}
-                        {credentialConfigured
-                          ? (
-                            <span
-                              className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`}
-                              role="img"
-                              aria-label={configuredLabel}
-                              title={configuredLabel}
-                            />
-                          )
-                          : credentialMissing
-                            ? (
-                              <span
-                                className={`${styles['credentialDot']} ${styles['credentialDotMissing']}`}
-                                role="img"
-                                aria-label={missingLabel}
-                                title={missingLabel}
-                              />
-                            )
-                            : null}
-                      </span>
-                      <span className={styles['rowActions']}>
-                        <button
-                          type="button"
-                          className={styles['secondaryButton']}
-                          aria-label={providerCopy(t('editProvider'), target)}
-                          onClick={() => {
-                            setSavedTarget(undefined)
-                            setAddingOption(undefined)
-                            // One card at a time: leaving `declaring` set would show
-                            // the create card beside this editor, and closing either
-                            // one discards the other's draft.
-                            setDeclaring(false)
-                            setAdding(false)
-                            setEditing(open ? undefined : target)
-                          }}
-                        >
-                          {t('edit')}
-                        </button>
-                        {row.removable
-                          ? (
+                            {row.entry.declared === true
+                              ? <span className={styles['rowTag']}>{t('customTag')}</span>
+                              : null}
+                            {credentialConfigured
+                              ? (
+                                <span
+                                  className={`${styles['credentialDot']} ${styles['credentialDotConfigured']}`}
+                                  role="img"
+                                  aria-label={configuredLabel}
+                                  title={configuredLabel}
+                                />
+                              )
+                              : credentialMissing
+                                ? (
+                                  <span
+                                    className={`${styles['credentialDot']} ${styles['credentialDotMissing']}`}
+                                    role="img"
+                                    aria-label={missingLabel}
+                                    title={missingLabel}
+                                  />
+                                )
+                                : null}
+                          </span>
+                          <span className={styles['rowActions']}>
                             <button
                               type="button"
-                              className={styles['dangerButton']}
-                              aria-label={providerCopy(t('removeProvider'), target)}
-                              disabled={!state.writable}
+                              className={styles['secondaryButton']}
+                              aria-label={providerCopy(t('editProvider'), target)}
                               onClick={() => {
-                                if (editing?.provider === target.provider && editing.settingsNs === target.settingsNs) {
-                                  setEditing(undefined)
-                                  setAdding(false)
-                                  setAddingOption(undefined)
-                                }
                                 setSavedTarget(undefined)
-                                setDeleteFailure(undefined)
-                                setDeleteTarget(target)
+                                // One card at a time: leaving `declaring` set would show
+                                // the create card beside this editor, and closing either
+                                // one discards the other's draft.
+                                setDeclaring(false)
+                                setAdding(false)
+                                setEditing(open ? undefined : target)
                               }}
                             >
-                              {t('remove')}
+                              {t('edit')}
                             </button>
-                          )
+                            {row.removable
+                              ? (
+                                <button
+                                  type="button"
+                                  className={styles['dangerButton']}
+                                  aria-label={providerCopy(t('removeProvider'), target)}
+                                  disabled={!state.writable}
+                                  onClick={() => {
+                                    if (editing?.provider === target.provider && editing.settingsNs === target.settingsNs) {
+                                      setEditing(undefined)
+                                      setAdding(false)
+                                    }
+                                    setSavedTarget(undefined)
+                                    setDeleteFailure(undefined)
+                                    setDeleteTarget(target)
+                                  }}
+                                >
+                                  {t('remove')}
+                                </button>
+                              )
+                              : null}
+                          </span>
+                        </div>
+                        {open
+                          ? renderProviderEditor({
+                            target,
+                            namespace,
+                            schema,
+                            api,
+                            t,
+                            readOnly: !state.writable,
+                            onClose: (changed) => { closeEditor(changed, target) },
+                          })
                           : null}
-                      </span>
-                    </div>
-                    {open
-                      ? renderProviderEditor({
-                        target,
-                        namespace,
-                        schema,
-                        api,
-                        t,
-                        readOnly: !state.writable,
-                        onClose: (changed) => { closeEditor(changed, target) },
-                      })
-                      : null}
-                  </li>
-                )
-              })}
-              {accountGroup ? null : renderSlot('settings.models.provider-option', {
-                mode: 'row', credentials: state.credentials,
-                onEdit: (id) => {
-                  setSavedTarget(undefined)
-                  setEditing(undefined)
-                  setDeclaring(false)
-                  setAdding(true)
-                  setAddingOption(id)
-                },
-              })}
-            </ul>
-            <div className={styles['addBlock']}>
-              {showAdd
-                ? (
-                  <div className={styles['addCard']}>
-                    <div className={styles['field']}>
-                      <span className={styles['fieldLabel']}>{t('provider')}</span>
-                      <select data-hydra-control="field"
-                        className={styles['input']}
-                        value={addingOption === undefined ? googleSelected ? 'google' : addTarget?.provider ?? '' : `plugin:${addingOption}`}
-                        aria-label={t('provider')}
-                        onChange={(event) => {
-                          const optionalId = event.currentTarget.selectedOptions[0]?.dataset['hydraProviderOption']
-                          if (optionalId !== undefined) {
-                            setSavedTarget(undefined)
-                            setEditing(undefined)
-                            setAdding(true)
-                            setDeclaring(false)
-                            setAddingOption(optionalId)
-                            return
-                          }
-                          const row = event.target.value === 'google'
-                            ? googleRow
-                            : selectable.find(candidate => candidate.entry.provider === event.target.value)
-                          /* v8 ignore next -- the select only lists addable rows */
-                          if (row === undefined) return
-                          setAddingOption(undefined)
-                          setEditing(targetOf(row))
-                        }}
-                      >
-                        {selectable.map(row => row === googleRow
-                          ? <option key="google" value="google">Google</option>
-                          : <option key={row.entry.provider} value={row.entry.provider}>{row.entry.displayName}</option>)}
-                        {addTarget === undefined && addingOption === undefined ? <option value="" disabled>{t('provider')}</option> : null}
-                        {accountGroup ? null : renderSlot('settings.models.provider-option', { mode: 'option' })}
-                      </select>
-                    </div>
-                    {addingOption !== undefined && !accountGroup
-                      ? renderSlot('settings.models.provider-option', {
-                        mode: 'editor', readOnly: !state.writable,
-                        onClose: (changed) => {
-                          setAdding(false)
-                          setAddingOption(undefined)
-                          if (changed) announceSaved({ provider: addingOption, displayName: addingOption })
-                        },
-                      }, { only: addingOption, fallback: <p role="status">{t('providerUnavailable')}</p> })
-                      : addTarget !== undefined && addNamespace !== undefined ? <ProviderEditor
-                        key={addTarget.provider}
-                        provider={addTarget.provider}
-                        displayName={addTarget.displayName}
-                        hideTitle
-                        accountMode="add"
-                        namespace={addNamespace}
-                        schema={schema}
-                        settingsPath={addTarget.settingsPath}
-                        api={api}
-                        t={t}
-                        readOnly={!state.writable}
-                        onClose={(changed) => { closeEditor(changed, addTarget) }}
-                      /> : null}
-                  </div>
-                )
-                : declaring && !accountGroup
-                  ? (
-                    <div className={styles['addCard']}>
-                      <CustomProviderCard
-                        taken={state.rows.map(row => row.entry.provider)}
-                        protocols={protocols}
-                        /* v8 ignore next -- the card only opens from a button disabled without this namespace */
-                        revision={state.namespaces.get('llm-pi-ai')?.revision ?? 0}
-                        api={api}
-                        t={t}
-                        readOnly={!state.writable}
-                        onClose={(changed) => {
-                          setDeclaring(false)
-                          if (changed) void controller.load()
-                        }}
-                      />
-                    </div>
-                  )
-                  : (
-                    <div className={styles['addActions']}>
-                      <button
-                        type="button"
-                        className={styles['addButton']}
-                        disabled={(selectable.length === 0 && (accountGroup || providerOptionCount === 0)) || !state.writable}
-                        onClick={() => {
-                          setSavedTarget(undefined)
-                          setAddingOption(undefined)
-                          setDeclaring(false)
-                          setAdding(true)
-                          // API-key providers require an explicit choice; the
-                          // account flow keeps its repeat-sign-in shortcut.
-                          setEditing(accountGroup && selectable[0] !== undefined
-                            ? targetOf(selectable[0])
-                            : undefined)
-                        }}
-                      >
-                        {/* Same glyph as the composer's attach button. */}
-                        <IconPlusOutline16 size={14} />
-                        {t(accountGroup ? 'accountProviderAdd' : 'add')}
-                      </button>
-                      {accountGroup ? null : <button
-                        type="button"
-                        className={styles['addButton']}
-                        disabled={protocols.length === 0 || !state.writable}
-                        onClick={() => {
-                          setSavedTarget(undefined)
-                          setAdding(false)
-                          setEditing(undefined)
-                          setDeclaring(true)
-                        }}
-                      >
-                        <IconPlusOutline16 size={14} />
-                        {t('customAdd')}
-                      </button>}
-                    </div>
-                  )}
-            </div>
-          </section>
-        )
-      })}
-      <Modal
-        open={deleteTarget !== undefined}
-        onClose={closeDelete}
-        title={deleteTarget === undefined ? '' : providerCopy(t('deleteTitle'), deleteTarget)}
-        closeLabel={t('close')}
-        description={deleteTarget === undefined
-          ? ''
-          : providerCopy(
-            providerAccountKey(deleteTarget.settingsNs, deleteTarget.provider) !== undefined
-              ? t(deleteTarget.provider === 'gemini-web' ? 'deleteDescriptionWithGeminiWeb'
-                : deleteTarget.provider === 'antigravity' || deleteTarget.provider === 'gemini-api'
-                  ? 'deleteDescriptionWithGoogleAccounts' : 'deleteDescriptionWithAccounts')
-              : deleteTarget.credentialRef === undefined && deleteTarget.credentialRefs.length === 0
-                ? t(deleteTarget.settingsNs === 'llm-pi-ai' ? 'deleteDescriptionWithRecord' : 'deleteDescription')
-                : t('deleteDescriptionWithCredential'),
-            deleteTarget,
-          )}
-        className={styles['deleteDialog'] as string}
-        footer={(
-          <>
-            <Button variant="outline" autoFocus disabled={deleting} onClick={closeDelete}>
-              {t('cancel')}
-            </Button>
-            <Button
-              variant="outline"
-              className={styles['deleteConfirm']}
-              disabled={deleting}
-              onClick={confirmDelete}
-            >
-              {deleteTarget === undefined
-                ? ''
-                : providerCopy(deleting ? t('deleting') : t('deleteConfirm'), deleteTarget)}
-            </Button>
-          </>
-        )}
-      >
-        {deleteFailure === undefined ? null : <p className={styles['error']}>{deleteFailure}</p>}
-      </Modal>
+                      </li>
+                    )
+                  })}
+                </ul>
+                <div className={styles['addBlock']}>
+                  {showAdd
+                    ? (
+                      <div className={styles['addCard']}>
+                        <div className={styles['field']}>
+                          <span className={styles['fieldLabel']}>{t('provider')}</span>
+                          <select data-hydra-control="field"
+                            className={styles['input']}
+                            value={addTarget?.provider ?? ''}
+                            aria-label={t('provider')}
+                            onChange={(event) => {
+                              const row = selectable.find(candidate => candidate.entry.provider === event.target.value)
+                              /* v8 ignore next -- the select only lists addable rows */
+                              if (row === undefined) return
+                              setEditing(targetOf(row))
+                            }}
+                          >
+                            {selectable.map(row => (
+                              <option key={row.entry.provider} value={row.entry.provider}>{row.entry.displayName}</option>
+                            ))}
+                            {addTarget === undefined ? <option value="" disabled>{t('provider')}</option> : null}
+                          </select>
+                        </div>
+                        {addTarget !== undefined && addNamespace !== undefined ? <ProviderEditor
+                          key={addTarget.provider}
+                          provider={addTarget.provider}
+                          displayName={addTarget.displayName}
+                          hideTitle
+                          namespace={addNamespace}
+                          schema={schema}
+                          settingsPath={addTarget.settingsPath}
+                          api={api}
+                          t={t}
+                          readOnly={!state.writable}
+                          onClose={(changed) => { closeEditor(changed, addTarget) }}
+                        /> : null}
+                      </div>
+                    )
+                    : declaring && !accountGroup
+                      ? (
+                        <div className={styles['addCard']}>
+                          <CustomProviderCard
+                            taken={state.rows.map(row => row.entry.provider)}
+                            protocols={protocols}
+                            /* v8 ignore next -- the card only opens from a button disabled without this namespace */
+                            revision={state.namespaces.get('llm-pi-ai')?.revision ?? 0}
+                            api={api}
+                            t={t}
+                            readOnly={!state.writable}
+                            onClose={(changed) => {
+                              setDeclaring(false)
+                              if (changed) void controller.load()
+                            }}
+                          />
+                        </div>
+                      )
+                      : (
+                        <div className={styles['addActions']}>
+                          <button
+                            type="button"
+                            className={styles['addButton']}
+                            disabled={(selectable.length === 0) || !state.writable}
+                            onClick={() => {
+                              setSavedTarget(undefined)
+                              setDeclaring(false)
+                              setAdding(group)
+                              setEditing(undefined)
+                            }}
+                          >
+                            {/* Same glyph as the composer's attach button. */}
+                            <IconPlusOutline16 size={14} />
+                            {t('add')}
+                          </button>
+                          {accountGroup ? null : <button
+                            type="button"
+                            className={styles['addButton']}
+                            disabled={protocols.length === 0 || !state.writable}
+                            onClick={() => {
+                              setSavedTarget(undefined)
+                              setAdding(false)
+                              setEditing(undefined)
+                              setDeclaring(true)
+                            }}
+                          >
+                            <IconPlusOutline16 size={14} />
+                            {t('customAdd')}
+                          </button>}
+                        </div>
+                      )}
+                </div>
+              </section>
+            )
+          })}
+          <Modal
+            open={deleteTarget !== undefined}
+            onClose={closeDelete}
+            title={deleteTarget === undefined ? '' : providerCopy(t('deleteTitle'), deleteTarget)}
+            closeLabel={t('close')}
+            description={deleteTarget === undefined
+              ? ''
+              : providerCopy(
+                t(deleteTarget.credentialRef === undefined && deleteTarget.credentialRefs.length === 0
+                  ? 'deleteDescription' : 'deleteDescriptionWithCredential'),
+                deleteTarget,
+              )}
+            className={styles['deleteDialog'] as string}
+            footer={(
+              <>
+                <Button variant="outline" autoFocus disabled={deleting} onClick={closeDelete}>
+                  {t('cancel')}
+                </Button>
+                <Button
+                  variant="outline"
+                  className={styles['deleteConfirm']}
+                  disabled={deleting}
+                  onClick={confirmDelete}
+                >
+                  {deleteTarget === undefined
+                    ? ''
+                    : providerCopy(deleting ? t('deleting') : t('deleteConfirm'), deleteTarget)}
+                </Button>
+              </>
+            )}
+          >
+            {deleteFailure === undefined ? null : <p className={styles['error']}>{deleteFailure}</p>}
+          </Modal>
+        </>}
     </div>
   )
 }

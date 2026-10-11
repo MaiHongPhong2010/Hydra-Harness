@@ -331,6 +331,7 @@ export class PiAiAdapter extends LlmAdapter {
           id: model.id,
           name: model.name,
           inputModalities: [...model.input],
+          ...model.api === 'openai-responses' || model.api === 'openai-codex-responses' ? { serviceTiers: ['standard', 'priority'] as const } : {},
           ...endpoints === undefined ? {} : { endpoints: [...endpoints] },
         }
       })
@@ -356,6 +357,7 @@ export class PiAiAdapter extends LlmAdapter {
         id: model,
         name: resolvedModel.name,
         inputModalities: [...resolvedModel.input],
+        ...resolvedModel.api === 'openai-responses' || resolvedModel.api === 'openai-codex-responses' ? { serviceTiers: ['standard', 'priority'] as const } : {},
         ...endpoints === undefined ? {} : { endpoints: [...endpoints] },
         context: { contextWindow: resolvedModel.contextWindow },
         ...configuredMaxTokens === undefined ? {} : { defaultMaxTokens: configuredMaxTokens },
@@ -551,7 +553,15 @@ export class PiAiAdapter extends LlmAdapter {
         ...profileOptions(profile, reasoning, apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
-        ...options.maxTokens === undefined ? { onPayload: omitDefaultOutputCap } : {},
+        ...options.maxTokens === undefined || options.serviceTier !== undefined ? {
+          onPayload: (payload: unknown, payloadModel: Model<Api>) => {
+            if (options.maxTokens === undefined) omitDefaultOutputCap(payload, payloadModel)
+            if (options.serviceTier === undefined) return undefined
+            if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) throw new LlmError('Invalid Responses request payload.', 'INVALID_REQUEST')
+            return { ...payload, service_tier: options.serviceTier === 'standard' ? 'default' : 'priority' }
+          },
+        } : {},
+        ...options.serviceTier === undefined ? {} : { serviceTier: options.serviceTier === 'standard' ? 'default' as const : 'priority' as const },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are

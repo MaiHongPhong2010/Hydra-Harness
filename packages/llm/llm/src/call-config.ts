@@ -21,6 +21,10 @@ const AGENT_LOOP_REQUESTS = new WeakSet<GenerateOptions>()
  * per call.
  */
 export interface LlmCallConfig {
+  /** Adapter-supported processing tier. */
+  serviceTier?: 'standard' | 'priority'
+  /** Global user choice, retained when a provider cannot offer Priority. */
+  requestedServiceTier?: 'standard' | 'priority'
   provider: string
   model: string
   reasoningEffort?: ReasoningEffortId
@@ -34,6 +38,8 @@ export interface LlmCallConfig {
  * than by the caller's request proposal.
  */
 export interface LlmCallConfigAdapterDefaults {
+  /** Processing tier derived from the accepted global preference. */
+  serviceTier?: true
   reasoningEffort?: true
   maxTokens?: true
 }
@@ -51,6 +57,8 @@ export function callConfigEquals(a: LlmCallConfig, b: LlmCallConfig): boolean {
     a.provider !== b.provider
     || a.model !== b.model
     || a.reasoningEffort !== b.reasoningEffort
+    || a.serviceTier !== b.serviceTier
+    || a.requestedServiceTier !== b.requestedServiceTier
     || a.temperature !== b.temperature
     || a.maxTokens !== b.maxTokens
   ) return false

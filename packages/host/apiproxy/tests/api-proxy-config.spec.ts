@@ -5,7 +5,7 @@
  * invalidation frames (settings/credentials/models changed).
  */
 
-import { mkdtemp, readFile, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -35,6 +35,7 @@ import type { RpcRequest, RpcResponse } from '../src/api/rpc.ts'
 import { RpcId } from '../src/api/rpc.ts'
 import { AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE } from '@hydraharness/harness-agent-default-model'
 import { createApiProxy } from '../src/api-proxy.ts'
+import { WorkspaceId } from '@hydraharness/harness-workspace'
 
 const DEFAULTS = { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' }
 
@@ -271,6 +272,78 @@ function forwardedSettings(ns: string): HostFrame {
 }
 
 describe('settings domain', () => {
+  it('revalidates the workspace instructions path inside the writer lock', async () => {
+    const ctx = await harness()
+    const root = await mkdtemp(join(tmpdir(), 'hydra-instructions-target-'))
+    const document = join(root, '.hydra', 'AGENTS.local.md')
+    await mkdir(join(root, '.hydra'))
+    await writeFile(document, 'retain these bytes')
+    const workspaceId = WorkspaceId('instructions-workspace')
+    const registry = ctx.workspaceRegistry as unknown as { get(id: string): unknown }
+    registry.get = id => id === workspaceId ? { path: root } : undefined
+    const initialize = vi.fn(async () => {
+      if (initialize.mock.calls.length > 1) throw new Error('workspace path changed to a link')
+    })
+    ctx.provide('workspaceConfig', { settingsFor: () => Promise.resolve(ctx.settings), initialize } as never)
+    const api = createApiProxy(ctx, DEFAULTS)
+    expect(expectErr(await api.settings.writeInstructions(request({ workspaceId, content: 'replacement' })))).toMatchObject({ code: 'instructions-rejected' })
+    expect(initialize).toHaveBeenCalledTimes(2)
+    expect(await readFile(document, 'utf8')).toBe('retain these bytes')
+    await ctx.fiber.dispose()
+  })
+
+  it('addresses workspace layers without changing user settings or exposing secrets', async () => {
+    const ctx = await harness()
+    const localContexts = [new Context(), new Context(), new Context()]
+    for (const localCtx of localContexts) await localCtx.plugin(MemorySettings)
+    const schema = z.object({ model: z.string().default('base'), token: z.string().role('secret') })
+    ctx.settings.register(NS, schema)
+    for (const localCtx of localContexts) localCtx.settings.register(NS, schema)
+    const [first, shared, second] = localContexts.map(localCtx => localCtx.settings)
+    const a = WorkspaceId('a')
+    const b = WorkspaceId('b')
+    const registry = ctx.workspaceRegistry as unknown as { get(id: string): unknown }
+    registry.get = id => id === a || id === b ? { id, path: '/tmp' } : undefined
+    const decisions = new Map<string, boolean>()
+    ctx.provide('workspaceConfig', {
+      settingsFor: (id: string, layer: string) => Promise.resolve(id === a ? layer === 'shared' ? shared : first : second),
+      isTrusted: (id: string) => decisions.get(id) === true,
+      hasTrustDecision: (id: string) => decisions.has(id),
+      hasProjectConfig: () => Promise.resolve(true),
+      setTrusted: (id: string, enabled: boolean) => {
+        decisions.set(id, enabled)
+        return Promise.resolve()
+      },
+    } as never)
+    const api = createApiProxy(ctx, DEFAULTS)
+    const responses = await Promise.all([
+      api.settings.update(request({ workspaceId: a, ns: NS, patch: { model: 'a-local', token: 'private' } })),
+      api.settings.update(request({ workspaceId: a, layer: 'shared', ns: NS, patch: { model: 'a-shared' } })),
+      api.settings.update(request({ workspaceId: b, ns: NS, patch: { model: 'b-local' } })),
+    ])
+    expect(responses.map(response => expectOk(response))).toMatchObject([
+      { workspaceId: a, layer: 'local', value: { model: 'a-local' }, secrets: [{ set: true }] },
+      { workspaceId: a, layer: 'shared', value: { model: 'a-shared' } },
+      { workspaceId: b, layer: 'local', value: { model: 'b-local' } },
+    ])
+    expect(JSON.stringify(responses)).not.toContain('private')
+    expect(ctx.settings.get(NS)).toEqual({ model: 'base' })
+    expect(expectOk(await api.settings.describe(request({ workspaceId: a })))).toMatchObject({ workspaceId: a, layer: 'local', trusted: false })
+    expect(expectOk(await api.settings.setWorkspaceTrust(request({ workspaceId: a, trusted: true })))).toEqual({
+      workspaceId: a, trusted: true, trustDecided: true, hasProjectConfig: true,
+    })
+    expect(expectOk(await api.settings.workspaceStatus(request({ workspaceId: a })))).toEqual({
+      workspaceId: a, trusted: true, trustDecided: true, hasProjectConfig: true,
+    })
+    expect(expectOk(await api.settings.setWorkspaceTrust(request({ workspaceId: a, trusted: false })))).toMatchObject({
+      trusted: false, trustDecided: true,
+    })
+    expect(expectOk(await api.settings.workspaceStatus(request({ workspaceId: a })))).toMatchObject({ trusted: false, trustDecided: true })
+    expect(expectErr(await api.settings.describe(request({ workspaceId: WorkspaceId('unknown') })))).toMatchObject({ code: 'workspace-not-found' })
+    expect(expectErr(await api.settings.update(request({ workspaceId: WorkspaceId('unknown'), ns: NS, patch: { model: 'bad' } })))).toMatchObject({ code: 'workspace-not-found' })
+    await Promise.all(localContexts.map(localCtx => localCtx.fiber.dispose()))
+  })
+
   it('reports an actionable error when no settings provider is mounted', async () => {
     const ctx = await harness({ settings: false })
     const api = createApiProxy(ctx, DEFAULTS)
@@ -289,8 +362,8 @@ describe('settings domain', () => {
     const value = expectOk(await api.settings.describe(request({})))
     expect(value.writable).toBe(true)
     expect(value.hasDocument).toBe(true)
-    expect(value.namespaces).toHaveLength(1)
-    const view = value.namespaces[0]!
+    expect(value.namespaces.map(view => view.ns)).toEqual(['llm-speed', NS])
+    const view = value.namespaces.find(view => view.ns === NS)!
     expect(view.ns).toBe('llm-deepseek')
     expect(view.applies).toBe('live')
     expect((view.schema as { refs?: unknown }).refs).toBeDefined()
@@ -392,7 +465,7 @@ describe('settings domain', () => {
 
     const value = expectOk(await api.settings.describe(request({})))
     expect(value.namespaces.map(view => view.ns)).toEqual([
-      'llm-deepseek', 'some-other-plugin', 'permission', 'ui-theme', 'locale',
+      'llm-speed', 'llm-deepseek', 'some-other-plugin', 'permission', 'ui-theme', 'locale',
       'ui-conversation', 'shell', 'agent-loop', 'web-search-deepseek',
     ])
     const permission = expectOk(await api.settings.mutate(request({
@@ -448,7 +521,7 @@ describe('settings domain', () => {
     }))
     const api = createApiProxy(ctx, DEFAULTS)
     expect(expectOk(await api.settings.describe(request({}))).namespaces.map(view => view.ns))
-      .toEqual(['ui-onboarding', 'ui-theme'])
+      .toEqual(['llm-speed', 'ui-onboarding', 'ui-theme'])
     const frames = await collectHost(api, ['host/remote-event'], 2, async () => {
       expectOk(await api.settings.mutate(request({
         ns: 'ui-onboarding',
@@ -485,7 +558,7 @@ describe('settings domain', () => {
     ctx.settings.register(NS, AdapterConfig)
     const api = createApiProxy(ctx, DEFAULTS)
     expect(expectOk(await api.settings.describe(request({}))).namespaces.map(view => view.ns))
-      .toEqual(['llm-deepseek'])
+      .toEqual(['llm-speed', 'llm-deepseek'])
     expect(expectOk(await api.settings.update(request({ ns: 'llm-deepseek', patch: { baseURL: 'https://x' } }))).value)
       .toMatchObject({ baseURL: 'https://x' })
   })
@@ -504,7 +577,7 @@ describe('settings domain', () => {
     })
     expect(frames).toEqual([forwardedSettings('llm-deepseek')])
     // The resolved value never moved: base already said https://base.
-    expect(expectOk(await api.settings.describe(request({}))).namespaces[0]!.value)
+    expect(expectOk(await api.settings.describe(request({}))).namespaces.find(view => view.ns === NS)!.value)
       .toEqual({ apiKeyEnv: 'DEEPSEEK_API_KEY', baseURL: 'https://base' })
   })
 
@@ -542,14 +615,14 @@ describe('settings domain', () => {
     const ctx = await harness()
     ctx.settings.register(NS, AdapterConfig)
     const api = createApiProxy(ctx, DEFAULTS)
-    const opened = expectOk(await api.settings.describe(request({}))).namespaces[0]!.revision
+    const opened = expectOk(await api.settings.describe(request({}))).namespaces.find(view => view.ns === NS)!.revision
     expect(expectOk(await api.settings.update(request({ ns: 'llm-deepseek', patch: { baseURL: 'https://first' }, expectedRevision: opened })))
       .revision).toBe(opened + 1)
     const error = expectErr(await api.settings.update(request({ ns: 'llm-deepseek', patch: { baseURL: 'https://second' }, expectedRevision: opened })))
     expect(error.code).toBe('settings-conflict')
     expect(error.details).toEqual({ ns: 'llm-deepseek', expected: opened, actual: opened + 1 })
     // The refused write changed nothing.
-    expect(expectOk(await api.settings.describe(request({}))).namespaces[0]!.user).toEqual({ baseURL: 'https://first' })
+    expect(expectOk(await api.settings.describe(request({}))).namespaces.find(view => view.ns === NS)!.user).toEqual({ baseURL: 'https://first' })
   })
 
   it('updates the user layer, answers with the new redacted view, and broadcasts the frame', async () => {

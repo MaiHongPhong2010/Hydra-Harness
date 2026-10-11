@@ -125,23 +125,23 @@ describe('LocaleRuntime', () => {
     expect(svc.getSnapshot().revision).toBe(before + 1)
   })
 
-  it('setLocale writes through the scope without republishing an unchanged locale', () => {
+  it('setLocale writes through the scope without republishing an unchanged locale', async () => {
     const host = stubSettingsScope<LocaleSettings>()
     const { svc, events } = make(host)
-    svc.setLocale('en')
+    await svc.setLocale('en')
     expect(svc.getLocale().active).toBe('en')
     expect(host.set).toHaveBeenCalledWith('preference', 'en')
     expect(events).toHaveLength(0)
     // Re-selecting still writes: the active value may be a provisional
     // browser-derived resolution nothing has stored, and picking it is an
     // explicit choice that must outlive this browser.
-    svc.setLocale('en')
+    await svc.setLocale('en')
     expect(events).toHaveLength(0)
     expect(host.set).toHaveBeenCalledTimes(2)
     expect(host.set).toHaveBeenLastCalledWith('preference', 'en')
   })
 
-  it('persists an explicit pick of the provisional locale, so a shared Hydra home agrees', () => {
+  it('persists an explicit pick of the provisional locale, so a shared Hydra home agrees', async () => {
     // A browser naming no shipped language opens at FALLBACK_LOCALE with
     // nothing stored. Choosing that same language in the menu must become
     // durable, or a browser sharing the home still opens at a stale default.
@@ -150,20 +150,20 @@ describe('LocaleRuntime', () => {
     const { svc } = make(host)
     expect(svc.getLocale().active).toBe('en')
     expect(host.set).not.toHaveBeenCalled()
-    svc.setLocale('en')
+    await svc.setLocale('en')
     expect(host.set).toHaveBeenCalledWith('preference', 'en')
   })
 
-  it('setLocale without a host scope accepts the active process-local locale', () => {
+  it('setLocale without a host scope accepts the active process-local locale', async () => {
     const { svc, events } = make()
-    svc.setLocale('en')
+    await svc.setLocale('en')
     expect(svc.getLocale().active).toBe('en')
     expect(events).toHaveLength(0)
   })
 
   it('throws on unknown locale ids', () => {
     const { svc } = make()
-    expect(() => { svc.setLocale('fr') }).toThrow('not registered')
+    expect(() => { void svc.setLocale('fr') }).toThrow('not registered')
   })
 
   it('accepts a matching Host preference without writing or republishing it', () => {

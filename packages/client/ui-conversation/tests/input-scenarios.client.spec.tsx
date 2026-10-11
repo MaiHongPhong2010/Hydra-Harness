@@ -171,6 +171,7 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
       })
     },
     useNotices: bindSnapshotSelector(shell.notices),
+    useComposerPreferences: select => select({ busyEnter: 'queue', plainText: false, showContextUsage: true, sendShortcut: 'enter' }),
     useLexicon: bindSnapshotSelector(shell.lexicon),
     useMenuLauncher: bindSnapshotSelector(controller.launcher),
     renderSlot: (() => null) as InputBarProps['renderSlot'],

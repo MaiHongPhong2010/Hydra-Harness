@@ -15,6 +15,31 @@ async function setup(withProvider: boolean): Promise<Context> {
 }
 
 describe('settings invariants', () => {
+  it('checks isolated providers against their own values and routes ordinary listeners to their service realm', async () => {
+    const ctx = await setup(true)
+    const ns = settingsNamespace('ui-theme')
+    const theme = z.object({ theme: z.string().default('dark') })
+    ctx.settings.register(ns, theme)
+    const isolated = ctx.isolate('settings')
+    await isolated.plugin(MemorySettings)
+    isolated.settings.register(ns, theme)
+    const globalSeen: unknown[] = []
+    const isolatedSeen: unknown[] = []
+    ctx.on('settings/updated', (_ns, next) => { globalSeen.push(next) })
+    isolated.on('settings/updated', (_ns, next) => { isolatedSeen.push(next) })
+
+    await isolated.settings.update(ns, { theme: 'light' })
+    expect(isolated.settings.get(ns)).toEqual({ theme: 'light' })
+    expect(ctx.settings.get(ns)).toEqual({ theme: 'dark' })
+    expect(globalSeen).toEqual([])
+    expect(isolatedSeen).toEqual([{ theme: 'light' }])
+    expect(() => {
+      ctx.emit(isolated.settings, 'settings/updated', ns, { theme: 'forged' }, { theme: 'light' }, 'provider')
+    })
+      .toThrow('authoritative')
+    await ctx.fiber.dispose()
+  })
+
   it('fails a settings/updated emission without a live settings service', async () => {
     const ctx = await setup(false)
     expect(() => {

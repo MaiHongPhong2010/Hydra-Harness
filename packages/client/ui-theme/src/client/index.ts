@@ -402,12 +402,16 @@ export function apply(ctx: ClientContext): void {
     // first render (the store's revision guard drops stale duplicates).
     sync(theme.getTheme())
     return {
-      setTheme: (id) => { theme.setTheme(id) },
+      setTheme: async (id) => {
+        await host.set(THEME_PREFERENCE_FIELD, id)
+        if (host.getSnapshot().value?.preference !== id) throw new Error('Could not save appearance. Try again.')
+      },
     }
   }
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
+  ctx.slots.inject('settings.general.general.item', () => ctx.slots.register({
+    name: 'settings.general.general.item',
     id: 'appearance',
+    label: () => ctx.locale.bind(SETTINGS_NS)('appearance.title'),
     order: 10,
     store,
     locale: SETTINGS_NS,

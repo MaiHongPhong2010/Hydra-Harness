@@ -1,8 +1,8 @@
 # @hydraharness/harness-agent-presets
 
-Per-preset agent composition. A **preset** is a directory holding one `agent.cordis.yml`; the roster mounts it ONCE per process under a standing scope, and each session that names it joins by having its agent scope key parented to the mount's (`@hydraharness/harness-scope`'s parent chain). The mount's tools, prompt sections, and projection units exist exactly once and cover every joined agent — its plugins key their state by Session/Agent, so sessions stay apart inside one shared instance — and a host reader with no agent at all (a cold transcript read) resolves the same standing registrations by preset id.
+Per-preset agent composition. A **preset** is a directory holding one `agent.cordis.yml`; each roster mounts one standing generation per preset, and each session that names it joins by having its agent scope key parented to the mount's (`@hydraharness/harness-scope`'s parent chain). The mount's tools, prompt sections, and projection units cover every joined agent; its plugins key their state by Session/Agent. A host reader with no agent resolves the same standing registrations by preset id through the session's roster.
 
-The mechanism is two seams. Entry contexts chain to the context a subtree was plugged into, and both [`@hydraharness/harness-tools`](../../core/tools/README.md) and [`@hydraharness/harness-system-prompt`](../../core/system-prompt/README.md) file registrations into the calling context's scope layer — so the standing mount's contributions land in the PRESET's layer. What carries them to each session is `@hydraharness/harness-scope`'s parent chain: an agent's views resolve `agent → preset → global` (nearest shadowing farthest), and the mount's listeners are admitted for every agent parented under it while a sibling preset's stay deaf.
+Entry contexts chain to the context a subtree was plugged into. [`@hydraharness/harness-tools`](../../core/tools/README.md) and [`@hydraharness/harness-system-prompt`](../../core/system-prompt/README.md) register contributions in the calling context's scope layer. A standing generation inherits the roster's enclosing scope: views resolve `agent → preset → workspace → global` for workspace rosters and `agent → preset → global` for unscoped rosters, with nearer registrations taking precedence. Listeners receive descendant agents' events. Separate rosters may reuse preset ids without sharing their mounts.
 
 ## Service: `AgentPresets` (ctx key: `agentPresets`)
 
@@ -16,10 +16,14 @@ Discovery is unmemoized: `list()` and `resolve()` re-read the roots on every cal
 - `ctx.agentPresets.composedPreset(agentCtx): string | undefined` The preset one LIVE agent runs on, read from its scope chain rather than from its session — the only answer available for an agent whose durable header is still being built.
 - `ctx.agentPresets.recompose(agentCtx, id): Promise<AgentPreset>` Re-link one agent to a different preset's standing composition. Valid only while the agent has produced nothing — **the caller owns that check**; the new mount is ensured before the link moves, so a failure leaves the agent as it was. Refuses a broken preset like `mount()`.
 - `ctx.agentPresets.standingKeyFor(id?): Promise<ScopeKey>` The standing scope key a host reader with no agent (a cold transcript read) resolves preset registrations in; ensures the mount without starting an agent, session, or turn. Refuses a broken preset like `mount()`.
-- `ctx.agentPresets.listPluginEntries(): Promise<AgentPresetPluginEntry[]>` Every switchable leaf row in every healthy preset, qualified by preset id and carrying its desired state.
-- `ctx.agentPresets.setPluginEnabled(entryId, enabled): Promise<void>` Persist one leaf's desired state for a later standing mount. Running sessions retain the generation they joined.
+- `ctx.agentPresets.listPluginEntries(settings?): Promise<AgentPresetPluginEntry[]>` Every switchable leaf row with effective desired state, or the supplied provider's inherited and stored state when editing a selected layer.
+- `ctx.agentPresets.setPluginEnabled(entryId, enabled, settings?): Promise<void>` Persist one leaf to the selected provider, or the roster's provider when omitted, with its revision. Running sessions retain their generation; a shared write does not copy local leaf overrides.
 - `ctx.agentPresets.roots: readonly PresetRoot[]` The roots this roster scans — every configured root in order, then the derived harness-home root. Not `config.roots`: read this to answer whether a roster is composed at all, so one derivation decides it.
-- `ctx.agentPresets.authorable: boolean` Whether any of those roots has `user` trust, and therefore whether a preset can be created at all.
+- `ctx.agentPresets.setProjectRoot(path, enabled): Promise<void>` Prepend a trusted project root or remove it, disposing only generations from the revoked root. Existing agents on inherited generations keep their capabilities.
+- `ctx.agentPresets.isProjectContext(agentCtx, root): boolean` Recognize an agent's project generation, including one already disposed after trust revocation.
+- `ctx.agentPresets.isRetiredProjectContext(agentCtx, root): boolean` Recognize a stopped project generation that requires reopening/resuming the session, even after the workspace is trusted again.
+- `ctx.agentPresets.authoringDirectory(id): Promise<string>` Resolve an owned preset directory for an editor, refusing inherited presets and escaping symlinks or junctions.
+- `ctx.agentPresets.authorable: boolean` Whether the roster has a workspace authoring root or a discovered root with `user` trust.
 - `ctx.agentPresets.read(id): Promise<string>` One preset's composition text, exactly as stored.
 - `ctx.agentPresets.copy(from, id, name?): Promise<void>` Create a locally authored preset by copying an existing one's whole directory — the only authoring write. No composition text crosses this seam, so a copy is exactly as loadable as its source; the copied metadata keeps the source's description but never its name or roster order, and `name` (or the id fallback) is what distinguishes the rows.
 - `ctx.agentPresets.remove(id): Promise<void>` Delete a locally authored preset; joined sessions keep their standing mount. Clears the user default when it named the preset just deleted: storing a default that does not exist yet is deliberate, but one this call removed will never be supplied again and would fail every session created without an explicit pick.
@@ -52,13 +56,15 @@ The restriction to a produced-nothing agent is a product rule, not a mechanical 
 
 ## Authoring
 
-Authoring is copy-only. A new preset is a whole-directory copy of an existing one — composition, metadata, skill directories, assets — landed under the first `user` root; the inputs are two ids the service resolves against its own roots plus an optional display name, so no caller ever supplies composition text and a copy grants nothing the roster did not already carry. Everything after creation happens in the preset's own files. `copy()` refuses three things before anything lands:
+Authoring is copy-only. A new preset copies its source directory, including composition, metadata, skills, and assets. A workspace roster writes only to `<workspaceRoot>/.hydra/agent-presets`, even while project discovery is disabled by trust; other rosters use the first `user` root. Inputs are two ids resolved by the roster and an optional display name. `copy()` refuses three things before anything lands:
 
 - **An id that is not `[a-z0-9][a-z0-9-]*`.** The id becomes a directory name, so containment is a property of the id itself rather than of a path check after the fact — `../escape`, `a/b`, and an absolute path are all rejected as ids.
 - **An id that is already taken.** A copy never overwrites: any root supplying the id refuses it (a user directory named like a shipped preset would be shadowed by it), and a directory occupying the name on disk refuses it too. Discovery lists such a directory as a broken preset, so the refusal's way out — delete it — is on the same page that reported it.
 - **An unknown source.** The source may be any trust — copying a shipped preset is the primary case — but it must exist; a failed copy rolls its half-made directory back rather than leaving one discovery cannot see.
 
 The copied tree is re-tightened to owner-only (`0o600` files keeping their owner-execute bit, `0o700` directories), symlinks are dereferenced so the copy is self-contained, and the root is created on first copy — a deployment configuring a user root that does not exist yet is the normal first-run state. The copied `preset.yml` is rewritten: the source's description is kept for the author to edit in place, but its name and roster `order` are dropped — a copy presenting itself identically to its source, or sorted into the shipped set's declared order, would make the roster stop distinguishing them. `remove()` refuses a preset that ships with the deployment; the shipped set is the known-good compositions copies start from.
+
+Workspace authoring checks canonical destination paths before copying, deleting, or opening a composition for editing. An escaping symlink or Windows junction rejects the operation. Inherited user presets remain readable and mountable but are not editable or removable through the workspace roster.
 
 ### How a preset's rows resolve
 
@@ -88,6 +94,7 @@ Every read failure degrades to no metadata — absent, malformed, wrongly typed,
 | `default` | required | Preset id mounted when a caller names none |
 | `roots` | `[]` | Scanned directories in precedence order; each supplies `path` (a leading `~` expands) and `trust` (defaults to `user`) |
 | `includeUserRoot` | `true` | Append `<hydraHome>/.agent-presets` as a `user` root, after every configured root |
+| `workspaceRoot` | unset | Canonical workspace directory confining authoring to its `.hydra/agent-presets` |
 
 An absent root supplies no presets rather than failing: the user root does not exist until the first locally authored preset, and naming a default no root supplies already fails loud at resolution.
 
@@ -95,7 +102,7 @@ An absent root supplies no presets rather than failing: the user root does not e
 
 `<hydraHome>/.agent-presets` is where a person's own presets live, the way `<hydraHome>/skills` is where their own skills live ([`@hydraharness/harness-skill-filesystem`](../../skill/skill-filesystem/README.md)), so the roster derives it rather than waiting for a deployment to remember it — a launcher that configures nothing still finds and authors presets. It is appended AFTER every configured root, which keeps an earlier root winning a duplicate id: a shipped `standard` still shadows a home directory that claimed the name, and `copy()` refuses that id rather than landing a preset nothing would resolve.
 
-The roots are resolved once, when the service is constructed. A root set that changed between a `list()` and the `copy()` acting on its answer would author into a directory the caller never saw.
+The constructor resolves the initial roots. Workspace trust changes the project discovery root through `setProjectRoot`; `workspaceRoot` keeps its authoring directory fixed across those changes.
 
 `includeUserRoot: false` mounts a roster over `roots` alone. A deployment that confines presets to its own directories needs it, and so does any test pinning an exact roster — otherwise the machine's real `<hydraHome>` decides what the roster contains.
 
@@ -111,6 +118,8 @@ agent-presets:
 ```
 
 The value is read per resolution rather than snapshotted, so a hot-reloaded document takes effect on the next session created and every running session stays on the preset it was composed from. `pluginEnablement` uses the same setting namespace to override named leaf rows by preset and changes only later standing mounts. Clearing the user field re-inherits the composition default. A default naming a preset no root supplies is stored without complaint and fails at the next `resolve()` — the roster is a live directory, so a name absent now may exist by the time a session asks for it.
+
+Deleting a workspace preset selected by the inherited settings is refused before changing its files. Select another default in that lower layer first. Deleting a preset selected only by the personal layer clears that override and restores the inherited default.
 
 ## What a mount rejects
 
@@ -144,10 +153,10 @@ Prefix-stable for the life of an agent: a composition is installed once, before 
 
 ## Known Limitations and Deferred Work
 
-- **A preset outside the writable root is discoverable but not deletable** — `remove()` refuses anything that does not live under the FIRST `user` root, so a deployment that configures its own writable root while leaving `includeUserRoot` on lists the harness-home presets, mounts them, and then answers "it does not live under the writable preset root" for every delete. The roster carries one writable root by design; a deployment that wants only its own sets `includeUserRoot: false`.
+- **One authoring directory per roster** — workspace rosters edit only project presets; other rosters edit only presets in the first `user` root. Presets from other roots remain discoverable and mountable.
 - **A preset cannot be changed once a session has produced anything** — `recompose` re-links a BLANK session's parent scope to another standing mount, and only a blank one: switching a composition that already ran would strand tools the model has called. Changing the default affects only sessions created afterwards.
 - **A generation is keyed on the composition file alone** — the stamp check notices `agent.cordis.yml` changing, not an edit to a skill file or asset beside it; those reach new sessions only once the composition file itself moves or the process restarts.
-- **A superseded generation is never reclaimed** — sessions already joined keep the generation they run on, and the roster holds no join count that could tell when the last one left, so the whole subtree stays mounted until the process ends. The cost is per generation rather than per session, but it is not free: `@hydraharness/harness-skill-filesystem` watches its roots by default, so each edit-then-create cycle adds a live watcher set. Bounded by how often compositions are edited — which the settings-page authoring flow makes a per-save event rather than a per-deploy one. Reclaiming one needs a joined-agent count on the standing mount; see the `TODO` at `ensureStanding`.
+- **Superseded generations remain mounted** — sessions already joined keep their generation, and the roster holds no join count that could tell when the last one left. The subtree stays mounted until the roster disposes or its project root is revoked. Each composition edit followed by a new session can add another mount and watcher set. Reclaiming an unused generation needs a joined-agent count; see the `TODO` at `ensureStanding`.
 - **A copy is never mounted to validate** — it is byte-identical to its source, so a source broken on disk yields a copy exactly as broken as the source; discovery's health check marks both rows on the next roster read rather than deferring the failure to a session start.
 - **Health is a shape check, not a mount** — discovery proves the composition parses in the loader dialect and holds named rows, not that every row's module resolves or activates; a row naming an absent package still fails at the first session, which rolls the creation back.
 - **A copy is a snapshot that drifts** — upgrading the deployment does not update copies of shipped presets, and there is no patch semantics at this layer to express "standard plus one change" (that is the bundle layer's `cordis.patch.yml`); the shipped set itself accepts the same cost — `cordis` and `code` are full copies of `standard` — so the whole assembly stays readable in one file.

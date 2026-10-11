@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
 import { AttachmentError } from '@hydraharness/harness-attachment'
 import { SessionId } from '@hydraharness/harness-session'
+import { Context } from '@hydraharness/cordis'
+import { createScope } from '@hydraharness/harness-scope'
 import { makeBridgeHarness, textResponse, type BridgeHarness } from './harness.ts'
 
 describe('automation-only ACP bridge', () => {
@@ -66,12 +68,58 @@ describe('automation-only ACP bridge', () => {
     expect(harness.adapter.requests[0]?.messages.at(-1)?.content).toEqual([{ type: 'text', text: 'say hello' }])
   })
 
+  it('composes its workspace tools before the first ACP prompt', async () => {
+    harness = await makeBridgeHarness({ script: [textResponse('workspace answer')] })
+    const workspaceKey = {}
+    await harness.ctx.plugin(Object.assign((owner: Context) => {
+      const workspace = createScope(owner, workspaceKey)
+      workspace.ctx.tools.register({
+        name: 'workspace_tool',
+        description: 'Workspace tool',
+        parameters: { type: 'object', properties: {} },
+        output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value as string }] },
+        execute: () => Promise.resolve('workspace result'),
+      })
+    }, { inject: ['tools'] }))
+    harness.ctx.provide('workspaceConfig', {
+      environment: (cwd: string) => {
+        expect(cwd).toBe(process.cwd())
+        return Promise.resolve({ scopeKey: workspaceKey })
+      },
+    } as never)
+    await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+    await harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'use this workspace' }] })
+    expect(harness.adapter.requests[0]?.tools?.some(tool => tool.name === 'workspace_tool')).toBe(true)
+    expect(harness.ctx.tools.schemas().some(tool => tool.name === 'workspace_tool')).toBe(false)
+  })
+
   it('leaves absent agent targets for request listeners to supply', async () => {
     harness = await makeBridgeHarness({ config: { provider: undefined, model: undefined } })
     await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
     const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
 
     expect(harness.ctx.agents.get(SessionId(sessionId))?.options).toEqual({})
+  })
+
+  it('uses the global model when both ACP target fields are absent', async () => {
+    harness = await makeBridgeHarness({
+      config: { provider: undefined, model: undefined },
+      script: [textResponse('global model answer')],
+    })
+    harness.ctx.provide('workspaceConfig', {
+      environment: () => Promise.resolve({
+        scopeKey: {},
+      }),
+    } as never)
+    harness.ctx.provide('agentDefaultModel', {
+      currentSelection: () => ({ provider: 'mock', model: 'global-model' }),
+    } as never)
+    await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+    await harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'use the global model' }] })
+    expect(harness.ctx.agents.get(SessionId(sessionId))?.options).toEqual({ provider: 'mock', model: 'global-model' })
+    expect(harness.adapter.requests[0]).toMatchObject({ model: 'global-model' })
   })
 
   it('concatenates text blocks without exposing protocol framing to the model', async () => {

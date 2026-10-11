@@ -23,6 +23,10 @@ export interface NativePluginControls {
   list: () => Promise<PluginInventorySnapshot>
   /** Persist one configured plugin's enablement. */
   setEnabled: (entryId: PluginInventoryEntry['entryId'], enabled: boolean) => Promise<PluginEnablementResult>
+  /** Remove one workspace preset plugin override and return its inherited state. */
+  reset?: (entryId: PluginInventoryEntry['entryId']) => Promise<PluginInventorySnapshot>
+  /** Whether the addressed document owns an override for this entry. */
+  overridden?: (entryId: PluginInventoryEntry['entryId']) => boolean
 }
 
 /** Local controls for imported OpenAI/Codex bundles. */
@@ -228,6 +232,15 @@ function NativePluginCatalog({
       () => { setMutationFailed(true) },
     ).finally(() => { setMutating(null) })
   }
+  const reset = (entry: PluginInventoryEntry): void => {
+    if (nativePlugins?.reset === undefined) return
+    setMutating(entry.entryId)
+    setMutationFailed(false)
+    void nativePlugins.reset(entry.entryId).then((snapshot) => {
+      setState({ status: 'ready', snapshot })
+      onRestartRequiredChange(snapshot.entries.filter(candidate => candidate.restartRequired).length)
+    }, () => { setMutationFailed(true) }).finally(() => { setMutating(null) })
+  }
 
   const selectedEntry = state.status === 'ready'
     ? state.snapshot.entries.find(entry => entry.entryId === selectedEntryId
@@ -280,6 +293,10 @@ function NativePluginCatalog({
       {drafts.changedNative.includes(entry.entryId) ? <p className={css.status}>{t('changedSinceStart')}</p> : null}
       {entry.restartRequired ? <p className={css.status}>{t('restartRequired')}</p> : null}
       {!entry.toggleable ? <p className={css.status}>{t('requiredPlugin')}</p> : null}
+      {nativePlugins?.reset === undefined || entry.presetId === undefined ? null : <Button
+        variant="outline" size="sm" disabled={drafts.saving || mutating !== null || !nativePlugins.overridden?.(entry.entryId)}
+        onClick={() => { reset(entry) }}
+      >{t('resetInherited')}</Button>}
     </>
   )
 

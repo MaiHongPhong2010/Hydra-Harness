@@ -22,20 +22,21 @@
  */
 
 import { stat } from 'node:fs/promises'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { Context, Service } from '@hydraharness/cordis'
 import { entryListSchema, type PatchOptions } from '@hydraharness/cordis-plugin-include'
 import type { EntryOptions } from '@hydraharness/cordis-plugin-loader'
 import z from '@hydraharness/schemastery'
-import { bindScopeParent, createScope, scopeOf, type Scope, type ScopeKey, type ScopeParentBinding } from '@hydraharness/harness-scope'
+import { bindScopeParent, createScope, scopeChainOf, scopeOf, type Scope, type ScopeKey, type ScopeParentBinding } from '@hydraharness/harness-scope'
 import { load } from 'js-yaml'
 // Type-only: resolves the `agent/created` lifecycle event this service watches.
 import type {} from '@hydraharness/harness-agent'
-import { settingsNamespace, type SettingsScope, type default as SettingsService } from '@hydraharness/harness-settings'
-import { hydraHomePath } from '@hydraharness/harness-home-paths'
+import { settingsNamespace, type SettingsProvider, type SettingsScope, type default as SettingsService } from '@hydraharness/harness-settings'
+import { expandHomePath, hydraHomePath } from '@hydraharness/harness-home-paths'
 import { discoverPresets, USER_PRESET_DIR } from './discovery.ts'
-import { copyComposition, deleteComposition, readComposition } from './authoring.ts'
+import { authoringDirectory, copyComposition, deleteComposition, readComposition } from './authoring.ts'
 import { mountPreset, serviceForAgent, standingMountFor } from './mount.ts'
-import { PresetExistsError } from './authoring.ts'
+import { PresetExistsError, PresetNotWritableError } from './authoring.ts'
 import { PresetMountError, UnknownPresetError, type AgentPreset, type Config, type PresetRoot } from './preset.ts'
 import type {} from './types.ts'
 
@@ -71,6 +72,7 @@ export interface AgentPresetPluginEntry {
 }
 
 const PRESET_PLUGIN_ENTRY_PREFIX = 'agent-preset:'
+const selectedNotifications = new WeakMap<Context, WeakSet<object>>()
 
 function presetPluginEntryId(presetId: string, rowId: string): string {
   return `${PRESET_PLUGIN_ENTRY_PREFIX}${presetId}:${rowId}`
@@ -121,7 +123,7 @@ export {
   type JoinedPresetMount, type PresetMount,
 } from './mount.ts'
 export {
-  copyComposition, deleteComposition, InvalidPresetIdError, PresetExistsError,
+  authoringDirectory, copyComposition, deleteComposition, InvalidPresetIdError, PresetExistsError,
   PresetNotWritableError, readComposition, writableRoot,
 } from './authoring.ts'
 export { resolveSessionPreset, type PresetBearingSession } from './session.ts'
@@ -152,19 +154,18 @@ export class AgentPresets extends Service {
       trust: z.union(['system', 'user'] as const).default('user'),
     })).default([]),
     includeUserRoot: z.boolean().default(true),
+    workspaceRoot: z.string(),
   }) as z<Config>
 
   /**
    * The roots discovery and authoring actually scan: every configured root in
    * order, then the harness-home user root unless `includeUserRoot` is false.
    *
-   * Derived once, because a root set that changed between `list()` and the
-   * `copy()` acting on its answer would author into a directory the caller
-   * never saw. Appending rather than prepending keeps an earlier configured
-   * root winning a duplicate id, so a shipped preset still shadows a
-   * locally authored directory that claimed its name.
+   * Workspace trust may prepend or remove its project root. Appending the
+   * harness-home root keeps the configured precedence and authoring root.
    */
-  private readonly resolvedRoots: readonly PresetRoot[]
+  private resolvedRoots: readonly PresetRoot[]
+  private readonly workspaceRoot: string | undefined
 
   /**
    * The user layer over `config.default`, present only while a settings
@@ -192,6 +193,7 @@ export class AgentPresets extends Service {
   constructor(ctx: Context, public config: Config) {
     super(ctx, 'agentPresets')
     this.selfCtx = ctx
+    this.workspaceRoot = config.workspaceRoot === undefined ? undefined : resolve(expandHomePath(config.workspaceRoot))
     this.resolvedRoots = config.includeUserRoot
       ? [...config.roots, { path: hydraHomePath(USER_PRESET_DIR), trust: 'user' }]
       : [...config.roots]
@@ -249,6 +251,10 @@ export class AgentPresets extends Service {
     // only the stable identity needed by clients, never the live Session.
     ctx.on('session/event', (session, event) => {
       if (event.type !== 'agent-preset/selected') return
+      let notified = selectedNotifications.get(ctx.root)
+      if (notified === undefined) selectedNotifications.set(ctx.root, notified = new WeakSet())
+      if (notified.has(event)) return
+      notified.add(event)
       ctx.emit('agent-preset/selected', session.id, event.data.agentPreset)
     })
   }
@@ -322,6 +328,10 @@ export class AgentPresets extends Service {
    * is bounded by how often compositions change, not by session count.
    */
   private readonly standing = new Map<string, Promise<StandingMount>>()
+  /** Every generation remains owned until its originating root is revoked or the roster unloads. */
+  private readonly generations = new Map<ScopeKey, { preset: AgentPreset; scope: Scope }>()
+  /** Origin survives revocation while an agent still retains its generation key. */
+  private readonly generationOrigins = new WeakMap<ScopeKey, string>()
 
   /**
    * Parent bindings of the agents this roster composed, keyed by the agent's
@@ -419,9 +429,84 @@ export class AgentPresets extends Service {
     return this.resolvedRoots
   }
 
+  /**
+   * Enable or revoke one workspace project root. Revocation disposes its
+   * generations, including pending mounts; generations from other roots remain live.
+   * @param path - project directory containing preset subdirectories.
+   * @param enabled - whether the project root may supply compositions.
+   * @returns completion after revoked project generations have stopped.
+   */
+  async setProjectRoot(path: string, enabled: boolean): Promise<void> {
+    const projectPath = resolve(expandHomePath(path))
+    const currentIndex = this.resolvedRoots.findIndex(root => resolve(expandHomePath(root.path)) === projectPath)
+    if ((enabled && currentIndex === 0) || (!enabled && currentIndex === -1)) return
+    const remaining = this.resolvedRoots.filter(root => resolve(expandHomePath(root.path)) !== projectPath)
+    this.resolvedRoots = enabled ? [{ path: projectPath, trust: 'user' }, ...remaining] : remaining
+    for (const [key, generation] of [...this.generations]) {
+      if (dirname(dirname(generation.preset.path)) !== projectPath) continue
+      this.standing.delete(generation.preset.id)
+      if (enabled) continue
+      this.generations.delete(key)
+      await generation.scope.dispose()
+    }
+    if (!enabled) return
+    // A project preset may shadow a generation supplied by another root.
+    for (const preset of await discoverPresets([{ path: projectPath, trust: 'user' }])) {
+      this.standing.delete(preset.id)
+    }
+  }
+
+  /**
+   * Whether an agent joined a generation supplied below a project directory,
+   * including a generation disposed after trust was revoked.
+   * @param agentCtx - the agent's registration context.
+   * @param root - project directory whose preset origins to recognize.
+   * @returns whether the joined generation originates inside that directory.
+   */
+  isProjectContext(agentCtx: Context, root: string): boolean {
+    return this.projectGenerations(agentCtx, root).length > 0
+  }
+
+  /**
+   * Whether an agent retains a project generation stopped by trust revocation.
+   * Re-trusting a workspace permits fresh generations, without restoring stopped ones.
+   * @param agentCtx - the agent's registration context.
+   * @param root - project directory whose stopped generations to recognize.
+   * @returns whether continuing this agent requires a fresh composition.
+   */
+  isRetiredProjectContext(agentCtx: Context, root: string): boolean {
+    return this.projectGenerations(agentCtx, root).some(key => !this.generations.has(key))
+  }
+
+  private projectGenerations(agentCtx: Context, root: string): ScopeKey[] {
+    const projectRoot = resolve(expandHomePath(root))
+    return scopeChainOf(scopeOf(agentCtx)).filter((key) => {
+      const origin = this.generationOrigins.get(key)
+      if (origin === undefined) return false
+      const location = relative(projectRoot, origin)
+      return !isAbsolute(location) && location !== '..' && !location.startsWith(`..${sep}`)
+    })
+  }
+
   /** Whether this deployment has a root locally authored presets go to. */
   get authorable(): boolean {
-    return this.resolvedRoots.some(root => root.trust === 'user')
+    return this.workspaceRoot !== undefined || this.resolvedRoots.some(root => root.trust === 'user')
+  }
+
+  private get authoringRoots(): readonly PresetRoot[] {
+    return this.workspaceRoot === undefined
+      ? this.resolvedRoots
+      : [{ path: join(this.workspaceRoot, '.hydra', 'agent-presets'), trust: 'user' }]
+  }
+
+  /**
+   * Resolve a locally writable preset directory for an editor.
+   * @param id - the preset to edit.
+   * @returns its directory after checking authoring ownership and canonical containment.
+   * @throws when the preset is inherited, read-only, or escapes through a link.
+   */
+  async authoringDirectory(id: string): Promise<string> {
+    return authoringDirectory(this.authoringRoots, await this.resolve(id), this.workspaceRoot)
   }
 
   /**
@@ -436,11 +521,13 @@ export class AgentPresets extends Service {
 
   /**
    * List the explicit leaf rows every preset can switch for future sessions.
+   * @param settings - optional selected layer whose desired enablement to read.
    * @returns every leaf with its persisted desired state.
    */
-  async listPluginEntries(): Promise<AgentPresetPluginEntry[]> {
+  async listPluginEntries(settings?: SettingsProvider): Promise<AgentPresetPluginEntry[]> {
     const entries: AgentPresetPluginEntry[] = []
-    const enablement = this.settings?.get().pluginEnablement ?? {}
+    const enablement = settings === undefined ? this.settings?.get().pluginEnablement ?? {}
+      : this.pluginEnablementSource(settings).enablement
     for (const preset of await this.list()) {
       if (preset.broken !== undefined) continue
       try {
@@ -458,17 +545,33 @@ export class AgentPresets extends Service {
    * Persist one preset leaf state and let only later sessions mount a new generation.
    * @param entryId - preset-qualified leaf entry id.
    * @param enabled - desired state for later sessions.
+   * @param settings - selected write layer; omitted uses this roster's provider.
    */
-  async setPluginEnabled(entryId: string, enabled: boolean): Promise<void> {
-    const entry = (await this.listPluginEntries()).find(candidate => candidate.entryId === entryId)
+  async setPluginEnabled(entryId: string, enabled: boolean, settings?: SettingsProvider): Promise<void> {
+    const entry = (await this.listPluginEntries(settings)).find(candidate => candidate.entryId === entryId)
     if (entry === undefined) throw new Error(`agent-presets: plugin entry ${entryId} was not found`)
     if (entry.enabled === enabled) return
-    const settings = this.settings
-    if (settings === undefined) throw new Error('agent-presets: plugin settings are unavailable')
-    await settings.update({ pluginEnablement: { [entry.presetId]: { [entry.rowId]: enabled } } })
+    const source = settings ?? this.selfCtx.get('settings')
+    if (source === undefined) throw new Error('agent-presets: plugin settings are unavailable')
+    const { revision } = this.pluginEnablementSource(source)
+    await source.update(settingsNamespace(SETTINGS_NAMESPACE),
+      { pluginEnablement: { [entry.presetId]: { [entry.rowId]: enabled } } }, revision)
     // Existing sessions retain their joined standing mount. A later mount gets
     // fresh Include patches from the committed settings value.
     this.standing.delete(entry.presetId)
+  }
+
+  private pluginEnablementSource(settings: SettingsProvider): {
+    enablement: Record<string, Record<string, boolean>>
+    revision: number
+  } {
+    const descriptor = settings.describe().find(section => section.ns === SETTINGS_NAMESPACE)
+    if (descriptor === undefined) throw new Error('agent-presets: plugin settings are unavailable')
+    const inherited = (descriptor.base as Partial<AgentPresetSettings>).pluginEnablement ?? {}
+    const user = (descriptor.user as Partial<AgentPresetSettings> | undefined)?.pluginEnablement ?? {}
+    const enablement = Object.fromEntries([...new Set([...Object.keys(inherited), ...Object.keys(user)])]
+      .map(presetId => [presetId, { ...inherited[presetId], ...user[presetId] }]))
+    return { enablement, revision: descriptor.revision }
   }
 
   /**
@@ -494,7 +597,7 @@ export class AgentPresets extends Service {
     if ((await this.list()).some(preset => preset.id === id)) {
       throw new PresetExistsError(id)
     }
-    await copyComposition(this.resolvedRoots, source, id, name)
+    await copyComposition(this.authoringRoots, source, id, name, this.workspaceRoot)
     // A settled mount under this id can only be stale (its preset was deleted
     // from disk outside `remove`); the new preset must not inherit it. Every
     // session already joined keeps the generation it runs on regardless.
@@ -504,19 +607,20 @@ export class AgentPresets extends Service {
   /**
    * Delete a locally authored preset.
    * @param id - the preset id.
-   * @throws when the preset is unknown or ships with the deployment.
+   * @throws when the preset is unknown, ships with the deployment, or remains
+   * a workspace's inherited default.
    */
   async remove(id: string): Promise<void> {
-    await deleteComposition(this.resolvedRoots, await this.resolve(id))
-    // Sessions on the deleted preset keep their standing mount; only new
-    // sessions see the roster without it.
+    const preset = await this.resolve(id)
+    const inherited = this.settingsService?.describe()
+      .find(descriptor => descriptor.ns === SETTINGS_NAMESPACE)?.base as AgentPresetSettings | undefined
+    if (this.workspaceRoot !== undefined && preset.trust === 'user' && inherited?.default === id) {
+      throw new PresetNotWritableError(id,
+        'it is an inherited default; select another default in the lower settings layer before removing it')
+    }
+    await deleteComposition(this.authoringRoots, preset, this.workspaceRoot)
+    // Existing sessions retain their joined generation.
     this.standing.delete(id)
-    // Storing a default that does not exist YET is deliberate — the roster is a
-    // live directory, so a name absent now may exist by the time a session asks
-    // for it, and `resolve` reports it then. A default this call just deleted is
-    // not that case: nothing will ever supply it again, and left in place every
-    // session created without an explicit pick would fail to start. Clearing it
-    // exposes the deployment's own default underneath, which is the layering.
     if (this.settings?.get().default !== id) return
     await this.settingsService?.mutate(
       settingsNamespace(SETTINGS_NAMESPACE),
@@ -598,6 +702,10 @@ export class AgentPresets extends Service {
 
   /** Resolve (or create, single-flight) the standing mount of one preset. */
   private async ensureStanding(preset: AgentPreset): Promise<StandingMount> {
+    const origin = dirname(dirname(preset.path))
+    if (!this.resolvedRoots.some(root => resolve(expandHomePath(root.path)) === origin)) {
+      throw new PresetMountError(preset.id, 'the preset root is no longer enabled')
+    }
     const pending = this.standing.get(preset.id)
     if (pending !== undefined) {
       const mounted = await pending
@@ -621,7 +729,10 @@ export class AgentPresets extends Service {
     }
     const created = (async (): Promise<StandingMount> => {
       const key: ScopeKey = { agentPreset: preset.id }
-      const scope = createScope(this.selfCtx, key)
+      const parent = scopeOf(this.selfCtx)
+      const scope = createScope(this.selfCtx, key, parent === undefined ? undefined : { parent })
+      this.generations.set(key, { preset, scope })
+      this.generationOrigins.set(key, preset.path)
       try {
         // Stamped before the file is read: an edit racing the mount makes the
         // stamp stale rather than silently current, so the next session
@@ -633,6 +744,7 @@ export class AgentPresets extends Service {
         await mountPreset(scope.ctx, preset, this.enablementPatches(preset.id))
         return { key, scope, stamp }
       } catch (error) {
+        this.generations.delete(key)
         this.standing.delete(preset.id)
         await scope.dispose()
         throw error

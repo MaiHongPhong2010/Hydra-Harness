@@ -2,15 +2,20 @@
 
 /** English dictionary (the key-set source of truth). */
 export const en = {
-  'title': 'Permission',
-  'description': 'Choose the default permission mode for new sessions',
+  saving: 'Saving…',
+  reset: 'Reset to inherited permission',
+  'title': 'Default permissions',
+  'description': 'Save the default and apply it to open chats. Changes control the next action.',
+  'full.title': 'Full access',
+  'full.description': 'Allow file access and commands without approval in open and new chats.',
+  'retry': 'Retry open chats',
   'loading': 'Loading',
   'unavailable': 'Unavailable',
   'preset.readOnly': 'Read only',
   'preset.workspaceWrite': 'Edit',
   'preset.fullAccess': 'Auto-Pilot',
   'confirm.title': 'Enable Auto-Pilot?',
-  'confirm.description': 'Auto-Pilot lets new sessions reduce confirmation steps and perform more actions directly, including sensitive operations, file changes, or external commands. Only use it when you trust subsequent tasks.',
+  'confirm.description': 'Auto-Pilot allows file changes and external commands without approval in open and new chats. Only enable it when you trust these tasks.',
   'confirm.acknowledge': 'I understand the risks and want to continue',
   'confirm.cancel': 'Cancel',
   'confirm.enable': 'Enable Auto-Pilot',

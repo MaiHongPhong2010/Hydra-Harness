@@ -10,13 +10,13 @@ A session's preset is fixed when the session is created — the host refuses to 
 
 A second surface, beside the workspace picker on the new-session screen. It sits there rather than in the composer because that is where the choice is still open: a control that spends most of its life disabled belongs on the screen where it still works.
 
-The chip opens on the deployment default and its pick is *staged* — the screen precedes the session it would apply to. The stage reaches a session when one becomes current and is still blank, which covers both the session the workspace connect created and the blank one it reused; riding along on `sessions.create` would miss the second. It is spent on first use, so the next new session opens on the default again, exactly like the workspace picker beside it.
+The chip reads the effective roster and default of the current or recently selected workspace. Its pick is *staged* until a blank session becomes current, covering both the session a workspace connect creates and a blank one it reuses. The stage is spent on first use and cleared when switching workspace; a late acknowledgement from the previous workspace updates its original session without changing the new workspace's pick.
 
 A session that has started is refused rather than queued: the host answers `agent-preset-locked`, and the stage is dropped instead of waiting for a session that will never accept it.
 
 ## The session-header label
 
-A third surface, beside the session title: the preset THIS session runs, as static chrome. A control there would promise a switch the host refuses outright. It reads the preset from the session's own summary and resolves the display name against the same roster the General row reads. Forwarded `agent-preset/selected` owner events fold committed blank-session switches into that shared summary in every tab; the initiating tab may already have applied the RPC echo, and the merge is idempotent.
+A third surface, beside the session title: the preset THIS session runs, as static chrome. A control there would promise a switch the host refuses outright. It reads the preset from the session's own summary and resolves the display name against that session's workspace roster. Forwarded `agent-preset/selected` owner events fold committed blank-session switches into that shared summary in every tab; the initiating tab may already have applied the RPC echo, and the merge is idempotent.
 
 ## What it reads and writes
 
@@ -57,6 +57,8 @@ Setting the default writes the `agent-presets` settings namespace, which the hos
 ## When the surfaces are absent
 
 A deployment that composes no presets answers with an empty roster, and the row, the chip, the label, and the section all render nothing — every session then shares the host composition, and there is nothing to choose between or manage. A deployment that configures no writable root answers `authorable: false`, and the section stays a read-only browser: the shipped compositions still open in the viewer, but every copy action is disabled with the reason as its tooltip rather than offering a dialog whose create always fails.
+
+Settings reads and authors global presets and their default. The workspace picker and session header use the effective workspace roster, including project presets and defaults loaded automatically from `.hydra/`. Settings edits leave active sessions on their recorded preset.
 
 ## Model Experience
 

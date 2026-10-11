@@ -6,6 +6,8 @@ export const en = {
   'appearance.light': 'Light',
   'appearance.dark': 'Dark',
   'appearance.system': 'System',
+  'appearance.saving': 'Saving…',
+  'appearance.applies': 'Applied immediately.',
 } satisfies Record<string, string>
 
 /** The settings.theme namespace key union. */

@@ -13,13 +13,14 @@
  * @module @hydraharness/harness-hooks-registry
  */
 
+import type {} from '@hydraharness/harness-optional-plugins'
 import { mkdir, readFile, rm } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { Service, type Context, type Fiber } from '@hydraharness/cordis'
 import z from '@hydraharness/schemastery'
 import { writeFileAtomic } from '@hydraharness/harness-atomic-write'
 import { resolveHydraHome } from '@hydraharness/harness-home-paths'
-import { settingsNamespace, type SettingsScope } from '@hydraharness/harness-settings'
+import { settingsNamespace, type SettingsProvider, type SettingsScope } from '@hydraharness/harness-settings'
 import {
   apply as applyClaudeCodeHooks, inject as claudeCodeInject,
 } from '@hydraharness/harness-hooks-claude-code'
@@ -54,6 +55,8 @@ const DEFAULT_HOOK_TIMEOUT_MS = 600_000
 export interface Config {
   /** Override the resolved harness home that holds materialized inline documents. */
   hydraHome?: string
+  /** Absolute workspace directory for relative document paths and hook commands. */
+  cwd?: string
 }
 
 /** One stored record, as the settings document holds it. */
@@ -103,7 +106,7 @@ function sourceKind(record: StoredRecord): HookSourceKind {
  * @param record - one stored record to judge.
  * @param label - operation name used in the diagnostic.
  */
-function assertMountable(record: StoredRecord, label: string): void {
+function assertMountable(record: StoredRecord, label: string, cwd?: string): void {
   if (!RECORD_NAME_PATTERN.test(record.name)) {
     throw new Error(`${label}: record name must match ${String(RECORD_NAME_PATTERN)}`)
   }
@@ -114,7 +117,7 @@ function assertMountable(record: StoredRecord, label: string): void {
   if (record.configPath !== '' && inline) {
     throw new Error(`${label}: record ${record.name} declares both a configPath and inline hook definitions`)
   }
-  if (record.configPath !== '' && !isAbsolute(record.configPath)) {
+  if (record.configPath !== '' && !isAbsolute(record.configPath) && cwd === undefined) {
     throw new Error(`${label}: record ${record.name} configPath must be absolute`)
   }
   if (inline && Buffer.byteLength(JSON.stringify(record.config), 'utf8') > MAX_INLINE_BYTES) {
@@ -205,6 +208,7 @@ export class HookRecordRegistry extends Service {
   private readonly owner: Context
   static Config: z<Config> = z.object({
     hydraHome: z.string(),
+    cwd: z.string(),
   })
 
   private readonly settings: SettingsScope<HooksSettings>
@@ -213,12 +217,15 @@ export class HookRecordRegistry extends Service {
   private readonly invalid = new Map<string, string>()
   /** Directory holding the documents materialized from inline definitions. */
   private readonly inlineRoot: string
+  private readonly cwd: string | undefined
   private tail: Promise<unknown> = Promise.resolve()
   private stopped = false
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'hookRecords')
+    if (config.cwd !== undefined && !isAbsolute(config.cwd)) throw new Error('hookRecords: cwd must be absolute')
     this.owner = ctx
+    this.cwd = config.cwd
     this.inlineRoot = join(resolveHydraHome(config.hydraHome), 'hooks')
     this.settings = ctx.settings.register(HOOKS_SETTINGS_NAMESPACE, HooksSettingsSchema, {
       // Refuse a colliding section where it is written: two records claiming
@@ -228,6 +235,14 @@ export class HookRecordRegistry extends Service {
   }
 
   protected async [Service.init](): Promise<void> {
+    this.ctx.inject(['optionalPlugins'], (pctx) => {
+      pctx.effect(() => pctx.optionalPlugins.subscribe((enabled) => {
+        void this.enqueue(async () => {
+          if (!enabled) await pctx.optionalPlugins.drain()
+          if (pctx.optionalPlugins.enabled === enabled) await this.reconcile()
+        }).catch((error: unknown) => { this.ctx.logger.error(error) })
+      }), 'hooks-registry: optional policy')
+    })
     this.ctx.effect(() => () => this.shutdown(), 'hookRecords.dispose')
     this.ctx.effect(
       () => this.settings.watch(() => this.enqueue(() => this.reconcile())),
@@ -238,10 +253,20 @@ export class HookRecordRegistry extends Service {
 
   /**
    * Project every stored record with its live state.
+   * @param settings - optional layer whose desired records to project.
    * @returns the current record projection, in stored order.
    */
-  list(): HookRecordSnapshot {
-    return { records: this.settings.get().records.map(record => this.view(record)) }
+  list(settings?: SettingsProvider): HookRecordSnapshot {
+    const records = settings === undefined ? this.settings.get().records : this.writeSource(settings).records
+    return { records: records.map(record => this.view(record)) }
+  }
+
+  /**
+   * Reconcile the current effective settings after a layer or trust change.
+   * @returns completion after earlier queued work and the current mounts settle.
+   */
+  settle(): Promise<void> {
+    return this.enqueue(() => this.reconcile())
   }
 
   /**
@@ -249,18 +274,18 @@ export class HookRecordRegistry extends Service {
    * converge the mounted set. A definition this registry could not mount is
    * refused before anything persists.
    * @param request - complete record definition.
+   * @param settings - selected write layer; omitted uses this registry's provider.
    * @returns the refreshed projection.
    * @throws If create names an existing record or replace names a missing record.
    */
-  define(request: HookRecordDefinitionRequest): Promise<HookRecordSnapshot> {
+  define(request: HookRecordDefinitionRequest, settings: SettingsProvider = this.owner.settings): Promise<HookRecordSnapshot> {
     return this.enqueue(async () => {
-      const revision = this.settings.revision
-      const records = this.settings.get().records
+      const { revision, records } = this.writeSource(settings)
       const index = records.findIndex(candidate => candidate.name === request.name.trim())
       if (request.mode === 'create' && index !== -1) throw new Error(`hookRecords.define: record ${request.name} already exists`)
       if (request.mode === 'replace' && index === -1) throw new Error(`hookRecords.define: record ${request.name} is not configured`)
       const record = foldDefinition(request, index === -1 ? undefined : records[index])
-      assertMountable(record, 'hookRecords.define')
+      assertMountable(record, 'hookRecords.define', this.cwd)
       // The dialect parser is the authority on whether these definitions run;
       // refusing here means a stored record can never be silently inert.
       summarize(record.dialect, await this.readDefinitions(record))
@@ -268,7 +293,7 @@ export class HookRecordRegistry extends Service {
         ? [...records, record]
         : records.map((candidate, position) => position === index ? record : candidate)
       if (next.length > MAX_RECORDS) throw new Error(`hookRecords.define: at most ${String(MAX_RECORDS)} records are supported`)
-      await this.ctx.settings.update(HOOKS_SETTINGS_NAMESPACE, { records: next }, revision)
+      await settings.update(HOOKS_SETTINGS_NAMESPACE, { records: next }, revision)
       await this.reconcile()
       return this.list()
     })
@@ -277,18 +302,18 @@ export class HookRecordRegistry extends Service {
   /**
    * Change one stored record's desired state.
    * @param request - target record and desired state.
+   * @param settings - selected write layer; omitted uses this registry's provider.
    * @returns the refreshed projection.
    */
-  setEnabled(request: HookRecordEnablementRequest): Promise<HookRecordSnapshot> {
+  setEnabled(request: HookRecordEnablementRequest, settings: SettingsProvider = this.owner.settings): Promise<HookRecordSnapshot> {
     return this.enqueue(async () => {
-      const revision = this.settings.revision
-      const records = this.settings.get().records
+      const { revision, records } = this.writeSource(settings)
       const index = records.findIndex(candidate => candidate.name === request.name)
       if (index === -1) throw new Error(`hookRecords.setEnabled: record ${request.name} is not configured`)
       const next = records.map((candidate, position) => position === index
         ? { ...candidate, enabled: request.enabled }
         : candidate)
-      await this.ctx.settings.update(HOOKS_SETTINGS_NAMESPACE, { records: next }, revision)
+      await settings.update(HOOKS_SETTINGS_NAMESPACE, { records: next }, revision)
       await this.reconcile()
       return this.list()
     })
@@ -298,20 +323,35 @@ export class HookRecordRegistry extends Service {
    * Remove one stored record, unmount it, and delete any document this registry
    * materialized for it.
    * @param name - stored record name.
+   * @param settings - selected write layer; omitted uses this registry's provider.
    * @returns the refreshed projection.
    */
-  remove(name: string): Promise<HookRecordSnapshot> {
+  remove(name: string, settings: SettingsProvider = this.owner.settings): Promise<HookRecordSnapshot> {
     return this.enqueue(async () => {
-      const revision = this.settings.revision
-      const records = this.settings.get().records
+      const { revision, records } = this.writeSource(settings)
       if (!records.some(candidate => candidate.name === name)) {
         throw new Error(`hookRecords.remove: record ${name} is not configured`)
       }
-      await this.ctx.settings.replace(HOOKS_SETTINGS_NAMESPACE, { records: records.filter(candidate => candidate.name !== name) }, revision)
+      await settings.replace(HOOKS_SETTINGS_NAMESPACE, { records: records.filter(candidate => candidate.name !== name) }, revision)
       await this.reconcile()
-      await rm(this.inlinePath(name), { force: true })
+      if (!this.settings.get().records.some(record => record.name === name)) {
+        await rm(this.inlinePath(name), { force: true })
+      }
       return this.list()
     })
+  }
+
+  /** Read the selected layer's desired records, including overrides suppressed by trust. */
+  private writeSource(settings: SettingsProvider): HooksSettings & { revision: number } {
+    const descriptor = settings.describe().find(section => section.ns === HOOKS_SETTINGS_NAMESPACE)
+    if (descriptor === undefined) throw new Error('hookRecords: selected settings provider has no hooks namespace')
+    return {
+      ...HooksSettingsSchema({
+        records: (descriptor.user as Partial<HooksSettings> | undefined)?.records
+          ?? (descriptor.base as Partial<HooksSettings> | undefined)?.records ?? [],
+      }),
+      revision: descriptor.revision,
+    }
   }
 
   /* jscpd:ignore-start -- hook and MCP registries intentionally share serialized reconciliation. */
@@ -335,12 +375,12 @@ export class HookRecordRegistry extends Service {
     this.invalid.clear()
     for (const [name, mount] of [...this.live]) {
       const record = records.get(name)
-      if (record?.enabled === true && recordDigest(record) === mount.digest) continue
+      if (this.ctx.get('optionalPlugins')?.enabled !== false && record?.enabled === true && recordDigest(record) === mount.digest) continue
       this.live.delete(name)
       await disposeQuietly(mount.fiber)
     }
     for (const record of records.values()) {
-      if (!record.enabled || this.live.has(record.name)) continue
+      if (this.ctx.get('optionalPlugins')?.enabled === false || !record.enabled || this.live.has(record.name)) continue
       await this.mount(record)
     }
     // The projection is published only after every mount settled, so an
@@ -358,7 +398,7 @@ export class HookRecordRegistry extends Service {
     let configPath: string
     let summary: { events: string[]; hookCount: number }
     try {
-      assertMountable(record, 'hookRecords')
+      assertMountable(record, 'hookRecords', this.cwd)
       configPath = await this.materialize(record)
       summary = summarize(record.dialect, await this.readDefinitions(record))
     } catch (error) {
@@ -374,8 +414,9 @@ export class HookRecordRegistry extends Service {
       }, {
         configPath,
         defaultTimeoutMs: record.defaultTimeoutMs,
-        ...record.pluginRoot === '' ? {} : { pluginRoot: record.pluginRoot },
-        ...record.projectDir === '' ? {} : { projectDir: record.projectDir },
+        ...this.cwd === undefined ? {} : { cwd: this.cwd },
+        ...record.pluginRoot === '' ? {} : { pluginRoot: this.documentPath(record.pluginRoot) },
+        ...record.projectDir === '' ? {} : { projectDir: this.documentPath(record.projectDir) },
       })
       : this.owner.plugin({
         name: `hook-record:${record.name}`,
@@ -384,6 +425,7 @@ export class HookRecordRegistry extends Service {
       }, {
         configPath,
         defaultTimeoutMs: record.defaultTimeoutMs,
+        ...this.cwd === undefined ? {} : { cwd: this.cwd },
       })
     const mount: LiveMount = {
       fiber,
@@ -409,7 +451,7 @@ export class HookRecordRegistry extends Service {
    * section always reaches the bridge.
    */
   private async materialize(record: StoredRecord): Promise<string> {
-    if (sourceKind(record) === 'file') return record.configPath
+    if (sourceKind(record) === 'file') return this.documentPath(record.configPath)
     const path = this.inlinePath(record.name)
     await mkdir(this.inlineRoot, { recursive: true, mode: 0o700 })
     await writeFileAtomic(path, `${JSON.stringify(record.config, undefined, 2)}\n`, { mode: 0o600, dirMode: 0o700 })
@@ -421,7 +463,7 @@ export class HookRecordRegistry extends Service {
     if (sourceKind(record) === 'inline') return record.config
     let text: string
     try {
-      text = await readFile(record.configPath, 'utf8')
+      text = await readFile(this.documentPath(record.configPath), 'utf8')
     } catch (cause) {
       throw new Error(`hookRecords: record ${record.name} cannot read ${record.configPath}`, { cause })
     }
@@ -437,10 +479,18 @@ export class HookRecordRegistry extends Service {
     return join(this.inlineRoot, `${name}.json`)
   }
 
+  /** Resolve a read-only document or substitution path inside the owning cwd. */
+  private documentPath(path: string): string {
+    return this.cwd === undefined ? path : resolve(this.cwd, path)
+  }
+
   /** Project one stored record with its live state. */
   private view(record: StoredRecord): HookRecordView {
-    const mount = this.live.get(record.name)
-    const invalid = this.invalid.get(record.name)
+    const candidate = this.live.get(record.name)
+    const digest = recordDigest(record)
+    const mount = candidate?.digest === digest ? candidate : undefined
+    const effective = this.settings.get().records.find(hook => hook.name === record.name)
+    const invalid = effective !== undefined && recordDigest(effective) === digest ? this.invalid.get(record.name) : undefined
     const status: HookRecordStatus = invalid !== undefined
       ? 'invalid'
       : !record.enabled ? 'stopped' : mount?.status ?? 'stopped'

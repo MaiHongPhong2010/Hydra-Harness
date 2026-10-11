@@ -23,8 +23,8 @@ export class HydraHarness implements AsyncDisposable {
   private clientInstance: HarnessClient
   private readonly launch: HarnessClientOptions
   private readonly cwd: string
-  private readonly provider: string
-  private readonly model: string
+  private readonly provider: string | undefined
+  private readonly model: string | undefined
   private readonly maxTokens: number | undefined
   private initialized: Promise<void> | undefined
   private closed = false
@@ -37,8 +37,8 @@ export class HydraHarness implements AsyncDisposable {
     // process's cwd, but the wire cwd is resolved again inside the child — a
     // relative value would double-resolve (e.g. `worker` → `worker/worker`).
     this.cwd = resolve(options.cwd ?? options.launch.cwd ?? process.cwd())
-    this.provider = options.provider ?? 'deepseek-official'
-    this.model = options.model ?? 'deepseek-v4-flash'
+    this.provider = options.provider
+    this.model = options.model
     this.maxTokens = options.maxTokens
   }
 
@@ -65,8 +65,8 @@ export class HydraHarness implements AsyncDisposable {
         this.clientInstance.start()
         await this.clientInstance.initialize({
           cwd: this.cwd,
-          provider: this.provider,
-          model: this.model,
+          ...this.provider === undefined ? {} : { provider: this.provider },
+          ...this.model === undefined ? {} : { model: this.model },
           ...this.maxTokens === undefined ? {} : { maxTokens: this.maxTokens },
         })
       } catch (error) {

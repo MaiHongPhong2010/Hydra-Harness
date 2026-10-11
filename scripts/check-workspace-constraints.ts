@@ -57,7 +57,7 @@ const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|app
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@hydraharness/harness': ['lib/*.js', 'config'],
-  '@hydraharness/harness-desktop': ['main.cjs', 'preload.cjs', 'assets', 'tests/snapshots'],
+  '@hydraharness/harness-desktop': ['main.cjs', 'preload.cjs', 'native-preferences.cjs', 'environment-launcher.cjs', 'assets', 'tests/snapshots'],
   // The Web build emits sourcemaps for browser debugging; publishing them is
   // what the payload policy forbids, so the bundle ships without them.
   '@hydraharness/harness-web-frontend': ['dist', '!dist/**/*.map'],
@@ -177,6 +177,7 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@hydraharness/harness-skill-badge': ['assets'],
   '@hydraharness/harness-subprocess-local': ['scripts/ensure-spawn-helper.mjs'],
   '@hydraharness/harness-llm': ['lib/proxy.js'],
+  '@hydraharness/harness-native-command': ['lib/desktop-bridge.js'],
 }
 
 function sameStringList(actual: readonly string[] | undefined, expected: readonly string[]): boolean {

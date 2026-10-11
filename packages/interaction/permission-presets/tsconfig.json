@@ -7,7 +7,7 @@
   "include": [
     "src"
   ],
-  "references": [
+  "references": [{"path": "../../core/agent"},
     {
       "path": "../../../vendor/cosmokit"
     },
@@ -43,6 +43,9 @@
     },
     {
       "path": "../commands"
+    },
+    {
+      "path": "../../workspace/workspace-config"
     }
   ]
 }

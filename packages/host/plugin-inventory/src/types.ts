@@ -1,4 +1,6 @@
 import type { Branded } from '@hydraharness/harness-brand'
+import type { SettingsTarget } from '@hydraharness/harness-workspace-config/types'
+export type { SettingsTarget } from '@hydraharness/harness-workspace-config/types'
 export type { ImportedPluginEntry, ImportedPluginSnapshot, PluginImportSource } from '@hydraharness/harness-plugin-runtime/types'
 export type {
   McpServerDefinitionRequest, McpServerEnablementRequest, McpServerSnapshot,
@@ -23,6 +25,8 @@ export type PluginFiberPhase =
 
 /** One non-group Loader entry exposed to trusted clients. */
 export interface PluginInventoryEntry {
+  /** Functionality or dependency protected from optional-plugin suspension, separately from restart semantics. */
+  readonly required?: boolean
   readonly entryId: PluginEntryId
   /** Exact module specifier imported by the Loader entry. */
   readonly moduleName: string
@@ -44,6 +48,8 @@ export interface PluginInventoryEntry {
   readonly enabled: boolean
   /** Agent preset that owns this entry, when it is not a Host entry. */
   readonly presetId?: string
+  /** Leaf row within {@link presetId}; identifies its settings override. */
+  readonly presetRowId?: string
   /** Whether a changed preset entry affects only sessions created afterwards. */
   readonly newSessionsOnly?: boolean
   /** Desired root-entry enablement waiting for the next profile start. */
@@ -56,13 +62,13 @@ export interface PluginInventoryEntry {
 }
 
 /** Requested persistent enablement for one Loader entry. */
-export interface PluginEnablementRequest {
+export interface PluginEnablementRequest extends SettingsTarget {
   readonly entryId: PluginEntryId
   readonly enabled: boolean
 }
 
 /** Point-in-time inventory returned by the plugin inventory Remote. */
-export interface PluginInventorySnapshot {
+export interface PluginInventorySnapshot extends SettingsTarget {
   readonly entries: readonly PluginInventoryEntry[]
 }
 

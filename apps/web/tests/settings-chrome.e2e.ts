@@ -12,7 +12,7 @@ import { mkdir, readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
-import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFailed } from 'vitest'
 import { join } from 'node:path'
 import { load as parseYaml } from 'js-yaml'
 import { SessionId } from '@hydraharness/harness-session'
@@ -31,7 +31,7 @@ const PLUGIN_TOGGLE_EXPECTED = join(SNAPSHOT_DIR, 'plugin-toggle.expected.md')
 // The English fallback surface: a browser naming no shipped language.
 const DIALOG_EN_EXPECTED = join(SNAPSHOT_DIR, 'dialog-en.expected.md')
 const PLUGIN_ROW_SELECTOR = '[data-plugin-entry$="ui-settings"]'
-const PLUGIN_TOGGLE_ROW_SELECTOR = '[data-plugin-entry$="session-stats"]'
+const PLUGIN_TOGGLE_ROW_SELECTOR = '[data-plugin-entry$="command-feedback"]'
 const MODE = webSnapshotMode()
 
 describe('web e2e: settings modal and General preferences', () => {
@@ -54,6 +54,13 @@ describe('web e2e: settings modal and General preferences', () => {
     await scaffold?.close()
   })
 
+  beforeEach(async () => {
+    if (await page.getByRole('dialog', { name: 'Settings', exact: true }).count() > 0) {
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('Escape')
+    }
+  })
+
   it('opens the Usage settings section before any model calls', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-settings-usage'))
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
@@ -61,6 +68,23 @@ describe('web e2e: settings modal and General preferences', () => {
     await dialog.getByRole('button', { name: 'Usage' }).click()
     await dialog.getByRole('heading', { name: 'Usage', exact: true }).waitFor({ timeout: 10_000 })
     await dialog.getByText('No token usage yet.', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.keyboard.press('Escape')
+    expect(tripwire.pageErrors).toEqual([])
+  }, 30_000)
+
+  it('finds General contributions and sections and reports an empty search', async () => {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Settings' })
+    const search = dialog.getByRole('searchbox', { name: 'Search settings' })
+    await search.fill('Send shortcut')
+    await dialog.getByRole('combobox', { name: 'Send shortcut' }).waitFor()
+    expect(await dialog.getByRole('heading', { name: 'Composer', exact: true }).count()).toBe(1)
+    expect(await dialog.getByRole('heading', { name: 'Permissions', exact: true }).count()).toBe(0)
+    await search.fill('Models')
+    expect(await dialog.getByRole('button', { name: 'Models', exact: true }).count()).toBe(1)
+    await search.fill('missing-setting-xyz')
+    await dialog.getByRole('status').filter({ hasText: 'No matching settings' }).waitFor()
+    await search.fill('')
     await page.keyboard.press('Escape')
     expect(tripwire.pageErrors).toEqual([])
   }, 30_000)
@@ -79,7 +103,7 @@ describe('web e2e: settings modal and General preferences', () => {
         { width: 560, height: 700 },
       ]) {
         await page.setViewportSize(viewport)
-        for (const section of ['General', 'Models', 'Plugins']) {
+        for (const section of ['General', 'Models', 'Accounts', 'Plugins']) {
           await dialog.getByRole('button', { name: section, exact: true }).click()
           await expect.poll(async () => {
             const bounds = await dialog.boundingBox()
@@ -187,65 +211,60 @@ describe('web e2e: settings modal and General preferences', () => {
     )
     await compareOrRefreshGolden(PLUGINS_EXPECTED, pluginsSnapshot, MODE)
     const toggleRow = inventoryPanel.locator(PLUGIN_TOGGLE_ROW_SELECTOR)
-    await toggleRow.getByRole('switch', { name: 'Disable plugin session-stats', exact: true }).waitFor()
+    await toggleRow.getByRole('switch', { name: 'Disable plugin command-feedback', exact: true }).waitFor()
     const toggleSnapshot = await captureStableAria(
       page,
       PLUGIN_TOGGLE_ROW_SELECTOR,
       scaffold.workspaceCwd,
     )
     await compareOrRefreshGolden(PLUGIN_TOGGLE_EXPECTED, toggleSnapshot, MODE)
-    await toggleRow.getByRole('switch', { name: 'Disable plugin session-stats', exact: true }).click()
-    await toggleRow.getByRole('switch', { name: 'Enable plugin session-stats', exact: true }).waitFor()
-    expect((await inventory.list()).entries.find(entry => entry.moduleName === '@hydraharness/harness-session-stats')?.enabled).toBe(true)
+    await toggleRow.getByRole('switch', { name: 'Disable plugin command-feedback', exact: true }).click()
+    await toggleRow.getByRole('switch', { name: 'Enable plugin command-feedback', exact: true }).waitFor()
+    expect((await inventory.list()).entries.find(entry => entry.moduleName === '@hydraharness/harness-command-feedback')?.enabled).toBe(true)
     await toggleRow.locator('[role="button"]').click()
-    const toggleDetails = page.getByRole('dialog', { name: 'session-stats', exact: true })
+    const toggleDetails = page.getByRole('dialog', { name: 'command-feedback', exact: true })
     await toggleDetails.getByText('Unsaved change', { exact: true }).waitFor()
     await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'plugin-draft.expected.md'),
-      await captureStableAria(page, '[role="dialog"][aria-label="session-stats"]', scaffold.workspaceCwd), MODE)
+      await captureStableAria(page, '[role="dialog"][aria-label="command-feedback"]', scaffold.workspaceCwd), MODE)
     await toggleDetails.getByRole('button', { name: 'Close plugin details', exact: true }).click()
     await inventoryPanel.getByRole('button', { name: 'Save plugin settings', exact: true }).click()
     await expect.poll(async () => (await inventory.list()).entries
-      .find(entry => entry.moduleName === '@hydraharness/harness-session-stats' && entry.presetId === undefined)?.enabled).toBe(false)
+      .find(entry => entry.moduleName === '@hydraharness/harness-command-feedback' && entry.presetId === undefined)?.enabled).toBe(false)
     const settingsPath = join(scaffold.harnessHome, 'settings.yaml')
     expect(parseYaml(await readFile(settingsPath, 'utf8'))).toMatchObject({
-      plugins: { enabled: { '@hydraharness/harness-session-stats': false } },
+      plugins: { enabled: { '@hydraharness/harness-command-feedback': false } },
     })
     await toggleRow.locator('[role="button"]').click()
-    const savedToggleDetails = page.getByRole('dialog', { name: 'session-stats', exact: true })
+    const savedToggleDetails = page.getByRole('dialog', { name: 'command-feedback', exact: true })
     await expect.poll(() => savedToggleDetails.getByText('Unsaved change', { exact: true }).count()).toBe(0)
     await savedToggleDetails.getByText('Changed since app start', { exact: true }).waitFor()
     await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'plugin-saved.expected.md'),
-      await captureStableAria(page, '[role="dialog"][aria-label="session-stats"]', scaffold.workspaceCwd), MODE)
+      await captureStableAria(page, '[role="dialog"][aria-label="command-feedback"]', scaffold.workspaceCwd), MODE)
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
     await trigger.click()
     await dialog.getByRole('button', { name: 'Plugins', exact: true }).click()
     await dialog.getByRole('tab', { name: 'Plugins', exact: true }).click()
     await toggleRow.locator('[role="button"]').click()
-    const reopenedToggleDetails = page.getByRole('dialog', { name: 'session-stats', exact: true })
+    const reopenedToggleDetails = page.getByRole('dialog', { name: 'command-feedback', exact: true })
     await reopenedToggleDetails.getByText('Changed since app start', { exact: true }).waitFor()
     await reopenedToggleDetails.getByRole('button', { name: 'Close plugin details', exact: true }).click()
-    await toggleRow.getByRole('switch', { name: 'Enable plugin session-stats', exact: true }).click()
-    await toggleRow.getByRole('switch', { name: 'Disable plugin session-stats', exact: true }).waitFor()
+    await toggleRow.getByRole('switch', { name: 'Enable plugin command-feedback', exact: true }).click()
+    await toggleRow.getByRole('switch', { name: 'Disable plugin command-feedback', exact: true }).waitFor()
     await inventoryPanel.getByRole('button', { name: 'Save plugin settings', exact: true }).click()
     await expect.poll(async () => (await inventory.list()).entries
-      .find(entry => entry.moduleName === '@hydraharness/harness-session-stats' && entry.presetId === undefined)?.enabled).toBe(true)
+      .find(entry => entry.moduleName === '@hydraharness/harness-command-feedback' && entry.presetId === undefined)?.enabled).toBe(true)
     expect(parseYaml(await readFile(settingsPath, 'utf8'))).toMatchObject({
-      plugins: { enabled: { '@hydraharness/harness-session-stats': true } },
+      plugins: { enabled: { '@hydraharness/harness-command-feedback': true } },
     })
-    await pluginRow.getByRole('switch', { name: 'Disable plugin ui-settings', exact: true }).click()
-    await inventoryPanel.getByRole('button', { name: 'Save plugin settings', exact: true }).click()
-    await expect.poll(async () => (await inventory.list()).entries.find(entry => entry.moduleName === '@hydraharness/harness-client-ui-settings')?.restartRequired).toBe(true)
-    expect((await inventory.list()).entries.find(entry => entry.moduleName === '@hydraharness/harness-client-ui-settings')?.enabled).toBe(true)
+    expect(await pluginRow.getByRole('switch').count()).toBe(0)
+    expect((await inventory.list()).entries.find(entry => entry.moduleName === '@hydraharness/harness-client-ui-settings')?.required).toBe(true)
     await pluginRow.locator('[role="button"]').click()
     const pluginDetails = page.getByRole('dialog', { name: 'ui-settings', exact: true })
-    await pluginDetails.getByText('This change will apply after restart.', { exact: true }).waitFor()
+    await pluginDetails.getByText('Required by Hydra or another enabled plugin.', { exact: true }).waitFor()
     await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'plugin-core-pending.expected.md'),
       await captureStableAria(page, '[role="dialog"][aria-label="ui-settings"]', scaffold.workspaceCwd), MODE)
     await pluginDetails.getByRole('button', { name: 'Close plugin details', exact: true }).click()
-    await pluginRow.getByRole('switch', { name: 'Enable plugin ui-settings', exact: true }).click()
-    await inventoryPanel.getByRole('button', { name: 'Save plugin settings', exact: true }).click()
-    await expect.poll(async () => (await inventory.list()).entries.find(entry => entry.moduleName === '@hydraharness/harness-client-ui-settings')?.restartRequired).toBe(false)
     // Close path 1: Escape.
     await page.keyboard.press('Escape')
     await expect.poll(() => page.getByRole('dialog', { name: 'Settings' }).count(), { timeout: 5_000 }).toBe(0)
@@ -480,9 +499,8 @@ describe('web e2e: settings modal and General preferences', () => {
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Settings' })
     await dialog.waitFor({ timeout: 10_000 })
-    await dialog.getByRole('button', { name: 'Queue' }).click()
-    await page.getByRole('menuitem', { name: 'Steer' }).click()
-    await dialog.getByRole('button', { name: 'Steer' }).waitFor({ timeout: 10_000 })
+    await dialog.getByRole('combobox', { name: 'Follow-up behavior' }).selectOption('steer')
+    await expect.poll(() => dialog.getByRole('combobox', { name: 'Follow-up behavior' }).inputValue()).toBe('steer')
     expect(await page.evaluate(() => localStorage.getItem('hydra.conversation.busyEnter'))).toBeNull()
     await expect.poll(async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'), { timeout: 5_000 })
       .toMatch(/ui-conversation:\n\s+busyEnter: steer/)
@@ -494,7 +512,7 @@ describe('web e2e: settings modal and General preferences', () => {
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     const reloaded = page.getByRole('dialog', { name: 'Settings' })
-    await reloaded.getByRole('button', { name: 'Steer' }).waitFor({ timeout: 10_000 })
+    await expect.poll(() => reloaded.getByRole('combobox', { name: 'Follow-up behavior' }).inputValue()).toBe('steer')
 
     const second = await launchWebScaffold({ harnessHome: scaffold.harnessHome })
     const secondPage = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: 'en-US' })
@@ -504,8 +522,7 @@ describe('web e2e: settings modal and General preferences', () => {
       await secondPage.goto(second.baseUrl, { waitUntil: 'load' })
       await secondPage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
       await secondPage.getByRole('button', { name: 'Settings', exact: true }).click()
-      await secondPage.getByRole('dialog', { name: 'Settings' })
-        .getByRole('button', { name: 'Steer' }).waitFor({ timeout: 10_000 })
+      await expect.poll(() => secondPage.getByRole('dialog', { name: 'Settings' }).getByRole('combobox', { name: 'Follow-up behavior' }).inputValue()).toBe('steer')
       expect(await secondPage.evaluate(() => localStorage.getItem('hydra.conversation.busyEnter'))).toBeNull()
       expect(secondTripwire.pageErrors).toEqual([])
       expect(secondTripwire.warnings).toEqual([])
@@ -514,9 +531,8 @@ describe('web e2e: settings modal and General preferences', () => {
       await second.close()
     }
 
-    await reloaded.getByRole('button', { name: 'Steer' }).click()
-    await page.getByRole('menuitem', { name: 'Queue' }).click()
-    await reloaded.getByRole('button', { name: 'Queue' }).waitFor({ timeout: 10_000 })
+    await reloaded.getByRole('combobox', { name: 'Follow-up behavior' }).selectOption('queue')
+    await expect.poll(() => reloaded.getByRole('combobox', { name: 'Follow-up behavior' }).inputValue()).toBe('queue')
     expect(await page.evaluate(() => localStorage.getItem('hydra.conversation.busyEnter'))).toBeNull()
     await expect.poll(async () => readFile(join(scaffold.harnessHome, 'settings.yaml'), 'utf8'), { timeout: 5_000 })
       .toMatch(/ui-conversation:\n\s+busyEnter: queue/)
@@ -541,7 +557,7 @@ describe('web e2e: settings modal and General preferences', () => {
       await enPage.getByRole('button', { name: 'Settings', exact: true }).click()
       const dialog = enPage.getByRole('dialog', { name: 'Settings' })
       await dialog.waitFor({ timeout: 10_000 })
-      await dialog.getByRole('button', { name: 'English' }).waitFor({ timeout: 10_000 })
+      await dialog.getByRole('button', { name: 'Auto', exact: true }).waitFor({ timeout: 10_000 })
       // This page has no closing inventory spec to sweep its console, so the
       // scenario clears both tripwire channels itself.
       expect(enTripwire.pageErrors).toEqual([])
@@ -566,7 +582,7 @@ describe('web e2e: settings modal and General preferences', () => {
       await frPage.getByRole('button', { name: 'Settings', exact: true }).click()
       const dialog = frPage.getByRole('dialog', { name: 'Settings' })
       await dialog.waitFor({ timeout: 10_000 })
-      await dialog.getByRole('button', { name: 'English' }).waitFor({ timeout: 10_000 })
+      await dialog.getByRole('button', { name: 'Auto', exact: true }).waitFor({ timeout: 10_000 })
       // The markup already ships `en`, so this alone cannot prove the sync ran;
       // asserted anyway so a future change that resolves en but writes the
       // wrong tag is caught.

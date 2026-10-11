@@ -114,6 +114,7 @@ export class FakeApiClient implements IApiClient {
     payload => Promise.resolve(ok({ deleted: true as const, sessionIds: [payload.sessionId] }))
 
   readonly sessions: IApiClient['sessions'] = {
+    suggestions: (payload: unknown) => this.record('session.suggestions', payload, Promise.resolve(ok({ items: [] }))),
     list: (payload: unknown) => this.record('session.list', payload, this.onList(payload)),
     search: (payload: unknown, signal?: AbortSignal) => {
       this.lastSearchSignal = signal
@@ -230,6 +231,8 @@ export class FakeApiClient implements IApiClient {
     writeInstructions: payload => this.record('settings.writeInstructions', payload, Promise.resolve(ok({ content: '', revision: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' }))),
     listMemories: payload => this.record('settings.listMemories', payload, Promise.resolve(ok({ entries: [] }))),
     removeMemory: payload => this.record('settings.removeMemory', payload, Promise.resolve(ok({ removed: false }))),
+    workspaceStatus: payload => this.record('settings.workspaceStatus', payload, Promise.resolve(ok({ workspaceId: payload.workspaceId, trusted: false, hasProjectConfig: false, trustDecided: false }))),
+    setWorkspaceTrust: payload => this.record('settings.setWorkspaceTrust', payload, Promise.resolve(ok({ workspaceId: payload.workspaceId, trusted: payload.trusted, hasProjectConfig: false, trustDecided: true }))),
   }
 
   readonly credentials: IApiClient['credentials'] = {

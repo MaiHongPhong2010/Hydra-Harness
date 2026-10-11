@@ -59,6 +59,8 @@ export interface Config {
    * configured root. False mounts a roster over `roots` alone.
    */
   includeUserRoot: boolean
+  /** Canonical workspace directory confining authoring to its `.hydra/agent-presets`. */
+  workspaceRoot?: string
 }
 
 /**

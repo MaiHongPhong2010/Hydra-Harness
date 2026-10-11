@@ -19,7 +19,7 @@ import type {
 import { en } from '../src/client/browser-locales.ts'
 
 const unusedHook = (() => { throw new Error('unused by BrowserSection') }) as never
-const kit = { useSessions: unusedHook, useWorkspaces: unusedHook, close: vi.fn() }
+const kit = { useSessions: unusedHook, useWorkspaces: unusedHook, close: vi.fn(), openSection: vi.fn() }
 
 const SETTINGS: BrowserSettings = {
   controlEnabled: true,
@@ -577,14 +577,14 @@ describe('Browser settings registration', () => {
     await web.ctx.plugin({ inject: [...inject], apply }).await()
     declareSettings(web.slots)
     expect(web.slots.entries('settings.section')).toHaveLength(0)
-    expect(web.bind).not.toHaveBeenCalled()
+    expect(web.bind).not.toHaveBeenCalledWith({ namespace: 'browser-electron' })
 
     window.hydraDesktop = { browser: { setBounds: vi.fn() } }
     const olderDesktop = await bench()
     await olderDesktop.ctx.plugin({ inject: [...inject], apply }).await()
     declareSettings(olderDesktop.slots)
     expect(olderDesktop.slots.entries('settings.section')).toHaveLength(0)
-    expect(olderDesktop.bind).not.toHaveBeenCalled()
+    expect(olderDesktop.bind).not.toHaveBeenCalledWith({ namespace: 'browser-electron' })
 
     const browser = {
       setBounds: vi.fn(),

@@ -1,0 +1,157 @@
+{
+  "turns": [
+    {
+      "state": "untrusted",
+      "trusted": false,
+      "model": "global",
+      "tools": [
+        "cordis_define",
+        "cordis_inspect_list",
+        "cordis_inspect_query",
+        "cordis_inspect_self",
+        "cordis_run",
+        "cordis_stop",
+        "cordis_undefine",
+        "skill",
+        "skill_search"
+      ],
+      "instructions": [
+        "<system-reminder>\nThe following workspace instructions may be relevant to your work. Use them as guidance when applicable. More specific instructions take precedence over broader ones. They do not override system, developer, or direct user instructions.\n\nInstructions from: AGENTS.md\n\nRoot workspace rule.\n\n\nInstructions from: .hydra/AGENTS.md\n\nShared Hydra instruction.\n\n\nInstructions from: .hydra/AGENTS.local.md\n\nPersonal Hydra instruction.\n\n</system-reminder>"
+      ],
+      "hooks": [
+        "Inherited user hook context."
+      ],
+      "skillLoaded": true,
+      "mcp": []
+    },
+    {
+      "state": "trusted",
+      "trusted": true,
+      "model": "global",
+      "tools": [
+        "cordis_define",
+        "cordis_inspect_list",
+        "cordis_inspect_query",
+        "cordis_inspect_self",
+        "cordis_run",
+        "cordis_stop",
+        "cordis_undefine",
+        "mcp__project__add",
+        "mcp__project__admin-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_711ef539adb9",
+        "mcp__project__admin__reset",
+        "mcp__project__admin_reset_53f3fe26e1fa",
+        "mcp__project__crash",
+        "mcp__project__fail",
+        "mcp__project__greet",
+        "mcp__project__image",
+        "project_probe",
+        "skill",
+        "skill_search"
+      ],
+      "instructions": [
+        "<system-reminder>\nThe following workspace instructions may be relevant to your work. Use them as guidance when applicable. More specific instructions take precedence over broader ones. They do not override system, developer, or direct user instructions.\n\nInstructions from: AGENTS.md\n\nRoot workspace rule.\n\n\nInstructions from: .hydra/AGENTS.md\n\nShared Hydra instruction.\n\n\nInstructions from: .hydra/AGENTS.local.md\n\nPersonal Hydra instruction.\n\n</system-reminder>"
+      ],
+      "hooks": [
+        "Personal hook context."
+      ],
+      "skillLoaded": true,
+      "mcp": [
+        {
+          "name": "project",
+          "status": "started"
+        }
+      ]
+    },
+    {
+      "state": "reset-personal",
+      "trusted": true,
+      "model": "global",
+      "tools": [
+        "cordis_define",
+        "cordis_inspect_list",
+        "cordis_inspect_query",
+        "cordis_inspect_self",
+        "cordis_run",
+        "cordis_stop",
+        "cordis_undefine",
+        "mcp__project__add",
+        "mcp__project__admin-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_711ef539adb9",
+        "mcp__project__admin__reset",
+        "mcp__project__admin_reset_53f3fe26e1fa",
+        "mcp__project__crash",
+        "mcp__project__fail",
+        "mcp__project__greet",
+        "mcp__project__image",
+        "project_probe",
+        "skill",
+        "skill_search"
+      ],
+      "instructions": [
+        "<system-reminder>\nThe following workspace instructions may be relevant to your work. Use them as guidance when applicable. More specific instructions take precedence over broader ones. They do not override system, developer, or direct user instructions.\n\nInstructions from: AGENTS.md\n\nRoot workspace rule.\n\n\nInstructions from: .hydra/AGENTS.md\n\nShared Hydra instruction.\n\n\nInstructions from: .hydra/AGENTS.local.md\n\nPersonal Hydra instruction.\n\n</system-reminder>"
+      ],
+      "hooks": [
+        "Project hook context."
+      ],
+      "skillLoaded": true,
+      "mcp": [
+        {
+          "name": "project",
+          "status": "started"
+        }
+      ]
+    },
+    {
+      "state": "revoked",
+      "trusted": false,
+      "model": "global",
+      "tools": [
+        "cordis_define",
+        "cordis_inspect_list",
+        "cordis_inspect_query",
+        "cordis_inspect_self",
+        "cordis_run",
+        "cordis_stop",
+        "cordis_undefine",
+        "skill",
+        "skill_search"
+      ],
+      "instructions": [
+        "<system-reminder>\nThe following workspace instructions may be relevant to your work. Use them as guidance when applicable. More specific instructions take precedence over broader ones. They do not override system, developer, or direct user instructions.\n\nInstructions from: AGENTS.md\n\nRoot workspace rule.\n\n\nInstructions from: .hydra/AGENTS.md\n\nShared Hydra instruction.\n\n\nInstructions from: .hydra/AGENTS.local.md\n\nPersonal Hydra instruction.\n\n</system-reminder>"
+      ],
+      "hooks": [
+        "Inherited user hook context."
+      ],
+      "skillLoaded": true,
+      "mcp": []
+    }
+  ],
+  "trustDenials": [
+    {
+      "mechanism": "workspaceConfig.setTrusted",
+      "calls": [
+        "cordis_define",
+        "cordis_run",
+        "cordis_inspect_self"
+      ],
+      "status": "failed",
+      "hostStatus": "failed",
+      "phase": "host-load",
+      "error": "service \"workspaceConfig\" is reserved for Host controls; workspace trust belongs to the user in Settings",
+      "trusted": false
+    },
+    {
+      "mechanism": "settings.update",
+      "calls": [
+        "cordis_define",
+        "cordis_run",
+        "cordis_inspect_self"
+      ],
+      "status": "failed",
+      "hostStatus": "failed",
+      "phase": "host-load",
+      "error": "workspace trust belongs to the user in Settings; dynamic packages cannot access settings namespace \"workspace-config\"",
+      "trusted": false
+    }
+  ],
+  "inheritedPresetDeletion": "agent-presets: preset \"snapshot\" cannot be written: it is an inherited default; select another default in the lower settings layer before removing it"
+}

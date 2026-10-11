@@ -1,0 +1,10 @@
+- menu "Model and reasoning effort":
+  - menuitem "Model DeepSeek-V4-Flash":
+    - text: Model DeepSeek-V4-Flash
+    - img
+  - menuitem "Image model fresh-raster-alias":
+    - text: Image model fresh-raster-alias
+    - img
+  - menuitem "Video model fresh-motion-alias":
+    - text: Video model fresh-motion-alias
+    - img

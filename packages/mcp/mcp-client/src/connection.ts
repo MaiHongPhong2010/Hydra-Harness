@@ -18,6 +18,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { Context } from '@hydraharness/cordis'
+import type {} from '@hydraharness/harness-suggested-prompts'
+import { scopeOf } from '@hydraharness/harness-scope'
 import { MAX_TIMER_DELAY_MS } from '@hydraharness/harness-timeout'
 import { createTransport } from './transport.ts'
 import { syncTools } from './tools.ts'
@@ -137,6 +139,32 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   let disposed = false
   /** Current generation: the connecting or connected client; undefined during backoff waits and after final failure. */
   let client: Client | undefined
+  ctx.inject(['suggestedPrompts'], (sctx) => {
+    sctx.effect(() => sctx.suggestedPrompts.registerSource({ name: `MCP ${config.serverName}`, scope: scopeOf(ctx),
+      async read(_agent, signal, maxBytes, maxResources) {
+        const generation = client
+        if (generation?.getServerCapabilities()?.resources === undefined) return ''
+        const resources = await generation.listResources({}, { signal })
+        const parts: string[] = []
+        let remaining = maxBytes
+        for (const resource of resources.resources.slice(0, maxResources)) {
+          signal.throwIfAborted()
+          const result = await generation.readResource({ uri: resource.uri }, { signal })
+          for (const content of result.contents) {
+            if (!('text' in content) || typeof content.text !== 'string') continue
+            const text = `${resource.name}:\n${content.text}`
+            const size = Buffer.byteLength(text)
+            if (size > remaining) throw new Error('MCP resource exceeded the suggestion data budget')
+            parts.push(text)
+            remaining -= size
+          }
+        }
+        const text = parts.join('\n')
+        if (Buffer.byteLength(text) > maxBytes) throw new Error('MCP resources exceeded the suggestion data budget')
+        return text
+      },
+    }), 'mcp-client: suggestion source')
+  })
   /** Close signal paired with {@link client}; captured by dispose before current ownership is cleared. */
   let clientClosed: Promise<void> | undefined
   /** Live tool registrations owned by this server; only {@link enqueueSync} and dispose swap it. */

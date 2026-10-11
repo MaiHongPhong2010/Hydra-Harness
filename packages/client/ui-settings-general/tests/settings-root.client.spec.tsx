@@ -2,8 +2,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useEffect, useState } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { bindSnapshotSelector } from '@hydraharness/harness-client-test-runtime'
+import { createSnapshotStore } from '@hydraharness/harness-client-runtime/client'
 import type { SettingsRootComponentProps } from '../src/client/shell-contract.ts'
 import { SettingsRoot } from '../src/client/SettingsRoot.tsx'
+import type { SettingsSectionOwnerProps } from '@hydraharness/harness-client-ui-settings/client'
 
 afterEach(cleanup)
 
@@ -48,10 +51,14 @@ function mount({
       current: 'active-session',
       byId: { 'active-session': { blank: false } },
     })) as never
-  const unusedHook = (() => { throw new Error('unused by SettingsRoot') }) as never
   const props: SettingsRootComponentProps = {
+    searchCopy: { label: 'Search settings', empty: 'No matching settings' },
+    useGeneralItems: select => select([{ slot: 'settings.general.composer.item', id: 'shortcut', order: 0, label: 'Composer Send shortcut' }]),
     useSessions,
-    useWorkspaces: unusedHook,
+    useWorkspaces: select => select({ items: [] } as never),
+    workspaceStatus: vi.fn(),
+    trustWorkspace: vi.fn(),
+    trustCopy: { title: 'Trust workspace?', description: 'Project commands run on your computer.', allow: 'Trust', cancel: 'Cancel' },
     wide,
     useOnboardingSteps: select => select(steps),
     useSections: (select) => {
@@ -162,6 +169,70 @@ describe('SettingsPanel close paths', () => {
 })
 
 describe('SettingsPanel navigation', () => {
+  it('lets a section clear sidebar search, open another page, and focus its heading', () => {
+    const { renderSlot } = mount({ rows: [
+      { id: 'models', order: 10, label: 'Models' }, { id: 'accounts', order: 11, label: 'Accounts' },
+    ] })
+    renderSlot.mockImplementation(((key: string, owner: SettingsSectionOwnerProps, options?: { only?: string }) => {
+      if (key !== 'settings.section') return SEAT_CONTENT[key]
+      return <div><h2>{options?.only}</h2>
+        <button onClick={() => { owner.openSection(options?.only === 'models' ? 'accounts' : 'models') }}>Manage</button></div>
+    }) as SettingsRootComponentProps['renderSlot'])
+    openPanel()
+    const search = screen.getByRole('searchbox')
+    fireEvent.change(search, { target: { value: 'Models' } })
+    expect(screen.queryByRole('button', { name: 'Accounts' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    expect(search).toHaveProperty('value', '')
+    expect(screen.getByRole('button', { name: 'Accounts' }).getAttribute('aria-current')).toBe('true')
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'accounts' }))
+    fireEvent.change(search, { target: { value: 'Accounts' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'models' }))
+  })
+  it('finds General by preference labels, other sections by name, and shows no-match feedback', () => {
+    mount()
+    openPanel()
+    const search = screen.getByRole('searchbox', { name: 'Search settings' })
+    fireEvent.change(search, { target: { value: 'shortcut' } })
+    expect(screen.getByTestId('section-general')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Models' })).toBeNull()
+    fireEvent.change(search, { target: { value: 'models' } })
+    expect(screen.getByTestId('section-models')).toBeTruthy()
+    fireEvent.change(search, { target: { value: 'missing feature' } })
+    expect(screen.getByRole('status').textContent).toBe('No matching settings')
+  })
+  it('retains global settings navigation and drafts when the current workspace changes', async () => {
+    const sessions = createSnapshotStore({ phase: 'ready', current: 'session-a', byId: {} })
+    function DraftSection() {
+      const [draft, setDraft] = useState('')
+      return <input aria-label="Model draft" value={draft} onChange={(event) => { setDraft(event.currentTarget.value) }} />
+    }
+    const props: SettingsRootComponentProps = {
+      searchCopy: { label: 'Search settings', empty: 'No matching settings' },
+      useGeneralItems: select => select([]),
+      wide: true,
+      useSessions: bindSnapshotSelector(sessions) as never,
+      useWorkspaces: select => select({ items: ['a', 'b'].map(id => ({
+        workspaceId: `workspace-${id}`, path: `/workspace-${id}`, sessionIds: [`session-${id}`],
+      })) } as never),
+      workspaceStatus: vi.fn<SettingsRootComponentProps['workspaceStatus']>(async workspaceId => ({
+        workspaceId, trusted: false, trustDecided: true, hasProjectConfig: true,
+      })),
+      trustWorkspace: vi.fn(),
+      trustCopy: { title: 'Trust workspace?', description: 'Project commands run on your computer.', allow: 'Trust', cancel: 'Cancel' },
+      useSections: select => select([{ id: 'models', order: 0, label: 'Models' }, { id: 'usage', order: 1, label: 'Usage' }]),
+      useOnboardingSteps: select => select([]),
+      renderSlot: key => key === 'settings.section' ? <DraftSection /> : SEAT_CONTENT[key],
+    }
+    render(<SettingsRoot {...props} />)
+    openPanel()
+    fireEvent.change(screen.getByLabelText('Model draft'), { target: { value: 'Global draft' } })
+    await act(async () => { sessions.update((draft) => { draft.current = 'session-b' }) })
+    expect(screen.getByLabelText('Model draft')).toHaveProperty('value', 'Global draft')
+    expect(screen.getByRole('button', { name: 'Usage' })).toBeTruthy()
+  })
+
   it('projects rows, marks the first active, and renders only that section', () => {
     mount()
     openPanel()

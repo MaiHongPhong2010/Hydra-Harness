@@ -17,9 +17,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@hydraharness/cordis'
 import Loader from '@hydraharness/cordis-plugin-loader'
 import FileSettingsProvider from '@hydraharness/harness-settings-file'
+import McpServerRegistry, { MCP_SERVERS_SETTINGS_NAMESPACE } from '@hydraharness/harness-mcp-registry'
+import HookRecordRegistry, { HOOKS_SETTINGS_NAMESPACE } from '@hydraharness/harness-hooks-registry'
 import type { ImportedPluginEntry, ImportedPluginIdentity, ImportedPluginRuntime } from '@hydraharness/harness-plugin-runtime'
 import PluginInventoryGateway from '../src/index.ts'
-import type { AddPluginMarketplaceRequest } from '../src/types.ts'
+import type { AddPluginMarketplaceRequest, SettingsTarget } from '../src/types.ts'
 
 vi.mock('node:fs/promises', async (original) => {
   const fs = await original<typeof import('node:fs/promises')>()
@@ -162,6 +164,149 @@ describe('OpenAI/Codex marketplace sources', () => {
     for (const [call, handler, args] of calls) {
       await expect(call()).resolves.toBeDefined()
       expect(handler).toHaveBeenLastCalledWith(...args)
+    }
+  })
+
+  it('routes MCP and hook edits and projections to the selected workspace layer', async () => {
+    const { ctx, inventory } = await harness()
+    const workspaceIds = ['workspace-a', 'workspace-b'] as NonNullable<SettingsTarget['workspaceId']>[]
+    const environments = new Map(workspaceIds.map((workspaceId) => {
+      const environment = new Context()
+      contexts.push(environment)
+      const mcp = { list: vi.fn(() => ({ servers: [{ name: workspaceId }] })),
+        define: vi.fn(async () => ({ servers: [] })), setEnabled: vi.fn(async () => ({ servers: [] })),
+        remove: vi.fn(async () => ({ servers: [] })) }
+      const hooks = { list: vi.fn(() => ({ records: [{ name: workspaceId }] })),
+        define: vi.fn(async () => ({ records: [] })), setEnabled: vi.fn(async () => ({ records: [] })),
+        remove: vi.fn(async () => ({ records: [] })) }
+      environment.provide('mcpServers', mcp as never)
+      environment.provide('hookRecords', hooks as never)
+      return [workspaceId, { ctx: environment, mcp, hooks }] as const
+    }))
+    const layers = { shared: {}, local: {} }
+    const environmentFor = vi.fn(async (workspaceId: NonNullable<SettingsTarget['workspaceId']>) => {
+      const environment = environments.get(workspaceId)
+      if (environment === undefined) throw new Error('workspace is not registered')
+      return environment
+    })
+    const settingsFor = vi.fn(async (_workspaceId: NonNullable<SettingsTarget['workspaceId']>, layer: 'shared' | 'local') => layers[layer])
+    ctx.provide('workspaceConfig', { environmentFor, settingsFor } as never)
+
+    for (const [workspaceId, environment] of environments) {
+      const layer = workspaceId === workspaceIds[0] ? 'shared' : 'local'
+      const target = { workspaceId, layer } as const
+      const server = { mode: 'create', name: 'same', transport: 'stdio', command: 'node', ...target } as const
+      const hook = { mode: 'create', name: 'same', dialect: 'claude-code', config: { hooks: {} }, ...target } as const
+      const enabled = { name: 'same', enabled: true, ...target }
+      const remove = { name: 'same', ...target }
+      const calls = [
+        [() => inventory.listMcpServers(target), environment.mcp.list, [layers[layer]], 'servers'],
+        [() => inventory.defineMcpServer(server), environment.mcp.define, [server, layers[layer]], 'servers'],
+        [() => inventory.setMcpServerEnabled(enabled), environment.mcp.setEnabled, [enabled, layers[layer]], 'servers'],
+        [() => inventory.removeMcpServer(remove), environment.mcp.remove, ['same', layers[layer]], 'servers'],
+        [() => inventory.listHookRecords(target), environment.hooks.list, [layers[layer]], 'records'],
+        [() => inventory.defineHookRecord(hook), environment.hooks.define, [hook, layers[layer]], 'records'],
+        [() => inventory.setHookRecordEnabled(enabled), environment.hooks.setEnabled, [enabled, layers[layer]], 'records'],
+        [() => inventory.removeHookRecord(remove), environment.hooks.remove, ['same', layers[layer]], 'records'],
+      ] as const
+      for (const [call, handler, args, field] of calls) {
+        await expect(call()).resolves.toMatchObject({ ...target, [field]: [{ name: workspaceId }] })
+        expect(handler).toHaveBeenLastCalledWith(...args)
+      }
+      expect(settingsFor).toHaveBeenLastCalledWith(workspaceId, layer)
+    }
+    const workspaceId = workspaceIds[0]!
+    await expect(inventory.listMcpServers({ workspaceId })).resolves.toMatchObject({ workspaceId, layer: 'local' })
+    expect(settingsFor).toHaveBeenLastCalledWith(workspaceId, 'local')
+    settingsFor.mockClear()
+    await expect(inventory.removeHookRecord({ name: 'same', workspaceId: 'unknown' as NonNullable<SettingsTarget['workspaceId']> }))
+      .rejects.toThrow('workspace is not registered')
+    expect(settingsFor).not.toHaveBeenCalled()
+  })
+
+  it('rejects a workspace target when workspace configuration is not composed', async () => {
+    const { inventory } = await harness()
+    const target = { workspaceId: 'unknown' as NonNullable<SettingsTarget['workspaceId']> }
+    await expect(inventory.listMcpServers(target)).rejects.toThrow('workspace configuration is unavailable')
+    await expect(inventory.listHookRecords(target)).rejects.toThrow('workspace configuration is unavailable')
+  })
+
+  it('projects shared definitions independently from local overrides while project execution is disabled', async () => {
+    const { ctx, inventory } = await harness()
+    const root = await mkdtemp(join(tmpdir(), 'hydra-inventory-record-layers-'))
+    directories.push(root)
+    const tools = { schemas: () => [] }
+    ctx.provide('tools', tools as never)
+    ctx.provide('shell', {} as never)
+    await ctx.plugin(McpServerRegistry)
+    await ctx.plugin(HookRecordRegistry, { hydraHome: root })
+    const shared = new Context()
+    const local = new Context()
+    contexts.push(shared, local)
+    await shared.plugin(FileSettingsProvider, { path: join(root, 'settings.yaml'), watch: false })
+    shared.settings.inherit(ctx.settings, [MCP_SERVERS_SETTINGS_NAMESPACE, HOOKS_SETTINGS_NAMESPACE])
+    await local.plugin(FileSettingsProvider, { path: join(root, 'settings.local.yaml'), watch: false })
+    local.settings.inherit(shared.settings, [MCP_SERVERS_SETTINGS_NAMESPACE, HOOKS_SETTINGS_NAMESPACE])
+    local.provide('tools', tools as never)
+    local.provide('shell', {} as never)
+    await local.plugin(McpServerRegistry)
+    await local.plugin(HookRecordRegistry, { hydraHome: join(root, 'local-hooks') })
+    ctx.provide('workspaceConfig', {
+      environmentFor: async () => ({ ctx: local, presets: undefined }),
+      settingsFor: async (_id: unknown, layer: 'shared' | 'local') => layer === 'shared' ? shared.settings : local.settings,
+    } as never)
+    const workspaceId = 'workspace' as NonNullable<SettingsTarget['workspaceId']>
+    const sharedTarget = { workspaceId, layer: 'shared' } as const
+    const localTarget = { workspaceId, layer: 'local' } as const
+    await inventory.defineMcpServer({ mode: 'create', name: 'same', transport: 'stdio', command: 'shared-command',
+      env: { TOKEN: 'shared-secret' }, ...sharedTarget })
+    await inventory.defineMcpServer({ mode: 'replace', name: 'same', transport: 'stdio', command: 'local-command',
+      env: { TOKEN: 'local-secret' }, ...localTarget })
+    await inventory.defineHookRecord({ mode: 'create', name: 'same', dialect: 'claude-code',
+      config: { Stop: [{ hooks: [{ type: 'command', command: 'shared-hook' }] }] }, ...sharedTarget })
+    await inventory.defineHookRecord({ mode: 'replace', name: 'same', dialect: 'codex',
+      config: { Stop: [{ hooks: [{ type: 'command', command: 'local-hook' }] }] }, ...localTarget })
+    shared.settings.setLayerEnabled(false)
+    local.settings.setLayerEnabled(false)
+    await local.get('mcpServers')!.settle()
+    await local.get('hookRecords')!.settle()
+    expect(local.get('mcpServers')!.list().servers).toEqual([])
+    expect(local.get('hookRecords')!.list().records).toEqual([])
+    const sharedMcp = await inventory.listMcpServers(sharedTarget)
+    expect(sharedMcp.servers[0]).toMatchObject({ command: 'shared-command', status: 'stopped', envNames: ['TOKEN'] })
+    expect(JSON.stringify(sharedMcp)).not.toContain('shared-secret')
+    expect((await inventory.listMcpServers(localTarget)).servers[0]?.command).toBe('local-command')
+    expect((await inventory.listHookRecords(sharedTarget)).records[0]?.dialect).toBe('claude-code')
+    expect((await inventory.listHookRecords(localTarget)).records[0]?.dialect).toBe('codex')
+    const changed = await inventory.setMcpServerEnabled({ name: 'same', enabled: true, ...sharedTarget })
+    expect(changed.servers[0]).toMatchObject({ command: 'shared-command', enabled: true, status: 'stopped' })
+    expect((await inventory.setHookRecordEnabled({ name: 'same', enabled: true, ...sharedTarget })).records[0])
+      .toMatchObject({ dialect: 'claude-code', enabled: true, status: 'stopped' })
+    await inventory.removeMcpServer({ name: 'same', ...sharedTarget })
+    await inventory.removeHookRecord({ name: 'same', ...sharedTarget })
+    expect((await inventory.listMcpServers(localTarget)).servers[0]?.command).toBe('local-command')
+    expect((await inventory.listHookRecords(localTarget)).records[0]?.dialect).toBe('codex')
+    expect(ctx.get('mcpServers')!.list().servers).toEqual([])
+    expect(ctx.get('hookRecords')!.list().records).toEqual([])
+  })
+
+  it('rejects a layer without workspaceId before reading or changing global records', async () => {
+    const { inventory } = await harness()
+    const target = { layer: 'shared' } as const
+    const calls = [
+      () => inventory.list(target),
+      () => inventory.setEnabled({ entryId: 'host-entry' as never, enabled: false, ...target }),
+      () => inventory.listMcpServers(target),
+      () => inventory.defineMcpServer({ mode: 'create', name: 'server', transport: 'stdio', command: 'node', ...target }),
+      () => inventory.setMcpServerEnabled({ name: 'server', enabled: true, ...target }),
+      () => inventory.removeMcpServer({ name: 'server', ...target }),
+      () => inventory.listHookRecords(target),
+      () => inventory.defineHookRecord({ mode: 'create', name: 'hook', dialect: 'claude-code', config: { hooks: {} }, ...target }),
+      () => inventory.setHookRecordEnabled({ name: 'hook', enabled: true, ...target }),
+      () => inventory.removeHookRecord({ name: 'hook', ...target }),
+    ]
+    for (const call of calls) {
+      await expect(Promise.resolve().then(async () => { await call() })).rejects.toThrow('layer requires workspaceId')
     }
   })
 

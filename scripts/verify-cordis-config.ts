@@ -37,7 +37,7 @@ const appOverlayFiles = new Set([
   'examples/web-schedule/cordis.yml',
   ...globSync('examples/mcp-memory/*.cordis.yml', { cwd: root }),
 ])
-const metadataFields = ['id', 'name', 'group', 'inject', 'intercept', 'isolate', 'pluginType', 'pluginGroup'] as const
+const metadataFields = ['id', 'name', 'group', 'inject', 'intercept', 'isolate', 'pluginType', 'pluginRequired', 'pluginGroup'] as const
 
 /** The adaptive directory-picker chooser package (mounts a backend row at boot). */
 const CHOOSER_PACKAGE = '@hydraharness/harness-host-directory-picker-auto'
@@ -455,6 +455,9 @@ function validateMetadata(entry: Record<string, unknown>, file: string, path: st
  */
 export function metadataExpressionErrors(entry: Record<string, unknown>, path: string): string[] {
   const problems: string[] = []
+  if (entry.pluginRequired !== undefined && typeof entry.pluginRequired !== 'boolean') {
+    problems.push(`${path}.pluginRequired: must be boolean`)
+  }
   if (entry.pluginType !== undefined && entry.pluginType !== 'core' && entry.pluginType !== 'normal') {
     problems.push(`${path}.pluginType: must be core or normal`)
   }

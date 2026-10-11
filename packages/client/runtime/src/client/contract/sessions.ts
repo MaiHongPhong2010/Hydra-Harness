@@ -29,7 +29,11 @@ export interface ISessions {
   readonly list: ObservableSnapshot<SessionListState>
   /** Atomic current-session provide projection (the renderer host's `sessions.provideInfo` feed). */
   readonly currentProvideInfo: HostObservable<SessionMaybeProvideInfo>
-  /** Resolve one session's render bundle without selecting it as current. */
+  /**
+   * Resolve one session's render bundle without selecting it as current.
+   * @param id - Session identity to resolve.
+   * @returns its render bundle, or undefined when unavailable.
+   */
   provideInfo(id: string): SessionProvideInfo | undefined
   /**
    * The `session.search` result bound the wire schema fixes, exposed to
@@ -37,14 +41,22 @@ export interface ISessions {
    * (fixture included) reports the same number.
    */
   readonly searchResultLimit: number
-  /** Create or adopt a session without selecting it as current. */
+  /**
+   * Create or adopt a session without selecting it as current.
+   * @param opts - Workspace, directory, or existing identity to adopt.
+   * @returns the created or adopted session identity.
+   */
   create(opts?: {
     workspaceId?: import('@hydraharness/harness-api-remotes/client').WorkspaceId
     cwd?: string
     sessionId?: SessionId
     reuseWorkspaceBlank?: true
+    projectless?: true
   }): Promise<SessionId>
-  /** Permanently delete a session after the UI confirmation step. */
+  /**
+   * Permanently delete a session after the UI confirmation step.
+   * @param sessionId - Session identity to delete.
+   */
   delete(sessionId: SessionId): Promise<void>
   /**
    * Select a session as current.

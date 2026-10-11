@@ -9,6 +9,7 @@
  * @module @hydraharness/harness-hooks-claude-code
  */
 
+import type {} from '@hydraharness/harness-optional-plugins'
 import { readFileSync } from 'node:fs'
 import type { Context } from '@hydraharness/cordis'
 import z from '@hydraharness/schemastery'
@@ -45,12 +46,13 @@ export const inject = ['shell']
 export interface Config {
   /**
    * Path to a `hooks.json` or a settings file whose `hooks` key holds the config.
-   * Process-level: read once at load, a relative path resolves against the process
-   * launch cwd, so one config applies to the whole process.
-   * TODO(per-session-hook-config): per-session discovery of a project-local
-   * `hooks.json` from each `session/new.cwd`.
+   * Read once at load; relative paths resolve against the process launch cwd.
+   * Hooks cover agents within the mounting context's registration scope, or
+   * every agent for an unscoped mount.
    */
   configPath: string
+  /** Owning workspace cwd; omitted uses each agent's session cwd. */
+  cwd?: string
   /**
    * Replaces `${CLAUDE_PLUGIN_ROOT}` in command strings (the plugin's root dir).
    */
@@ -71,6 +73,7 @@ export interface Config {
 
 export const Config: z<Config> = z.object({
   configPath: z.string().required(),
+  cwd: z.string(),
   pluginRoot: z.string(),
   projectDir: z.string(),
   defaultTimeoutMs: z.number().default(DEFAULT_HOOK_TIMEOUT_MS),
@@ -115,15 +118,20 @@ export function apply(ctx: Context, config: Config): void {
     return
   }
 
-  // Emit-shaped points run detached, so track their chains; disposal aborts
-  // active hooks and drains continuations before resolving.
+  // Every hook run is tracked; detached points also track their continuations.
   const detached = createDetachedRuns()
   // Only the start edge guarantees registry access. Retain each local child
   // through its paired end so stop hooks keep the session workspace after the
   // handle unregisters the agent. Every retained entry relies on that paired
   // end; a producer that can omit it must provide another release edge.
   const subagentChildren = new Map<SubagentRunId, Agent>()
-  ctx.effect(() => () => detached.drain(), 'hooks-claude-code: drain detached hook runs')
+  ctx.effect(() => () => detached.drain(), 'hooks-claude-code: drain hook runs')
+
+  function runPoint(...args: Parameters<typeof executePoint>): ReturnType<typeof executePoint> {
+    const run = executePoint(...args)
+    detached.track(run)
+    return run
+  }
 
   /**
    * Run every command hook configured for `point` whose matcher selects
@@ -134,7 +142,7 @@ export function apply(ctx: Context, config: Config): void {
    * decision. `matchQuery` is the event's matcher subject (tool name, session
    * source, …); `''` for events that ignore matchers.
    */
-  async function runPoint(
+  async function executePoint(
     point: string,
     matchQuery: string,
     payload: unknown,
@@ -144,7 +152,8 @@ export function apply(ctx: Context, config: Config): void {
     const outputs: HookOutput[] = []
     // Run the hook in the agent's session workspace (the `session/new` cwd on the session
     // header), not the executor or entry-point process's launch dir.
-    const workdir = opts.agent?.session.header.cwd
+    const workdir = config.cwd ?? opts.agent?.session.header.cwd
+    const signal = AbortSignal.any([opts.signal, detached.signal])
     // CLAUDE_PROJECT_DIR: an explicit config value wins; otherwise default it to the session
     // workspace (the same dir the hook runs in).
     const projectDir = config.projectDir ?? workdir
@@ -152,35 +161,39 @@ export function apply(ctx: Context, config: Config): void {
     for (const group of groups) {
       if (!matchesMatcher(group.matcher, matchQuery, 'claude-code')) continue
       for (const hook of group.hooks) {
-        const handlerId = nextHandlerId(point)
-        const session = opts.agent?.session
-        if (session && opts.turn !== undefined) {
-          appendHookInvoked(session, {
-            turn: opts.turn, point, dialect: 'claude-code', handlerId,
-            ...group.matcher !== undefined ? { matcher: group.matcher } : {},
-          })
-        }
-        const { output, durationMs } = await runHook(ctx.shell, hook, {
-          payload,
-          defaultTimeoutMs,
-          ...hookEnv ? { env: hookEnv } : {},
-          ...workdir !== undefined ? { cwd: workdir } : {},
-          signal: opts.signal,
-          trailingNewline: true,
-          // Discard a `hookSpecificOutput` block whose `hookEventName` names a
-          // different event than the one firing (the schemas key it by event).
-          expectedEventName: point,
-        }, () => performance.now())
-        outputs.push(output)
-        if (output.updatedInput !== undefined) {
-          ctx.logger.warn(`hooks-claude-code: ${point} hook requested updatedInput, which is not yet honored (ignored)`)
-        }
-        if (output.systemMessage !== undefined) {
-          ctx.logger.warn(`hooks-claude-code: ${point} hook emitted a systemMessage, which is not yet surfaced (ignored)`)
-        }
-        if (session && opts.turn !== undefined) {
-          appendHookResult(session, { turn: opts.turn, point, handlerId, output, stderrSummaryMaxChars, durationMs })
-        }
+        if (signal.aborted || ctx.get('optionalPlugins')?.enabled === false) return mergeHookOutputs(outputs)
+        const release = ctx.get('optionalPlugins')?.acquire()
+        try {
+          const handlerId = nextHandlerId(point)
+          const session = opts.agent?.session
+          if (session && opts.turn !== undefined) {
+            appendHookInvoked(session, {
+              turn: opts.turn, point, dialect: 'claude-code', handlerId,
+              ...group.matcher !== undefined ? { matcher: group.matcher } : {},
+            })
+          }
+          const { output, durationMs } = await runHook(ctx.shell, hook, {
+            payload,
+            defaultTimeoutMs,
+            ...hookEnv ? { env: hookEnv } : {},
+            ...workdir !== undefined ? { cwd: workdir } : {},
+            signal,
+            trailingNewline: true,
+            // Discard a `hookSpecificOutput` block whose `hookEventName` names a
+            // different event than the one firing (the schemas key it by event).
+            expectedEventName: point,
+          }, () => performance.now())
+          outputs.push(output)
+          if (output.updatedInput !== undefined) {
+            ctx.logger.warn(`hooks-claude-code: ${point} hook requested updatedInput, which is not yet honored (ignored)`)
+          }
+          if (output.systemMessage !== undefined) {
+            ctx.logger.warn(`hooks-claude-code: ${point} hook emitted a systemMessage, which is not yet surfaced (ignored)`)
+          }
+          if (session && opts.turn !== undefined) {
+            appendHookResult(session, { turn: opts.turn, point, handlerId, output, stderrSummaryMaxChars, durationMs })
+          }
+        } finally { release?.() }
       }
     }
     return mergeHookOutputs(outputs)

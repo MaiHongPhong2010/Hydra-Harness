@@ -23,11 +23,16 @@
       "default": "./lib/invariant.js"
     },
     "./src/*": "./src/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./desktop-bridge": {
+      "types": "./lib/types/desktop-bridge.d.ts",
+      "default": "./lib/desktop-bridge.js"
+    }
   },
   "files": [
     "lib/index.js",
     "lib/invariant.js",
+    "lib/desktop-bridge.js",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",

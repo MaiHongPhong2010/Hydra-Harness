@@ -46,6 +46,7 @@
   ],
   "license": "MIT",
   "peerDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-code-runtime": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
@@ -60,6 +61,7 @@
     "@hydraharness/schemastery": "workspace:^"
   },
   "devDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/harness-attachment": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-code-runtime": "workspace:^",

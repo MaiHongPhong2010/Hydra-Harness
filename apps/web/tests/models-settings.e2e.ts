@@ -93,10 +93,10 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     const dialog = page.getByRole('dialog', { name: 'Settings' })
     await dialog.waitFor({ timeout: 10_000 })
     await dialog.getByRole('button', { name: 'Models' }).click()
-    await dialog.getByText('Sign in with your accounts or enter API keys to use models from these providers.').waitFor({ timeout: 10_000 })
-    // The dormant pi-ai adapter contributes its whole installed catalog; no
-    // provider is configured yet, so the page is one add button.
-    const add = dialog.getByRole('button', { name: 'Add provider' })
+    await dialog.getByText('Configure providers, API keys, model catalogs, and default models.').waitFor({ timeout: 10_000 })
+    // The dormant pi-ai adapter contributes its whole installed catalog.
+    const add = dialog.getByRole('region', { name: 'API keys', exact: true })
+      .getByRole('button', { name: 'Add provider', exact: true })
     await add.waitFor({ timeout: 10_000 })
     // The button enables once the dormant catalog lands in the join.
     await expect.poll(async () => add.isEnabled(), { timeout: 10_000 }).toBe(true)
@@ -117,7 +117,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-illegal-key'))
     const dialog = page.getByRole('dialog', { name: 'Settings' })
     const key = dialog.getByRole('textbox', { name: 'API key', exact: true })
-    const save = dialog.getByRole('button', { name: 'Apply', exact: true })
+    const save = dialog.getByRole('region', { name: 'API keys', exact: true }).getByRole('button', { name: 'Apply', exact: true })
 
     // A key no HTTP header can carry would save cleanly and fail the first
     // turn with a ByteString TypeError; the form names the offending field
@@ -136,7 +136,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
   it('saves a blank key as a reference-free provider-native profile', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-native-auth'))
     const dialog = page.getByRole('dialog', { name: 'Settings' })
-    await dialog.getByRole('button', { name: 'Apply', exact: true }).click()
+    await dialog.getByRole('region', { name: 'API keys', exact: true }).getByRole('button', { name: 'Apply', exact: true }).click()
     const row = dialog.getByText('minimax-cn', { exact: true }).first()
     await row.waitFor({ timeout: 10_000 })
     await dialog.getByText('Saved minimax-cn.', { exact: true }).waitFor({ timeout: 10_000 })
@@ -167,7 +167,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     const dialog = page.getByRole('dialog', { name: 'Settings' })
     await dialog.getByRole('button', { name: 'Edit minimax-cn' }).click()
     await dialog.getByRole('textbox', { name: 'API key', exact: true }).fill('sk-e2e-minimax')
-    await dialog.getByRole('button', { name: 'Apply', exact: true }).click()
+    await dialog.getByRole('region', { name: 'API keys', exact: true }).getByRole('button', { name: 'Apply', exact: true }).click()
     // The profile lands in settings.yaml with only the derived reference, the
     // key value lands in the harness home's .credentials.yaml, the dormant route
     // registers, and the topology frame invalidates the page into the row.
@@ -197,7 +197,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     const url = dialog.getByLabel('Base URL')
     await url.waitFor({ timeout: 10_000 })
     await url.fill('https://gateway.minimax.example/v1')
-    await dialog.getByRole('button', { name: 'Apply', exact: true }).click()
+    await dialog.getByRole('region', { name: 'API keys', exact: true }).getByRole('button', { name: 'Apply', exact: true }).click()
     // The editor closes back to the row; the fold's write merged into the
     // stored profile beside the reference.
     await expect.poll(async () => dialog.getByLabel('Base URL').count(), { timeout: 10_000 }).toBe(0)
@@ -413,7 +413,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
 
     await protocol.selectOption('anthropic-messages')
     await name.fill('Renamed Acme Gateway')
-    await dialog.getByRole('button', { name: 'Apply', exact: true }).click()
+    await dialog.getByRole('region', { name: 'API keys', exact: true }).getByRole('button', { name: 'Apply', exact: true }).click()
     await expect.poll(async () => dialog.getByLabel('API protocol').count(), { timeout: 10_000 }).toBe(0)
     // The adapter re-resolved the route under the new protocol and re-registered
     // it under the new name: an unserviceable profile would have been refused
@@ -429,7 +429,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  it('confirms an identified provider deletion before removing its profile, SDK record, and API key', async () => {
+  it('removes a provider profile and owned API key while preserving its SDK credential record', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-delete'))
     const recordKey = credentialKey('llm-pi-ai', 'minimax-cn')
     await scaffold.ctx.credentials.modifyRecord(recordKey, async () => ({ kind: 'api-key', key: 'sk-sdk-minimax-stored' }))
@@ -461,10 +461,10 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     ).not.toContain('minimax-cn:')
     expect(await readFile(join(scaffold.harnessHome, '.credentials.yaml'), 'utf8'))
       .not.toContain('MINIMAX_CN_API_KEY')
-    expect(await scaffold.ctx.credentials.readRecord(recordKey)).toBeUndefined()
+    expect(await scaffold.ctx.credentials.readRecord(recordKey)).toMatchObject({ kind: 'api-key', key: 'sk-sdk-minimax-stored' })
     const credentialsAfter = await readFile(join(scaffold.harnessHome, '.credentials.yaml'), 'utf8')
-    expect(credentialsAfter).not.toContain('llm-pi-ai/minimax-cn')
-    expect(credentialsAfter).not.toContain('sk-sdk-minimax-stored')
+    expect(credentialsAfter).toContain('llm-pi-ai/minimax-cn')
+    expect(credentialsAfter).toContain('sk-sdk-minimax-stored')
     await expect.poll(
       async () => page.getByRole('dialog', { name: 'Delete minimax-cn?' }).count(),
       { timeout: 10_000 },

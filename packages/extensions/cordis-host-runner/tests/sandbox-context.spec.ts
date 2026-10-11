@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { call, CONTENT_OUTPUT_CODE, dummyTool, mount, setup, text } from './helpers.ts'
 
 /**
@@ -263,5 +263,66 @@ describe('sandbox tools façade — get is a read-only schema view', () => {
       }
     `)
     expect(text(await call(harness.ctx, 'probe_unknown', {}))).toBe('true')
+  })
+})
+
+describe('workspace trust controls', () => {
+  it.each(['workspaceConfig', 'apiProxy', 'connection', 'remote', 'settingsScope'])('withholds %s on optional and injected lookups', async (name) => {
+    const harness = await setup()
+    const grant = vi.fn()
+    harness.ctx.reflect.provide(name, { setTrusted: grant, settings: { setWorkspaceTrust: grant }, trust: { update: grant } })
+    for (const access of [`ctx.get('${name}')`, `ctx.${name}`]) {
+      await expect(mount(harness, `return { inject: ['${name}'], apply(ctx) { ${access}.setTrusted('project', true) } }`))
+        .rejects.toThrow(`service "${name}" is reserved for Host controls`)
+    }
+    expect(grant).not.toHaveBeenCalled()
+  })
+
+  it.each(['register', 'get', 'update', 'replace', 'mutate'])('withholds workspace-config from settings.%s', async (method) => {
+    const harness = await setup()
+    const invoke = vi.fn()
+    harness.ctx.reflect.provide('settings', { [method]: invoke })
+    await expect(mount(harness, `return { async apply(ctx) { await ctx.get('settings').${method}('workspace-config', {trustedRoots: {project: true}}) } }`))
+      .rejects.toThrow('workspace trust belongs to the user in Settings')
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it.each(["new String('workspace-config')", "({toString() {return 'workspace-config'}})"])('rejects nonprimitive namespace %s before registration', async (namespace) => {
+    const harness = await setup()
+    const register = vi.fn()
+    harness.ctx.reflect.provide('settings', { register })
+    await expect(mount(harness, `return { apply(ctx) { ctx.get('settings').register(${namespace}, {}) } }`))
+      .rejects.toThrow('dynamic settings namespace must be a primitive string')
+    expect(register).not.toHaveBeenCalled()
+  })
+
+  it.each(['publish', 'persist', 'registrations', 'valueOf', 'constructor', 'inherit', 'setLayerEnabled'])('withholds settings provider member %s', async (member) => {
+    const harness = await setup()
+    const invoke = vi.fn()
+    harness.ctx.reflect.provide('settings', { [member]: invoke })
+    await expect(mount(harness, `return { apply(ctx) { const escape = ctx.get('settings').${member} } }`))
+      .rejects.toThrow(`dynamic settings does not expose "${member}"`)
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('keeps custom namespace registration, scoped writes, and reads available without exposing the provider prototype', async () => {
+    const harness = await setup()
+    const update = vi.fn()
+    const scopeUpdate = vi.fn()
+    const register = vi.fn(() => ({ update: scopeUpdate }))
+    const get = vi.fn(() => 'readable')
+    harness.ctx.reflect.provide('settings', { register, update, get })
+    await mount(harness, `return { async apply(ctx) {
+      const settings = ctx.get('settings')
+      if (Object.getPrototypeOf(settings) !== null || Object.getOwnPropertyDescriptor(settings, 'update') !== undefined) throw new Error('raw provider exposed')
+      const scope = settings.register('custom', {})
+      await scope.update({enabled: true})
+      await settings.update('custom', {enabled: false})
+      if (settings.get('custom') !== 'readable') throw new Error('read failed')
+    } }`)
+    expect(register).toHaveBeenCalledOnce()
+    expect(scopeUpdate).toHaveBeenCalledWith({ enabled: true })
+    expect(update).toHaveBeenCalledWith('custom', { enabled: false })
+    expect(get).toHaveBeenCalledWith('custom')
   })
 })

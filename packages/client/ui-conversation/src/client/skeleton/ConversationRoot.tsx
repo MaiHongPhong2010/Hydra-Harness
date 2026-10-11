@@ -172,6 +172,7 @@ export function ConversationRoot({
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
+      {hero && sessionId !== undefined && renderSlot('conversation.hero.suggestions', {})}
     </div>
   )
 

@@ -8,8 +8,21 @@
     "src"
   ],
   "references": [
-    { "path": "../../fs/fs-review" },
-    { "path": "../../web/web" },
+    {
+      "path": "../../interaction/notifications"
+    },
+    {
+      "path": "../../workspace/workspace-config"
+    },
+    {
+      "path": "../../core/scope"
+    },
+    {
+      "path": "../../fs/fs-review"
+    },
+    {
+      "path": "../../web/web"
+    },
     {
       "path": "../../goal/goal"
     },
@@ -120,6 +133,15 @@
     },
     {
       "path": "../../web/web"
+    },
+    {
+      "path": "../../interaction/suggested-prompts"
+    },
+    {
+      "path": "../../interaction/toys"
+    },
+    {
+      "path": "../../fs/fs-local"
     }
   ]
 }

@@ -39,3 +39,8 @@
 .chevron {
   flex: none;
 }
+
+@media (max-width: 720px) {
+  .row { flex-wrap: wrap; }
+  .rowText { flex-basis: 100%; padding-right: 0; }
+}

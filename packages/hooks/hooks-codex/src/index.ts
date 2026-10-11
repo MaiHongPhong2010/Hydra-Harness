@@ -10,6 +10,7 @@
  * @module @hydraharness/harness-hooks-codex
  */
 
+import type {} from '@hydraharness/harness-optional-plugins'
 // Each dialect bridge keeps its complete dependency list visible at the entry
 // point; a cross-package facade for imports alone would add indirection.
 /* jscpd:ignore-start */
@@ -46,12 +47,13 @@ export const inject = ['shell']
 /** Plugin config: where the Codex hooks.json lives + the model name for payloads. */
 export interface Config {
   /**
-   * Path to a Codex `hooks.json`. Process-level: read once at load, a relative
-   * path resolves against the process launch cwd.
-   * TODO(per-session-hook-config): per-session project-local discovery from each
-   * `session/new.cwd`.
+   * Path to a Codex `hooks.json`, read once at load. Relative paths resolve
+   * against the process launch cwd. Hooks cover agents within the mounting
+   * context's registration scope, or every agent for an unscoped mount.
    */
   configPath: string
+  /** Owning workspace cwd; omitted uses each agent's session cwd. */
+  cwd?: string
   /** The model name stamped on every payload (Codex includes `model` on each event). */
   model?: string
   /** Default per-hook timeout in ms when a hook sets none (Codex default: 600000). */
@@ -64,6 +66,7 @@ export interface Config {
 
 export const Config: z<Config> = z.object({
   configPath: z.string().required(),
+  cwd: z.string(),
   model: z.string().default(''),
   defaultTimeoutMs: z.number().default(DEFAULT_HOOK_TIMEOUT_MS),
   stderrSummaryMaxChars: z.number().default(DEFAULT_STDERR_SUMMARY_MAX_CHARS),
@@ -103,17 +106,16 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   const model = config.model ?? ''
-  const lifecycle = new AbortController()
-  ctx.effect(() => () => {
-    lifecycle.abort(new Error('hooks-codex unloaded'))
-  }, 'hooks-codex lifecycle')
-
-  // SessionStart is the one emit-shaped (detached) point Codex has: track its
-  // run chains so disposal aborts a still-running hook process and drains the
-  // continuation (docs/defensive-patterns.md: dispose must reach quiescence).
+  // Every hook run is tracked; detached points also track their continuations.
   const detached = createDetachedRuns()
-  ctx.effect(() => () => detached.drain(), 'hooks-codex: drain detached hook runs')
+  ctx.effect(() => () => detached.drain(), 'hooks-codex: drain hook runs')
   const subagentChildren = new Map<SubagentRunId, Agent>()
+
+  function runPoint(...args: Parameters<typeof executePoint>): ReturnType<typeof executePoint> {
+    const run = executePoint(...args)
+    detached.track(run)
+    return run
+  }
 
   /**
    * Run and fold one configured Codex hook point.
@@ -121,7 +123,7 @@ export function apply(ctx: Context, config: Config): void {
    * A supplied turn records the hook invocation/result pair inside that open turn.
    * Detached lifecycle points omit it.
    */
-  async function runPoint(
+  async function executePoint(
     point: string,
     matchQuery: string,
     payload: unknown,
@@ -136,46 +138,51 @@ export function apply(ctx: Context, config: Config): void {
     const outputs: HookOutput[] = []
     // Run hooks in the agent's session workspace so relative paths address the
     // user's project rather than the server launch directory.
-    const workdir = opts.agent?.session.header.cwd
+    const workdir = config.cwd ?? opts.agent?.session.header.cwd
+    const signal = AbortSignal.any([opts.signal, detached.signal])
     for (const group of groups) {
       // Codex always interprets matchers as regexes; it has no literal fast path.
       if (!matchesMatcher(group.matcher, matchQuery, 'codex')) continue
       for (const hook of group.hooks) {
-        const handlerId = nextHandlerId(point)
-        const session = opts.agent?.session
-        if (session && opts.turn !== undefined) {
-          appendHookInvoked(session, {
-            turn: opts.turn, point, dialect: 'codex', handlerId,
-            ...group.matcher !== undefined ? { matcher: group.matcher } : {},
-          })
-        }
-        const { output, durationMs } = await runHook(ctx.shell, hook, {
-          payload,
-          defaultTimeoutMs,
-          ...workdir !== undefined ? { cwd: workdir } : {},
-          signal: AbortSignal.any([opts.signal, lifecycle.signal]),
-          trailingNewline: false, // Codex writes stdin without a trailing newline.
-          ...config.env === undefined ? {} : { env: config.env },
-          // Discard a `hookSpecificOutput` block naming a different event.
-          expectedEventName: point,
-        }, () => performance.now())
-        // Clean plain stdout becomes context only when no structured context
-        // exists; nonzero output and raw JSON never leak as prose.
-        if (opts.plainStdoutAsContext === true && output.exitCode === 0
+        if (signal.aborted || ctx.get('optionalPlugins')?.enabled === false) return mergeHookOutputs(outputs)
+        const release = ctx.get('optionalPlugins')?.acquire()
+        try {
+          const handlerId = nextHandlerId(point)
+          const session = opts.agent?.session
+          if (session && opts.turn !== undefined) {
+            appendHookInvoked(session, {
+              turn: opts.turn, point, dialect: 'codex', handlerId,
+              ...group.matcher !== undefined ? { matcher: group.matcher } : {},
+            })
+          }
+          const { output, durationMs } = await runHook(ctx.shell, hook, {
+            payload,
+            defaultTimeoutMs,
+            ...workdir !== undefined ? { cwd: workdir } : {},
+            signal,
+            trailingNewline: false, // Codex writes stdin without a trailing newline.
+            ...config.env === undefined ? {} : { env: config.env },
+            // Discard a `hookSpecificOutput` block naming a different event.
+            expectedEventName: point,
+          }, () => performance.now())
+          // Clean plain stdout becomes context only when no structured context
+          // exists; nonzero output and raw JSON never leak as prose.
+          if (opts.plainStdoutAsContext === true && output.exitCode === 0
           && output.additionalContext === undefined
           && output.stdout.length > 0 && !output.stdout.startsWith('{')) {
-          output.additionalContext = output.stdout
-        }
-        outputs.push(output)
-        // Execution and decision mapping remain in each bridge so dialect
-        // differences stay explicit at their owning extension point.
-        /* jscpd:ignore-start */
-        if (output.systemMessage !== undefined) {
-          ctx.logger.warn(`hooks-codex: ${point} hook emitted a systemMessage, which is not yet surfaced (ignored)`)
-        }
-        if (session && opts.turn !== undefined) {
-          appendHookResult(session, { turn: opts.turn, point, handlerId, output, stderrSummaryMaxChars, durationMs })
-        }
+            output.additionalContext = output.stdout
+          }
+          outputs.push(output)
+          // Execution and decision mapping remain in each bridge so dialect
+          // differences stay explicit at their owning extension point.
+          /* jscpd:ignore-start */
+          if (output.systemMessage !== undefined) {
+            ctx.logger.warn(`hooks-codex: ${point} hook emitted a systemMessage, which is not yet surfaced (ignored)`)
+          }
+          if (session && opts.turn !== undefined) {
+            appendHookResult(session, { turn: opts.turn, point, handlerId, output, stderrSummaryMaxChars, durationMs })
+          }
+        } finally { release?.() }
       }
     }
     return mergeHookOutputs(outputs)

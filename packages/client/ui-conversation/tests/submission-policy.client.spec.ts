@@ -1,66 +1,38 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { stubSettingsScope } from '@hydraharness/harness-client-test-runtime'
-import {
-  ComposerSubmissionPolicy, DEFAULT_BUSY_ENTER_BEHAVIOR,
-} from '../src/client/input/submission-policy.ts'
+import { ComposerSubmissionPolicy } from '../src/client/input/submission-policy.ts'
 import type { ConversationSettings } from '../src/submission-settings.ts'
 
-describe('ComposerSubmissionPolicy', () => {
-  it('defaults to Queue and only applies the preference while running', () => {
-    const policy = new ComposerSubmissionPolicy()
-    expect(policy.busyEnter.getSnapshot()).toBe(DEFAULT_BUSY_ENTER_BEHAVIOR)
-    expect(policy.resolve(false, 'enter', true)).toBe('queue')
-    expect(policy.resolve(false, 'accelerated', true)).toBe('queue')
-    expect(policy.resolve(true, 'enter', true)).toBe('queue')
-    expect(policy.resolve(true, 'accelerated', true)).toBe('steer')
-    expect(policy.resolve(true, 'enter', false)).toBe('queue')
-    expect(policy.resolve(true, 'accelerated', false)).toBe('queue')
-
-    const changed = vi.fn()
-    policy.busyEnter.subscribe(changed)
-    policy.setBusyEnter('steer')
-    expect(changed).toHaveBeenCalledTimes(1)
-    expect(policy.resolve(true, 'enter', true)).toBe('steer')
-    expect(policy.resolve(true, 'accelerated', true)).toBe('queue')
-    expect(policy.resolve(false, 'enter', true)).toBe('queue')
-    expect(policy.resolve(false, 'accelerated', true)).toBe('queue')
-  })
-
-  it('writes an explicit change through the scope after publishing it locally', () => {
+describe('composer preferences', () => {
+  it.each(['queue', 'steer'] as const)('resolves both shortcuts with %s follow-ups, including Send', (preferred) => {
     const host = stubSettingsScope<ConversationSettings>()
-    const observed: string[] = []
-    let liveBehavior = (): string => 'unconstructed'
-    const scope: typeof host.scope = {
-      ...host.scope,
-      set: (field, value) => {
-        observed.push(`${field}=${String(value)}:${liveBehavior()}`)
-        return host.scope.set(field, value)
-      },
+    const policy = new ComposerSubmissionPolicy(host.scope)
+    const opposite = preferred === 'queue' ? 'steer' : 'queue'
+    for (const shortcut of ['enter', 'mod-enter'] as const) {
+      host.publish({ status: 'ready', writable: true, value: { busyEnter: preferred, sendShortcut: shortcut } })
+      expect(policy.resolve(true, 'send', true)).toBe(preferred)
+      expect(policy.resolve(true, 'enter', true)).toBe(preferred)
+      expect(policy.resolve(true, 'accelerated', true)).toBe(shortcut === 'enter' ? opposite : preferred)
+      expect(policy.resolve(true, 'alternate', true)).toBe(opposite)
+      expect(policy.resolve(true, 'alternate', false)).toBe('queue')
+      expect(policy.resolve(false, 'alternate', true)).toBe('queue')
     }
-    const policy = new ComposerSubmissionPolicy(scope)
-    liveBehavior = () => policy.busyEnter.getSnapshot()
-    policy.setBusyEnter('steer')
-    expect(observed).toEqual(['busyEnter=steer:steer'])
-    expect(host.set).toHaveBeenCalledWith('busyEnter', 'steer')
-    expect(host.set).toHaveBeenCalledOnce()
   })
 
-  it('adopts a Host preference without writing it back and leaves an identical write untouched', () => {
+  it('uses existing defaults, follows Host acceptance, and rejects unacknowledged writes', async () => {
     const host = stubSettingsScope<ConversationSettings>()
     const policy = new ComposerSubmissionPolicy(host.scope)
-    host.publish({ status: 'ready', value: { busyEnter: 'steer' }, revision: 1, writable: true })
-    expect(policy.busyEnter.getSnapshot()).toBe('steer')
-    policy.setBusyEnter('steer')
-    expect(host.set).not.toHaveBeenCalled()
-    host.publish({ value: { busyEnter: 'steer' }, revision: 2 })
-    expect(policy.busyEnter.getSnapshot()).toBe('steer')
-  })
-
-  it('adopts a section already standing at construction', () => {
-    const host = stubSettingsScope<ConversationSettings>()
-    host.publish({ status: 'ready', value: { busyEnter: 'steer' }, revision: 1, writable: true })
-    const policy = new ComposerSubmissionPolicy(host.scope)
-    expect(policy.busyEnter.getSnapshot()).toBe('steer')
+    expect(policy.preferences.getSnapshot()).toEqual({ busyEnter: 'queue', plainText: false, showContextUsage: true, sendShortcut: 'enter' })
+    await expect(policy.save('plainText', true)).rejects.toThrow('read only')
+    host.publish({ status: 'ready', writable: true, revision: 1, value: { busyEnter: 'queue' } })
+    await expect(policy.save('plainText', true)).rejects.toThrow('Could not save')
+    expect(policy.preferences.getSnapshot().plainText).toBe(false)
+    host.set.mockImplementation((field: string, value: unknown) => {
+      host.publish({ value: { busyEnter: 'queue', [field]: value }, revision: 2 })
+    })
+    await policy.save('plainText', true)
+    expect(policy.preferences.getSnapshot().plainText).toBe(true)
+    await expect(new ComposerSubmissionPolicy().save('plainText', true)).rejects.toThrow('unavailable')
   })
 })

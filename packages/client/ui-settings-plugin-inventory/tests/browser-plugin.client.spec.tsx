@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
-import { Context, Service } from '@hydraharness/cordis'
+import { Context } from '@hydraharness/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { LocaleRuntime } from '@hydraharness/harness-client-locale/client'
 import { createSnapshotStore, SlotRegistry, type ISessions } from '@hydraharness/harness-client-runtime/client'
 import type { ConnectionHandle, ImportedPluginSnapshot, PluginInventorySnapshot } from '@hydraharness/harness-api-remotes/client'
+import type { SettingsTarget } from '@hydraharness/harness-client-ui-settings/client'
 import { resolveSlotLabel } from '@hydraharness/harness-client-ui-slots'
-import { usePinnedBrowserLanguages } from '@hydraharness/harness-client-test-runtime'
+import { usePinnedBrowserLanguages, stubSettingsScope } from '@hydraharness/harness-client-test-runtime'
+import { TestRemote } from '@hydraharness/harness-client-test-runtime'
 import { apply, inject } from '../src/client/index.ts'
 import { ImportedPluginCapabilitiesTab, type ImportedPluginCapabilitiesTabInjected } from '../src/client/ImportedPluginCapabilitiesTab.tsx'
 import { MarketplaceSettingsTab } from '../src/client/MarketplaceSettingsTab.tsx'
@@ -29,8 +31,7 @@ async function bench(isLoopback = true) {
   await ctx.plugin(SlotRegistry).await()
   const locale = new LocaleRuntime(ctx)
   ctx.provide('locale', locale)
-  class RemoteService extends Service { constructor(serviceCtx: Context) { super(serviceCtx, 'remote') } }
-  new RemoteService(ctx)
+  const events = new TestRemote(ctx)
   const list = vi.fn<() => Promise<Result<typeof EMPTY_NATIVE>>>().mockResolvedValue({ ok: true, value: EMPTY_NATIVE })
   const setEnabled = vi.fn<() => Promise<Result<{ snapshot: PluginInventorySnapshot; restartRequired: boolean }>>>()
     .mockResolvedValue({ ok: true, value: { snapshot: EMPTY_NATIVE, restartRequired: false } })
@@ -57,7 +58,14 @@ async function bench(isLoopback = true) {
   const remote = { list, setEnabled, listMarketplaces, addMarketplace, removeMarketplace, setMarketplaceEnabled,
     listImportedPlugins, importPlugin, enablePlugin, disablePlugin, trustPlugin, untrustPlugin, removePlugin }
   ctx.provide('remote.pluginInventory', remote)
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, ...remote }
+  Object.assign(events, { pluginInventory: remote })
+  const selection = createSnapshotStore({ target: {}, loading: false, error: null })
+  const policy = stubSettingsScope<{ enabled: boolean }>()
+  policy.publish({ value: { enabled: true }, status: 'ready', writable: true })
+  const settingsScope = { bind: () => policy.scope, selection: () => selection, describe: () => ({ ensure: async () => {},
+    getSnapshot: () => ({ view: { namespaces: [] } }), acceptView: () => {} }) }
+  ctx.provide('settingsScope', settingsScope as never)
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, selection, settingsScope, ...remote }
 }
 
 function declare(slots: SlotRegistry): () => void {
@@ -70,6 +78,42 @@ function declare(slots: SlotRegistry): () => void {
 }
 
 describe('ui-settings-plugin-inventory browser plugin', () => {
+  it('captures workspace enablement writes and resets only its selected document', async () => {
+    const b = await bench()
+    const entryId = 'agent-preset:standard:tool' as never
+    const target: SettingsTarget = { workspaceId: 'workspace-a' as never, layer: 'shared' }
+    let namespace = { ...target, ns: 'agent-presets', revision: 3, user: { pluginEnablement: { standard: { tool: false } } } as unknown }
+    const mirror = { ensure: async () => {}, getSnapshot: () => ({ view: { namespaces: [namespace] } }),
+      acceptView: (view: typeof namespace) => { namespace = view } }
+    Object.assign(b.settingsScope, { describe: () => mirror })
+    const mutate = vi.fn(async () => ({ rpcId: 'r', result: { ok: true, value: { ...namespace, revision: 4, user: undefined } } }))
+    Object.assign((b.ctx.get('connection') as ConnectionHandle).api, { settings: { mutate } })
+    const snapshot = { entries: [{ entryId, presetId: 'standard', presetRowId: 'tool', moduleName: 'tool',
+      enabled: true, toggleable: true, restartRequired: false, fiberPhase: null }] }
+    b.list.mockResolvedValue({ ok: true, value: snapshot })
+    b.setEnabled.mockResolvedValue({ ok: true, value: { snapshot, restartRequired: false } })
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    b.selection.set({ target, loading: false, error: null })
+    const entry = b.slots.entries('settings.plugins.tab').find(entry => entry.options.id === 'all')!
+    const face = (entry.inject as unknown as () => PluginInventorySettingsTabInjected)()
+    await face.nativePlugins!.list()
+    expect(b.list).toHaveBeenLastCalledWith(target)
+    await face.nativePlugins!.setEnabled(entryId, false)
+    await face.savePlugins()
+    expect(b.setEnabled).toHaveBeenLastCalledWith({ ...target, entryId, enabled: false })
+    expect(face.nativePlugins!.overridden?.(entryId)).toBe(true)
+    await face.nativePlugins!.reset!(entryId)
+    expect(mutate).toHaveBeenCalledWith({ ...target, ns: 'agent-presets', expectedRevision: 3,
+      ops: [{ op: 'unset', path: ['pluginEnablement', 'standard', 'tool'] }] })
+    expect(face.nativePlugins!.overridden?.(entryId)).toBe(false)
+    expect(face.importedPlugins).toBeUndefined()
+    b.selection.set({ target: { workspaceId: 'workspace-b' as never, layer: 'local' }, loading: false, error: null })
+    const other = (entry.inject as unknown as () => PluginInventorySettingsTabInjected)()
+    await other.nativePlugins!.list()
+    expect(b.list).toHaveBeenLastCalledWith({ workspaceId: 'workspace-b', layer: 'local' })
+    await b.ctx.fiber.dispose()
+  })
   it.each([false, true])('routes marketplace and imported-plugin controls (failure: %s)', async (failure) => {
     const b = await bench()
     declare(b.slots)
@@ -149,7 +193,7 @@ describe('ui-settings-plugin-inventory browser plugin', () => {
   })
 
   it('declares only the services used by the Settings Remote contribution', () => {
-    expect(inject).toEqual(['slots', 'locale', 'connection', 'sessions', 'remote', 'remote.pluginInventory'])
+    expect(inject).toEqual(['slots', 'locale', 'connection', 'sessions', 'remote', 'remote.pluginInventory', 'settingsScope'])
   })
 
   it('registers separate Plugins, Skills, and Marketplace tabs plus the Hooks child catalog', async () => {
@@ -176,6 +220,7 @@ describe('ui-settings-plugin-inventory browser plugin', () => {
     if (plugins.nativePlugins === undefined) throw new Error('expected local native plugin controls')
     await expect(plugins.nativePlugins.list()).resolves.toEqual(EMPTY_NATIVE)
     expect(b.list).toHaveBeenCalledOnce()
+    expect(b.list).toHaveBeenCalledWith({})
     if (plugins.importedPlugins === undefined) throw new Error('expected local imported plugin controls')
     await expect(plugins.importedPlugins.list()).resolves.toEqual(EMPTY_IMPORTED)
     expect(b.listImportedPlugins).toHaveBeenCalledOnce()

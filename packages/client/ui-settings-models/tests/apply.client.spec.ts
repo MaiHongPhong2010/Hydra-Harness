@@ -11,6 +11,7 @@ import {
   WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE, WELCOME_NOTICE_VERSION,
 } from '../src/onboarding-copy.ts'
 import { ModelsSection } from '../src/client/ModelsSection.tsx'
+import { AccountsSection } from '../src/client/AccountsSection.tsx'
 import { ProviderOnboarding } from '../src/client/ProviderOnboarding.tsx'
 import { WelcomeNotice } from '../src/client/WelcomeNotice.tsx'
 
@@ -70,17 +71,24 @@ describe('ui-settings-models apply', () => {
     expect(injected.t('deleteTitle')).toBe('Delete {provider}?')
     expect(typeof injected.controller.load).toBe('function')
     expect(injected.hooks.snapshot).toBe(injected.controller.store)
+    const account = before.slots.entries('settings.section')[1]!
+    expect(account.component).toBe(AccountsSection)
+    expect(account.options).toMatchObject({ id: 'accounts', order: 11 })
+    expect(resolveSlotLabel(account.options.label)).toBe('Accounts')
+    const accountsInjected = (account.inject as unknown as () => import('../src/client/AccountsSection.tsx').AccountsSectionInjected)()
+    expect(accountsInjected.controller).toBe(injected.controller)
+    expect(accountsInjected.hooks.snapshot).toBe(injected.controller.store)
     expect(injected.api).toBeDefined()
-    expect(injected.hooks.providerOptions.getSnapshot()).toBe(0)
+    expect(injected.hooks.decisions.getSnapshot()).toBe(0)
     const changed = vi.fn()
-    const unsubscribe = injected.hooks.providerOptions.subscribe(changed)
-    const removeOption = before.slots.register({ name: 'settings.models.provider-option', id: 'optional-provider' }, () => null)
-    expect(injected.hooks.providerOptions.getSnapshot()).toBe(1)
+    const unsubscribe = injected.hooks.decisions.subscribe(changed)
+    const removeOption = before.slots.register({ name: 'settings.models.decision', id: 'optional-provider' }, () => null)
+    expect(injected.hooks.decisions.getSnapshot()).toBe(1)
     await vi.waitFor(() => { expect(changed).toHaveBeenCalled() })
     unsubscribe()
     changed.mockClear()
     removeOption()
-    expect(injected.hooks.providerOptions.getSnapshot()).toBe(0)
+    expect(injected.hooks.decisions.getSnapshot()).toBe(0)
     await Promise.resolve()
     expect(changed).not.toHaveBeenCalled()
     const onboarding = before.slots.entries('settings.onboarding')
@@ -106,21 +114,21 @@ describe('ui-settings-models apply', () => {
     expect(after.slots.entries('settings.section')[0]!.component).toBe(ModelsSection)
     expect(after.slots.entries('settings.onboarding')).toHaveLength(2)
     // The self-inflicted ledger notifications hit the duplicate guard.
-    expect(after.slots.entries('settings.section')).toHaveLength(1)
+    expect(after.slots.entries('settings.section')).toHaveLength(2)
   })
 
   it('the label thunk follows the active locale without re-registration', async () => {
     const b = await bench()
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    b.locale.setLocale('en')
+    await b.locale.setLocale('en')
     expect(resolveSlotLabel(b.slots.entries('settings.section')[0]!.options.label)).toBe('Models')
     const injected = b.slots.entries('settings.section')[0]!.inject as unknown as () => import('../src/client/ModelsSection.tsx').ModelsSectionInjected
     expect(injected().t('deleteTitle')).toBe('Delete {provider}?')
     // Only one locale is shipped; re-selecting it still republishes through
     // the same durable-write path (see LocaleRuntime.setLocale), so the thunk
     // is re-read rather than assumed stale.
-    b.locale.setLocale('en')
+    await b.locale.setLocale('en')
     expect(resolveSlotLabel(b.slots.entries('settings.section')[0]!.options.label)).toBe('Models')
     expect(injected().t('deleteTitle')).toBe('Delete {provider}?')
   })
@@ -128,16 +136,16 @@ describe('ui-settings-models apply', () => {
   it('locale change while the slot is undeclared stays a no-op', async () => {
     const b = await bench()
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    b.locale.setLocale('en')
+    await b.locale.setLocale('en')
     expect(b.slots.entries('settings.section')).toHaveLength(0)
-    b.locale.setLocale('en')
+    await b.locale.setLocale('en')
   })
 
   it('re-registers after an HMR collapse re-declares the slot (stale disposer must not block)', async () => {
     const b = await bench()
     const redeclare = declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    expect(b.slots.entries('settings.section')).toHaveLength(1)
+    expect(b.slots.entries('settings.section')).toHaveLength(2)
     // Declarer unload: the cascade removes our entry while our local
     // disposer variable goes stale.
     redeclare()
@@ -148,9 +156,9 @@ describe('ui-settings-models apply', () => {
     expect(b.slots.entries('settings.section')[0]!.component).toBe(ModelsSection)
     expect(b.slots.entries('settings.onboarding')).toHaveLength(2)
     // The locale path also recovers through the same ledger re-check.
-    b.locale.setLocale('en')
+    await b.locale.setLocale('en')
     expect(resolveSlotLabel(b.slots.entries('settings.section')[0]!.options.label)).toBe('Models')
-    b.locale.setLocale('en')
+    await b.locale.setLocale('en')
   })
 
   it('registers the en nav dictionary and disposes everything with the fiber', async () => {

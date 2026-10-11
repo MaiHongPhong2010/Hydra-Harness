@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import type { SettingsScope, SettingsScopeSnapshot, SnapshotStore } from '@hydraharness/harness-client-runtime/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@hydraharness/harness-client-ui-slots'
 import type { InstructionsState } from './instructions-store.ts'
+import type { SettingsSelectionSnapshot } from '@hydraharness/harness-client-ui-settings/client'
 import type { PersonalizationKey } from './locales.ts'
 import css from './PersonalizationSection.module.css'
 
@@ -51,6 +52,8 @@ export interface PersonalizationSectionInjected {
     personalityDraft: SnapshotStore<PersonalityDraft>
     /** Memory settings scope, bound by the renderer as useMemory. */
     memory: SettingsScope<MemorySettings>
+    /** Addressed instruction document; memory and personality remain global. */
+    selection: SnapshotStore<SettingsSelectionSnapshot>
   }
   /** Refresh a clean editor on section entry, preserving any unsaved draft. */
   load: () => Promise<void>
@@ -95,6 +98,7 @@ export function PersonalizationSection(props: PersonalizationSectionProps): Reac
   const memory = useMemory((snapshot: SettingsScopeSnapshot<MemorySettings>) => snapshot)
   const personality = usePersonality((snapshot: SettingsScopeSnapshot<PersonalitySettings>) => snapshot)
   const personalityDraft = props.usePersonalityDraft((snapshot: PersonalityDraft) => snapshot)
+  const workspace = props.useSelection(snapshot => snapshot.target.workspaceId !== undefined)
   const [entries, setEntries] = useState<MemoryEntryView[]>([])
   const [memoryError, setMemoryError] = useState<string | null>(null)
 
@@ -103,6 +107,7 @@ export function PersonalizationSection(props: PersonalizationSectionProps): Reac
   }, [load])
 
   useEffect(() => {
+    if (workspace) return undefined
     let active = true
     void props.loadMemories().then((next) => {
       if (active) setEntries(next)
@@ -110,7 +115,7 @@ export function PersonalizationSection(props: PersonalizationSectionProps): Reac
       if (active) setMemoryError(error instanceof Error ? error.message : String(error))
     })
     return () => { active = false }
-  }, [props.loadMemories])
+  }, [props.loadMemories, workspace])
 
   const dirty = instructions.draft !== instructions.savedContent
   const saving = instructions.status === 'saving'
@@ -178,7 +183,7 @@ export function PersonalizationSection(props: PersonalizationSectionProps): Reac
               : null}
           </div>
         </details>
-        <details className={css.prompt}>
+        {!workspace && <details className={css.prompt}>
           <summary className={css.summary}>
             {t('personalityTitle')}
             {selectedPersonality !== currentPersonality ? <span className={css.badge}>{t('unsaved')}</span> : null}
@@ -208,10 +213,10 @@ export function PersonalizationSection(props: PersonalizationSectionProps): Reac
             </div>
             {personalityDraft.failed ? <p className={css.error} role="alert">{t('saveFailed')}</p> : null}
           </div>
-        </details>
+        </details>}
       </section>
 
-      <section className={css.group}>
+      {!workspace && <section className={css.group}>
         <h3 className={css.groupTitle}>{t('memoryTitle')}</h3>
         <p className={css.groupDesc}>{t('memoryDescription')}</p>
         <label className={css.checkbox}>
@@ -256,7 +261,7 @@ export function PersonalizationSection(props: PersonalizationSectionProps): Reac
             ))}
           </ul>}
         {memoryError === null ? null : <p className={css.error} role="alert">{memoryError}</p>}
-      </section>
+      </section>}
 
     </div>
   )

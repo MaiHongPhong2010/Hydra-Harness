@@ -6,6 +6,7 @@
  * active theme.
  */
 import clsx from 'clsx'
+import { useState } from 'react'
 import {
   IconDarkOutline16, IconFollowsystemOutline16, IconLightOutline16,
 } from '@hydraharness/harness-client-ui-primitives'
@@ -19,12 +20,12 @@ import css from './AppearanceRow.module.css'
 /** Injected business face: the preference write (t rides the standard locale seat). */
 export interface AppearanceRowInjected {
   /** Switch the theme preference. */
-  setTheme: (id: ThemePreference) => void
+  setTheme: (id: ThemePreference) => Promise<void>
 }
 
 /** Full component props: runtime share + store share + locale seat + injected face. */
 export type AppearanceRowComponentProps =
-  PropsRuntime<'settings.general.item'> & PropsStore<ReturnType<typeof createAppearanceRowStore>>
+  PropsRuntime<'settings.general.general.item'> & PropsStore<ReturnType<typeof createAppearanceRowStore>>
   & PropsLocale<'settings.theme'> & AppearanceRowInjected
 
 /** Cube order and icons (figma 501:30015-30017: Light, Dark, System). */
@@ -41,9 +42,14 @@ const CUBES: readonly { id: ThemePreference; labelKey: ThemeKey; Icon: typeof Ic
  */
 export function AppearanceRow({ t, setTheme, useStore }: AppearanceRowComponentProps) {
   const preference = useStore(s => s.preference)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string>()
   return (
     <div className={css.group}>
       <div className={css.title}>{t('appearance.title')}</div>
+      {saving || saved ? <div role="status" className={css.feedback}>{t(saving ? 'appearance.saving' : 'appearance.applies')}</div> : null}
+      {error !== undefined && <div role="alert" className={css.feedback}>{error}</div>}
       <div className={css.cubeRow}>
         {CUBES.map(({ id, labelKey, Icon }) => (
           <button
@@ -51,7 +57,13 @@ export function AppearanceRow({ t, setTheme, useStore }: AppearanceRowComponentP
             type="button"
             className={clsx(css.themeCube, preference === id && css.selected)}
             aria-pressed={preference === id}
-            onClick={() => { setTheme(id) }}
+            disabled={saving}
+            onClick={() => {
+              setSaving(true); setSaved(false); setError(undefined)
+              void setTheme(id).then(() => { setSaved(true) }, (failure: unknown) => {
+                setError(failure instanceof Error ? failure.message : String(failure))
+              }).finally(() => { setSaving(false) })
+            }}
           >
             <Icon />
             {t(labelKey)}

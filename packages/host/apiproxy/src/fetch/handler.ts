@@ -28,6 +28,7 @@ import {
   sessionHistoryRequestSchema,
   sessionListRequestSchema,
   sessionModelsRequestSchema,
+  sessionSuggestionsRequestSchema,
   sessionPromptRequestSchema,
   sessionRenameRequestSchema,
   sessionSearchRequestSchema,
@@ -66,6 +67,7 @@ import {
   settingsDescribeRequestSchema, settingsMutateRequestSchema, settingsOpenDocumentRequestSchema,
   settingsListMemoriesRequestSchema, settingsReadInstructionsRequestSchema, settingsRemoveMemoryRequestSchema,
   settingsReplaceRequestSchema, settingsUpdateRequestSchema, settingsWriteInstructionsRequestSchema,
+  settingsWorkspaceStatusRequestSchema, settingsSetWorkspaceTrustRequestSchema,
 } from '../api/settings.schema.ts'
 import {
   credentialsDescribeRequestSchema, credentialsSetRequestSchema, credentialsUnsetRequestSchema,
@@ -112,6 +114,7 @@ const UNARY_ROUTES: UnaryRoutes = {
   'session.delete': { schema: sessionDeleteRequestSchema, invoke: (api, r) => api.sessions.delete(r) },
   'session.history': { schema: sessionHistoryRequestSchema, invoke: (api, r) => api.sessions.history(r) },
   'session.models': { schema: sessionModelsRequestSchema, invoke: (api, r) => api.sessions.models(r) },
+  'session.suggestions': { schema: sessionSuggestionsRequestSchema, invoke: (api, r) => api.sessions.suggestions(r) },
   'session.selectModel': { schema: sessionSelectModelRequestSchema, invoke: (api, r) => api.sessions.selectModel(r) },
   'session.rename': { schema: sessionRenameRequestSchema, invoke: (api, r) => api.sessions.rename(r) },
   'session.fork': { schema: sessionForkRequestSchema, invoke: (api, r) => api.sessions.fork(r) },
@@ -158,6 +161,8 @@ const UNARY_ROUTES: UnaryRoutes = {
   'settings.mutate': { schema: settingsMutateRequestSchema, invoke: (api, r) => api.settings.mutate(r) },
   'settings.readInstructions': { schema: settingsReadInstructionsRequestSchema, invoke: (api, r) => api.settings.readInstructions(r) },
   'settings.writeInstructions': { schema: settingsWriteInstructionsRequestSchema, invoke: (api, r) => api.settings.writeInstructions(r) },
+  'settings.workspaceStatus': { schema: settingsWorkspaceStatusRequestSchema, invoke: (api, r) => api.settings.workspaceStatus(r) },
+  'settings.setWorkspaceTrust': { schema: settingsSetWorkspaceTrustRequestSchema, invoke: (api, r) => api.settings.setWorkspaceTrust(r) },
   'settings.listMemories': { schema: settingsListMemoriesRequestSchema, invoke: (api, r) => api.settings.listMemories(r) },
   'settings.removeMemory': { schema: settingsRemoveMemoryRequestSchema, invoke: (api, r) => api.settings.removeMemory(r) },
   'credentials.describe': { schema: credentialsDescribeRequestSchema, invoke: (api, r) => api.credentials.describe(r) },

@@ -1304,7 +1304,15 @@ index 0a1b76919766126f1c8c4a306b24e8096a5e02d0..564587721603ce841e914a5d9a2538fd
      "openai-responses": OpenAIResponsesOptions;
      "openai-codex-responses": OpenAICodexResponsesOptions;
      "azure-openai-responses": AzureOpenAIResponsesOptions;
-@@ -652,7 +654,7 @@ export interface Model<TApi extends Api> {
+@@ -287,6 +289,7 @@ export interface AssistantMessage {
+     responseModel?: string;
+     responseId?: string;
+     diagnostics?: AssistantMessageDiagnostic[];
++    serviceTier?: string;
+     usage: Usage;
+     stopReason: StopReason;
+     errorMessage?: string;
+@@ -652,7 +655,7 @@ export interface Model<TApi extends Api> {
      maxTokens: number;
      headers?: Record<string, string>;
      /** Compatibility overrides for OpenAI-compatible APIs. If not set, auto-detected from baseUrl. */
@@ -1313,3 +1321,16 @@ index 0a1b76919766126f1c8c4a306b24e8096a5e02d0..564587721603ce841e914a5d9a2538fd
  }
  export interface ImagesModel<TApi extends ImagesApi> extends Omit<Model<Api>, "api" | "provider" | "reasoning" | "contextWindow" | "maxTokens" | "compat"> {
      api: TApi;
+diff --git a/dist/api/openai-responses-shared.js b/dist/api/openai-responses-shared.js
+--- a/dist/api/openai-responses-shared.js
++++ b/dist/api/openai-responses-shared.js
+@@ -428,6 +428,9 @@
+             };
+         }
+         calculateCost(model, output.usage);
++        if (typeof response?.service_tier === "string") {
++            output.serviceTier = response.service_tier;
++        }
+         if (options?.applyServiceTierPricing) {
+             const serviceTier = options.resolveServiceTier
+                 ? options.resolveServiceTier(response?.service_tier, options.serviceTier)

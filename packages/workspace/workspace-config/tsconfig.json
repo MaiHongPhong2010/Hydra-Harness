@@ -1,0 +1,22 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
+  "include": ["src"],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/schemastery" },
+    { "path": "../workspace" },
+    { "path": "../../settings/settings" },
+    { "path": "../../settings/settings-file" },
+    { "path": "../../core/scope" },
+    { "path": "../../core/tools" },
+    { "path": "../../core/system-prompt" },
+    { "path": "../../core/agent" },
+    { "path": "../../shell/shell" },
+    { "path": "../../preset/agent-presets" },
+    { "path": "../../mcp/mcp-registry" },
+    { "path": "../../hooks/hooks-registry" },
+    { "path": "../../util/home-paths" },
+    { "path": "../../runtime-diagnostics/invariants" }
+  ]
+}

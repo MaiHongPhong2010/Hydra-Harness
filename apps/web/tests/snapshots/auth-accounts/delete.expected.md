@@ -2,6 +2,6 @@
   - heading "Delete Google Antigravity (antigravity)?" [level=2]
   - button "Close":
     - img
-  - paragraph: Deleting Google Antigravity (antigravity) removes its configuration and the shared Google sign-in details for Antigravity and Gemini API. Browser sign-ins are kept.
+  - paragraph: Deleting Google Antigravity (antigravity) removes its configuration. Connected accounts and credentials managed elsewhere are kept.
   - button "Cancel"
   - button "Delete Google Antigravity (antigravity)"

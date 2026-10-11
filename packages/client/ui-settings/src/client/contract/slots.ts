@@ -46,9 +46,8 @@ declare module '@hydraharness/harness-client-ui-slots' {
      * re-registers with fresh text on locale change, so the shell never
      * subscribes locale state; the ledger bump doubles as the shell's
      * re-render trigger). Sections render inside the panel content column.
-     * (`settings.general.item`, declared by ui-settings-general's General
-     * entry, is typed in the locale package — the common dependency of every
-     * item registrant; the shell neither declares nor renders it.)
+     * General declares six feature-row groups from this contract; the shell
+     * owns navigation and search while each feature owns its value and write.
      */
     'settings.section': { kind: 'list'; scope: 'root'; owner: SettingsSectionOwnerProps }
     /**
@@ -105,7 +104,17 @@ declare module '@hydraharness/harness-client-ui-slots' {
      * settings slot type, because this package is the settings domain's base
      * layer and every registrant already depends on it for `ctx.settingsScope`.
      */
-    'settings.general.item': { kind: 'list'; scope: 'root'; owner: SettingsGeneralItemOwnerProps }
+    'settings.general.permissions.item': { kind: 'list'; scope: 'root'; owner: SettingsGeneralItemOwnerProps }
+    /** Application and environment preferences contributed by their feature owners. */
+    'settings.general.general.item': { kind: 'list'; scope: 'root'; owner: SettingsGeneralItemOwnerProps }
+    /** Message composition and submission preferences. */
+    'settings.general.composer.item': { kind: 'list'; scope: 'root'; owner: SettingsGeneralItemOwnerProps }
+    /** Desktop popout preferences. */
+    'settings.general.popout.item': { kind: 'list'; scope: 'root'; owner: SettingsGeneralItemOwnerProps }
+    /** Notification preferences. */
+    'settings.general.notifications.item': { kind: 'list'; scope: 'root'; owner: SettingsGeneralItemOwnerProps }
+    /** Optional visual effects. */
+    'settings.general.toys.item': { kind: 'list'; scope: 'root'; owner: SettingsGeneralItemOwnerProps }
   }
 }
 
@@ -144,13 +153,15 @@ export interface SettingsHeaderOwnerProps {
 /**
  * Owner share of a settings section entry. The shell owns modal visibility
  * and navigation; a section's data arrives through its own inject faces and
- * stores. `close` is the one shell affordance a section receives, for flows
- * that leave settings altogether (starting a session from a section) — the
- * onboarding coordinator's `openSection`/`complete` precedent, inverted.
+ * stores. Sections can close the panel or navigate to another registered page.
  */
 export interface SettingsSectionOwnerProps {
+  /** Settings navigation search; General filters its registered row labels. */
+  query?: string
   /** Close the settings panel (the shell owns the open state). */
   close: () => void
+  /** Open a registered section, clear navigation search, and focus its heading. */
+  openSection: (id: string) => void
 }
 
 /** Owner share of the currently active settings-backed onboarding step. */

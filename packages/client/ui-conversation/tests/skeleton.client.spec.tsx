@@ -223,7 +223,7 @@ function mount(
           draftImages={() => []}
           resolveSubmitMode={() => 'queue'}
           toggleCommandMenu={vi.fn()}
-          useNotices={bindSnapshotSelector(wiring.notices)}
+          useNotices={bindSnapshotSelector(wiring.notices)} useComposerPreferences={select => select({ busyEnter: 'queue', plainText: false, showContextUsage: true, sendShortcut: 'enter' })}
           useLexicon={bindSnapshotSelector(wiring.lexicon)}
           useMenuLauncher={bindSnapshotSelector(createSnapshotStore<string | null>(null))}
           stop={stop}

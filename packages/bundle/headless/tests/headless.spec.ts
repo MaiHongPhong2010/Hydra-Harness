@@ -8,13 +8,14 @@ import AgentDefaultModelConfig from '@hydraharness/harness-agent-default-model'
 import { createAssistantMessage } from '@hydraharness/harness-llm'
 import SessionStore from '@hydraharness/harness-session'
 import type { Session, UserMessage } from '@hydraharness/harness-session'
+import { createScope, scopeTarget } from '@hydraharness/harness-scope'
 import { apply, Config, internals } from '../src/index.ts'
 
 const originalInternals = { ...internals }
 afterEach(() => { Object.assign(internals, originalInternals) })
 
 interface Script {
-  before?(session: Session): void
+  before?(session: Session, agent: Agent): void
   afterPrompt(session: Session, message: UserMessage): Promise<void> | void
 }
 
@@ -63,7 +64,7 @@ async function bench(script: Script): Promise<{
       })
       let idle = Promise.resolve()
       const agent = {} as Agent
-      const agentCtx = ownerCtx.extend({ agent })
+      const agentCtx = createScope(ownerCtx, agent).ctx.extend({ agent })
       Object.assign(agent, {
         id: session.id,
         options: options.agentOptions ?? {},
@@ -83,7 +84,7 @@ async function bench(script: Script): Promise<{
         whenIdle: () => idle,
       } satisfies Partial<Agent>)
       await options.setup?.(agentCtx)
-      script.before?.(session)
+      script.before?.(session, agent)
       ctx.agents.register(agent)
       return { agent, dispose: () => Promise.resolve() }
     },
@@ -108,6 +109,57 @@ async function bench(script: Script): Promise<{
 }
 
 describe('headless runner', () => {
+  it('joins its workspace before publication and pins the global model', async () => {
+    let published: Agent | undefined
+    const test = await bench({
+      before(_session, agent) { published = agent },
+      afterPrompt(session, message) { appendTurn(session, 1, message, 'workspace answer', true) },
+    })
+    const workspaceKey = {}
+    const workspace = createScope(test.ctx, workspaceKey)
+    let routed = false
+    workspace.ctx.on('agent/status', () => { routed = true })
+    test.ctx.provide('workspaceConfig', {
+      environment: (cwd: string) => {
+        expect(cwd).toBe(process.cwd())
+        return Promise.resolve({
+          scopeKey: workspaceKey,
+        })
+      },
+    } as never)
+    expect(await test.run()).toMatchObject({ code: 0, out: 'workspace answer\n' })
+    expect(published?.options).toEqual({ provider: 'test-provider', model: 'test-model' })
+    test.ctx.emit(scopeTarget(published!, published), 'agent/status', { agent: published!, status: 'idle' })
+    expect(routed).toBe(true)
+    await test.ctx.fiber.dispose()
+  })
+
+  it('records and mounts the selected workspace preset before publication', async () => {
+    let presetId: string | undefined
+    let mounted = false
+    const test = await bench({
+      before(session) {
+        expect(mounted).toBe(true)
+        presetId = session.header.agentPreset
+      },
+      afterPrompt(session, message) { appendTurn(session, 1, message, 'preset answer', true) },
+    })
+    test.ctx.provide('workspaceConfig', {
+      environment: () => Promise.resolve({
+        scopeKey: {},
+        settings: { get: () => ({ provider: 'test-provider', model: 'test-model' }) },
+        presets: { defaultId: 'workspace-preset', mount: (_ctx: Context, id: string) => {
+          expect(id).toBe('workspace-preset')
+          mounted = true
+          return Promise.resolve()
+        } },
+      }),
+    } as never)
+    expect(await test.run()).toMatchObject({ code: 0, out: 'preset answer\n' })
+    expect(presetId).toBe('workspace-preset')
+    await test.ctx.fiber.dispose()
+  })
+
   it('aggregates the final text across the complete idle-to-idle interval and flushes before exit', async () => {
     const test = await bench({
       before(session) {

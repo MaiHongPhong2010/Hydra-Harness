@@ -47,6 +47,8 @@ interface Draft {
   env: string
   cwd: string
   url: string
+  /** Sanitized endpoint initially returned for an existing HTTP server. */
+  originalUrl?: string
   headers: string
 }
 
@@ -73,6 +75,7 @@ function draftFrom(server: McpServer): Draft {
     env: '',
     cwd: server.cwd ?? '',
     url: server.url ?? '',
+    ...server.transport === 'streamable-http' && server.url !== undefined ? { originalUrl: server.url } : {},
     headers: '',
   }
 }
@@ -135,7 +138,7 @@ function toRequest(draft: Draft): McpServerDefinitionRequest | AssignmentFailure
     // The Host owns full URL validation; the browser only blocks a secret that
     // must never be embedded in an endpoint or sent through a normal field.
   }
-  return { ...shared, transport: 'streamable-http', url }
+  return { ...shared, transport: 'streamable-http', ...draft.originalUrl === url ? {} : { url } }
 }
 
 /** Whether the draft carries enough for its transport to be submitted. */
@@ -162,11 +165,12 @@ function statusLabel(server: McpServer, t: (key: PluginsSettingsLocaleKey) => st
  * @param props.t - the section's bound dictionary.
  * @returns the catalog, its add/edit dialog, and any failure notice.
  */
-export function McpServerCatalog({ active = true, controls, query, t }: {
+export function McpServerCatalog({ active = true, controls, query, t, workspace = false }: {
   active?: boolean
   controls: UserMcpControls
   query: string
   t: (key: PluginsSettingsLocaleKey) => string
+  workspace?: boolean
 }): ReactNode {
   const [request, setRequest] = useState(0)
   const [state, setState] = useState<ViewState>({ status: 'loading' })
@@ -388,6 +392,7 @@ export function McpServerCatalog({ active = true, controls, query, t }: {
                   disabled={saving}
                   onChange={(event) => { setDraft({ ...draft, cwd: event.currentTarget.value }) }}
                 />
+                <p className={css.empty}>{t(workspace ? 'userMcpWorkspaceCwdHint' : 'userMcpCwdHint')}</p>
                 <label htmlFor="user-mcp-env">{t('userMcpEnv')}</label>
                 <textarea data-hydra-control="field"
                   id="user-mcp-env"

@@ -28,6 +28,7 @@ export interface DesktopFileEntry {
 }
 
 export interface DesktopFilesApi {
+  openSystem?(path: string, workspaceId: string): Promise<void>
   root(workspaceId: string): Promise<string>
   list(path: string, workspaceId: string): Promise<DesktopFileEntry[]>
   search(query: string, workspaceId: string): Promise<DesktopFileEntry[]>
@@ -301,6 +302,8 @@ export function DesktopFilesPanel(props: {
   focusSearch: number
   onDirtyChange?: ((dirty: boolean) => void) | undefined
   onSavingChange?: ((saving: boolean) => void) | undefined
+  destination?: 'editor' | 'terminal' | 'system' | undefined
+  onOpenTerminal?: ((cwd: string) => void) | undefined
 }) {
   const api = window.hydraDesktop?.files
   const { workspaceId } = props
@@ -569,9 +572,21 @@ export function DesktopFilesPanel(props: {
     if (opening && children[path] === undefined) void loadDirectory(path)
   }
 
-  const openFile = useCallback(async (path: string) => {
+  const openFile = useCallback(async (path: string, forceEditor = false) => {
     if (api === undefined || rootPath === undefined || workspaceId === undefined
       || savingRef.current || mutatingRef.current || !mountedRef.current) return
+    if (!forceEditor && props.destination !== undefined && props.destination !== 'editor') {
+      try {
+        if (props.destination === 'terminal') {
+          if (props.onOpenTerminal === undefined) throw new Error('Terminal destination is unavailable')
+          props.onOpenTerminal(parentDirectory(rootPath, path))
+        } else {
+          if (api.openSystem === undefined) throw new Error('System destination is unavailable')
+          await api.openSystem(path, workspaceId)
+        }
+      } catch (reason: unknown) { setError(String(reason)) }
+      return
+    }
     const previous = documentRef.current
     if (previous?.path === path) return
     if (documentIsDirty(previous) && !window.confirm('Discard unsaved changes and open another file?')) return
@@ -615,7 +630,7 @@ export function DesktopFilesPanel(props: {
       // oxlint-disable-next-line typescript/no-unnecessary-condition -- refs can change while the desktop request is pending.
       if (mountedRef.current && readRequest.current === request) setReading(false)
     }
-  }, [api, rootPath, workspaceId])
+  }, [api, rootPath, workspaceId, props.destination, props.onOpenTerminal])
 
   const closeTab = useCallback((path: string, force = false) => {
     const target = openDocumentsRef.current.find(d => d.path === path)
@@ -676,7 +691,7 @@ export function DesktopFilesPanel(props: {
       if (entry.directory) setSelectedDirectory(entry.path)
       else if (readRequest.current === readRequestAtSubmit
         && documentRef.current === documentAtSubmit && !documentIsDirty(documentRef.current)) {
-        await openFile(entry.path)
+        await openFile(entry.path, true)
       }
     } catch (reason) {
       if (mountedRef.current && listGeneration.current === generation) setError(String(reason))

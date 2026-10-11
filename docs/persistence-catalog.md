@@ -574,7 +574,7 @@ Source: [`packages/context/personalization/src/session.ts:56`](../packages/conte
 'permission/preset': { preset: string; origin?: 'default' | 'selection' | 'inferred' }
 ```
 
-Source: [`packages/interaction/permission-presets/src/index.ts:53`](../packages/interaction/permission-presets/src/index.ts)
+Source: [`packages/interaction/permission-presets/src/index.ts:55`](../packages/interaction/permission-presets/src/index.ts)
 
 ### `personalization/*`
 
@@ -845,6 +845,30 @@ Source: [`packages/subagent/subagent/src/budget.ts:10`](../packages/subagent/sub
 ```
 
 Source: [`packages/subagent/subagent/src/descriptor.ts:37`](../packages/subagent/subagent/src/descriptor.ts)
+
+### `suggestions/*`
+
+<a id="suggestionsrequest--log-only"></a>
+
+#### `suggestions/request` — log-only
+
+```ts persistence-catalog
+/** Exact auxiliary model input; suggestions never enter conversation history. */
+'suggestions/request': { config: LlmCallConfig; system: string; context: string }
+```
+
+Source: [`packages/interaction/suggested-prompts/src/types.ts:10`](../packages/interaction/suggested-prompts/src/types.ts)
+
+<a id="suggestionsresult--log-only"></a>
+
+#### `suggestions/result` — log-only
+
+```ts persistence-catalog
+/** Accepted bounded draft choices or a readable failure. */
+'suggestions/result': SuggestedPromptBatch
+```
+
+Source: [`packages/interaction/suggested-prompts/src/types.ts:12`](../packages/interaction/suggested-prompts/src/types.ts)
 
 ### `team/*`
 

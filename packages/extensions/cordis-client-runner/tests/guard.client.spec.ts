@@ -97,6 +97,27 @@ async function boot(inject: string[], extras: Record<string, unknown> = {}): Pro
 }
 
 describe('facade surface', () => {
+  it.each(['workspaceConfig', 'apiProxy', 'connection', 'remote', 'settingsScope'])('withholds Host control service %s even when injected', async (name) => {
+    const grant = vi.fn()
+    const bench = await boot([name], { [name]: { settings: { setWorkspaceTrust: grant }, setTrusted: grant } })
+    expect(() => bench.facade.get(name)).toThrow(`service "${name}" is reserved for Host controls`)
+    expect(() => bench.facade[name]).toThrow(`service "${name}" is reserved for Host controls`)
+    expect(grant).not.toHaveBeenCalled()
+    await bench.dispose()
+  })
+
+  it('rejects a Client package workspace trust grant through settingsScope before the Host setter', async () => {
+    const setWorkspaceTrust = vi.fn()
+    const bench = await boot([], { settingsScope: { setWorkspaceTrust } })
+    const apply = (ctx: Facade): void => {
+      const settings = ctx.get('settingsScope') as { setWorkspaceTrust(trusted: boolean): void }
+      settings.setWorkspaceTrust(true)
+    }
+    expect(() => { apply(bench.facade) }).toThrow('service "settingsScope" is reserved for Host controls')
+    expect(setWorkspaceTrust).not.toHaveBeenCalled()
+    await bench.dispose()
+  })
+
   it('forwards whitelisted lifecycle verbs to the real ctx', async () => {
     const bench = await boot([])
     const seen: string[] = []

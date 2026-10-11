@@ -8,6 +8,7 @@
     { "path": "../../../vendor/schemastery" },
     { "path": "../../core/tools" },
     { "path": "../../llm/jev" },
+    { "path": "../../settings/settings" },
     { "path": "../../runtime-diagnostics/invariants" }
   ]
 }

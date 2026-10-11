@@ -6,6 +6,8 @@
 
 /** English dictionary (the key-set source of truth). */
 export const en = {
+  'tasks.title': 'Projectless task folder', 'tasks.description': 'Each standalone chat gets its own directory. Changing this root affects only new chats.',
+  'tasks.saving': 'Saving…', 'tasks.applies': 'Applies to new standalone chats', 'tasks.change': 'Choose folder',
   'group.ungrouped': 'Ungrouped',
   'session.new': 'New Session',
   'section.workspaces': 'Workspaces',

@@ -7,7 +7,7 @@
   "include": [
     "src"
   ],
-  "references": [
+  "references": [{"path": "../../settings/settings"},
     {
       "path": "../../../vendor/cosmokit"
     },

@@ -49,6 +49,16 @@ import { askUserQuestionAnswerSchema, questionResponsePayloadSchema } from '../s
 import { goalEditRequestSchema } from '../src/api/goals.schema.ts'
 import { subagentPromptRequestSchema } from '../src/api/subagents.schema.ts'
 import { authorizationLogoutRequestSchema } from '../src/api/authorization.schema.ts'
+import { settingsDescribeRequestSchema, settingsSetWorkspaceTrustRequestSchema, settingsWorkspaceStatusValueSchema } from '../src/api/settings.schema.ts'
+
+it('accepts opaque workspace settings targets and rejects unaddressed layers', () => {
+  expect(settingsDescribeRequestSchema.parse({ workspaceId: 'workspace-a', layer: 'shared' })).toEqual({ workspaceId: 'workspace-a', layer: 'shared' })
+  expect(settingsDescribeRequestSchema.safeParse({ layer: 'local' }).success).toBe(false)
+  expect(settingsDescribeRequestSchema.safeParse({ workspaceId: 'workspace-a', layer: 'other' }).success).toBe(false)
+  expect(settingsSetWorkspaceTrustRequestSchema.safeParse({ workspaceId: 'workspace-a', trusted: true }).success).toBe(true)
+  expect(settingsSetWorkspaceTrustRequestSchema.safeParse({ workspaceId: 'workspace-a', trusted: 'yes' }).success).toBe(false)
+  expect(settingsWorkspaceStatusValueSchema.safeParse({ workspaceId: 'workspace-a', trusted: true, trustDecided: true, hasProjectConfig: true }).success).toBe(true)
+})
 
 it('accepts whole-record credential removal while rejecting malformed explicit account identities', () => {
   const key = 'llm-account-auth/chatgpt'

@@ -23,6 +23,7 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       undo: async r => ({ rpcId: r.rpcId, result: { ok: false, error: { code: 'internal', message: 'unavailable', details: {} } } }),
     },
     sessions: {
+      suggestions: async r => ({ rpcId: r.rpcId, result: { ok: true, value: { items: [] } } }),
       selectVersion: async r => ({ rpcId: r.rpcId, result: { ok: true, value: { versionId: r.payload.versionId } } }),
       delete: async r => ({ rpcId: r.rpcId, result: { ok: true, value: { deleted: true, sessionIds: [r.payload.sessionId] } } }),
       revise: r => Promise.resolve({ rpcId: r.rpcId, result: { ok: false, error: { code: 'fork-unavailable', message: 'not configured', details: { sessionId: r.payload.sessionId } } } }),
@@ -276,6 +277,14 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       },
       async writeInstructions(request) {
         return { rpcId: request.rpcId, result: { ok: false, error: { code: 'instructions-rejected', message: 'stub', details: {} } } }
+      },
+      async workspaceStatus(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {
+          workspaceId: request.payload.workspaceId, trusted: false, trustDecided: false, hasProjectConfig: false,
+        } } }
+      },
+      async setWorkspaceTrust(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { ...request.payload, trustDecided: true, hasProjectConfig: false } } }
       },
       async listMemories(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { entries: [] } } }

@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector } from '@hydraharness/harness-client-test-runtime'
 import { createSnapshotStore } from '@hydraharness/harness-client-runtime/client'
+import type { SettingsSelectionSnapshot } from '@hydraharness/harness-client-ui-settings/client'
 import { AgentLoopCard } from '../src/client/AgentLoopCard.tsx'
 import type { AgentLoopCardProps } from '../src/client/AgentLoopCard.tsx'
 import { BashCard } from '../src/client/BashCard.tsx'
@@ -50,9 +51,11 @@ function cardActions() {
 }
 
 function renderSection(rows: readonly PluginsSettingsTabEntry[]) {
+  const selection = createSnapshotStore<SettingsSelectionSnapshot>({ target: {}, loading: false, error: null })
   const props = {
     t,
     useTabs: (selector: (value: readonly PluginsSettingsTabEntry[]) => unknown) => selector(rows),
+    useSelection: bindSnapshotSelector(selection),
     renderSlot: (_name: string, _owner: unknown, options: { only?: string }) => (
       <span>{options.only}</span>
     ),
@@ -151,9 +154,11 @@ describe('PluginsSettingsSection', () => {
   it('passes its one shared search query to every rendered tab', () => {
     const rows: readonly PluginsSettingsTabEntry[] = [{ id: 'all', order: 10, label: 'Plugin list' }]
     const seen: string[] = []
+    const selection = createSnapshotStore<SettingsSelectionSnapshot>({ target: {}, loading: false, error: null })
     const props = {
       t,
       useTabs: (selector: (value: readonly PluginsSettingsTabEntry[]) => unknown) => selector(rows),
+      useSelection: bindSnapshotSelector(selection),
       renderSlot: (_name: string, owner: { query: string }, options: { only?: string }) => {
         seen.push(owner.query)
         return <span>{options.only}</span>

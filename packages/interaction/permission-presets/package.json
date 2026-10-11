@@ -45,7 +45,7 @@
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
-  "peerDependencies": {
+  "peerDependencies": {"@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-shell": "workspace:^",
     "@hydraharness/harness-commands": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
@@ -55,13 +55,14 @@
     "@hydraharness/harness-session-projection": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
     "@hydraharness/harness-user-approval": "workspace:^",
-    "@hydraharness/cordis": "workspace:^"
+    "@hydraharness/cordis": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^"
   },
   "dependencies": {
     "@hydraharness/schemastery": "workspace:^",
     "zod": "^4.4.3"
   },
-  "devDependencies": {
+  "devDependencies": {"@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-shell": "workspace:^",
     "@hydraharness/harness-commands": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
@@ -71,6 +72,7 @@
     "@hydraharness/harness-session-projection": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
     "@hydraharness/harness-user-approval": "workspace:^",
-    "@hydraharness/cordis": "workspace:^"
+    "@hydraharness/cordis": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^"
   }
 }

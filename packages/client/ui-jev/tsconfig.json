@@ -6,6 +6,7 @@
     { "path": "../../../vendor/cosmokit" },
     { "path": "../../../vendor/cordis" },
     { "path": "../ui-slots" },
+    { "path": "../ui-primitives" },
     { "path": "../runtime" },
     { "path": "../ui-settings" },
     { "path": "../ui-settings-models" },

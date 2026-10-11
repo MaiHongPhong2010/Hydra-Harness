@@ -28,6 +28,12 @@ flowchart LR
   cfg --> plugin_hydra_base_session_title_llm
   plugin_hydra_base_user_questions["user-questions<br/>@hydraharness/harness-user-questions"]
   cfg --> plugin_hydra_base_user_questions
+  plugin_hydra_base_toys["toys<br/>@hydraharness/harness-toys"]
+  cfg --> plugin_hydra_base_toys
+  plugin_hydra_base_notifications["notifications<br/>@hydraharness/harness-notifications"]
+  cfg --> plugin_hydra_base_notifications
+  plugin_hydra_base_optional_plugins["optional-plugins<br/>@hydraharness/harness-optional-plugins"]
+  cfg --> plugin_hydra_base_optional_plugins
   plugin_hydra_base_agent["agent<br/>@hydraharness/harness-agent"]
   cfg --> plugin_hydra_base_agent
   plugin_hydra_base_agent_default_model["agent-default-model<br/>@hydraharness/harness-agent-default-model"]
@@ -108,10 +114,10 @@ flowchart LR
   cfg --> plugin_hydra_base_commands
   plugin_hydra_base_plugin_runtime["plugin-runtime<br/>@hydraharness/harness-plugin-runtime"]
   cfg --> plugin_hydra_base_plugin_runtime
-  plugin_hydra_base_mcp_registry["mcp-registry<br/>@hydraharness/harness-mcp-registry"]
-  cfg --> plugin_hydra_base_mcp_registry
-  plugin_hydra_base_hooks_registry["hooks-registry<br/>@hydraharness/harness-hooks-registry"]
-  cfg --> plugin_hydra_base_hooks_registry
+  plugin_hydra_base_workspace_config["workspace-config<br/>@hydraharness/harness-workspace-config"]
+  cfg --> plugin_hydra_base_workspace_config
+  plugin_hydra_base_agent_presets["agent-presets<br/>@hydraharness/harness-agent-presets"]
+  cfg --> plugin_hydra_base_agent_presets
   plugin_hydra_base_command_feedback["command-feedback<br/>@hydraharness/harness-command-feedback"]
   cfg --> plugin_hydra_base_command_feedback
   plugin_hydra_base_goal["goal<br/>@hydraharness/harness-goal"]
@@ -200,6 +206,8 @@ flowchart LR
   cfg --> plugin_hydra_base_fs_sandbox
   plugin_hydra_base_llm_deepseek["llm-deepseek<br/>@hydraharness/harness-llm-deepseek"]
   cfg --> plugin_hydra_base_llm_deepseek
+  plugin_hydra_base_suggested_prompts["suggested-prompts<br/>@hydraharness/harness-suggested-prompts"]
+  cfg --> plugin_hydra_base_suggested_prompts
   plugin_hydra_base_jev["jev<br/>@hydraharness/harness-jev"]
   cfg --> plugin_hydra_base_jev
   plugin_hydra_base_browser_decisions["browser-decisions<br/>@hydraharness/harness-browser-decisions"]
@@ -218,6 +226,9 @@ flowchart LR
 | `session-title` | `@hydraharness/harness-session-title` |
 | `session-title-llm` | `@hydraharness/harness-session-title-first-prompt-llm` |
 | `user-questions` | `@hydraharness/harness-user-questions` |
+| `toys` | `@hydraharness/harness-toys` |
+| `notifications` | `@hydraharness/harness-notifications` |
+| `optional-plugins` | `@hydraharness/harness-optional-plugins` |
 | `agent` | `@hydraharness/harness-agent` |
 | `agent-default-model` | `@hydraharness/harness-agent-default-model` |
 | `jobs` | `@hydraharness/harness-jobs-local` |
@@ -258,8 +269,8 @@ flowchart LR
 | `tool-skill` | `@hydraharness/harness-tool-skill` |
 | `commands` | `@hydraharness/harness-commands` |
 | `plugin-runtime` | `@hydraharness/harness-plugin-runtime` |
-| `mcp-registry` | `@hydraharness/harness-mcp-registry` |
-| `hooks-registry` | `@hydraharness/harness-hooks-registry` |
+| `workspace-config` | `@hydraharness/harness-workspace-config` |
+| `agent-presets` | `@hydraharness/harness-agent-presets` |
 | `command-feedback` | `@hydraharness/harness-command-feedback` |
 | `goal` | `@hydraharness/harness-goal` |
 | `goal-round-driver` | `@hydraharness/harness-goal-round-driver` |
@@ -304,6 +315,7 @@ flowchart LR
 | `agent-loop` | `@hydraharness/harness-agent-loop` |
 | `fs-sandbox` | `@hydraharness/harness-fs-sandbox` |
 | `llm-deepseek` | `@hydraharness/harness-llm-deepseek` |
+| `suggested-prompts` | `@hydraharness/harness-suggested-prompts` |
 | `jev` | `@hydraharness/harness-jev` |
 | `browser-decisions` | `@hydraharness/harness-browser-decisions` |
 

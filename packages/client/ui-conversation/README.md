@@ -58,6 +58,8 @@ A finished turn materializes one ordered `turn-tail` Conversation Node. Its engi
 
 Web passage citations resolve only against successful fetch results preceding the assistant message in the loaded transcript, including Code Mode subcalls. The source identity selects a recorded content version; a nonempty exact quote identifies its offsets. Missing, later, failed, or mismatched sources stay inert. Loading older history can make a previously unavailable source resolvable.
 
+The ui-conversation namespace owns literal draft presentation, estimated context-meter visibility, send shortcut, and Queue/Steer defaults. Draft contents survive presentation changes. Enter sends by default; Ctrl/Cmd+Enter sends the opposite behavior. With Ctrl/Cmd+Enter selected, Enter inserts a newline and Ctrl/Cmd+Shift+Enter sends the opposite behavior. Shift+Enter, IME composition, and repeated keydown events never submit. The Send button uses the same default; subagents without steering queue their follow-up.
+
 ## Model Experience
 
 None, as the conversation UI renders session history and streams in the browser; nothing here reaches a model request.

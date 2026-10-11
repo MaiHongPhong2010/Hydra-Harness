@@ -1,6 +1,7 @@
 /** Shared, immutable runtime for imported OpenAI/Codex and Claude plugin bundles. */
 
 import { execFile } from 'node:child_process'
+import type {} from '@hydraharness/harness-optional-plugins'
 import { createHash, randomUUID } from 'node:crypto'
 import {
   copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat,
@@ -171,6 +172,7 @@ export class PluginManifestLoader {
    * @param identity - Source-qualified identity used to namespace MCP servers.
    * @returns Parsed manifest and discovered component definitions.
    */
+
   async load(root: string, identity = 'plugin'): Promise<LoadedPlugin> {
     const checkedRoot = await validateBundleTree(root)
     const manifestLocation = await pluginManifestPath(checkedRoot)
@@ -470,6 +472,16 @@ export class ImportedPluginRuntime extends Service {
   }
 
   protected async [Service.init](): Promise<void> {
+    this.ctx.inject(['optionalPlugins'], (pctx) => {
+      pctx.effect(() => pctx.optionalPlugins.subscribe((enabled) => {
+        void this.enqueue(async () => {
+          if (!enabled) await pctx.optionalPlugins.drain()
+          if (pctx.optionalPlugins.enabled !== enabled) return
+          if (!enabled) for (const identity of [...this.live.keys()]) await this.unload(identity)
+          else for (const [identity, entry] of await this.store.list()) if (entry.enabled) await this.load(identity, entry)
+        }).catch((error: unknown) => { this.ctx.logger.error(error) })
+      }), 'plugin-runtime: optional policy')
+    })
     this.ctx.effect(() => () => this.dispose(), 'plugin-runtime.dispose')
     this.ctx.on('tools/pre-execute', (exec, next): Promise<PreToolDecision> => this.approveMcpTool(exec, next))
     this.ctx.commands.register({
@@ -661,6 +673,7 @@ export class ImportedPluginRuntime extends Service {
   }
 
   private async load(identity: string, entry: StoredPlugin): Promise<void> {
+    if (this.ctx.get('optionalPlugins')?.enabled === false) return
     if (this.live.has(identity)) return
     const loaded = await this.store.load(entry, identity)
     const component: RuntimeComponent = { commandDisposes: [], mcpFibers: new Map() }

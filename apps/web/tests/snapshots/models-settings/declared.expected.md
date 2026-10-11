@@ -1,6 +1,7 @@
 - dialog "Settings":
   - navigation:
     - text: Settings
+    - searchbox "Search settings"
     - button "General":
       - img
       - text: General
@@ -10,6 +11,9 @@
     - button "Models":
       - img
       - text: Models
+    - button "Accounts":
+      - img
+      - text: Accounts
     - button "Web Search":
       - img
       - text: Web Search
@@ -28,7 +32,11 @@
     - img
     - text: Close
   - heading "Models" [level=2]
-  - paragraph: Sign in with your accounts or enter API keys to use models from these providers.
+  - paragraph: Configure providers, API keys, model catalogs, and default models.
+  - region "Default model":
+    - text: Default model
+    - combobox "Default model"
+    - paragraph: Used by new chats. Existing chats keep their selected model.
   - region "Image and video generation":
     - heading "Image and video generation" [level=3]
     - button "Refresh models"
@@ -39,6 +47,13 @@
     - text: Video model
     - combobox "Video model":
       - option "Automatic fallback" [selected]
+  - region "Decision model":
+    - heading "Decision model" [level=3]
+    - text: Decision model
+    - combobox "Decision model" [disabled]:
+      - option "Off" [selected]
+    - paragraph: Enable the Jev group in Plugins to use browser decisions.
+    - button "Manage plugins"
   - region "API keys":
     - heading "API keys" [level=3]
     - paragraph: Configure provider API keys and optional fallback keys.
@@ -58,10 +73,11 @@
     - button "Add a custom provider":
       - img
       - text: Add a custom provider
-  - region "Account sign-in":
-    - heading "Account sign-in" [level=3]
-    - paragraph: Connect provider accounts independently of your API keys.
+  - region "Account-backed models":
+    - heading "Account-backed models" [level=3]
+    - paragraph: Configure catalogs for providers that use connected accounts. Manage sign-in and usage in Accounts.
+    - button "Manage accounts"
     - list
-    - button "Add sign-in provider":
+    - button "Add provider":
       - img
-      - text: Add sign-in provider
+      - text: Add provider

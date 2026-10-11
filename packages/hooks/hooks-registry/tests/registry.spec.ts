@@ -3,13 +3,17 @@
  * bridges need `ctx.shell` to run a hook; nothing here executes one, so a stub
  * executor stands in and keeps the suite platform-independent.
  */
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context, Service } from '@hydraharness/cordis'
 import FileSettingsProvider from '@hydraharness/harness-settings-file'
 import { SettingsConflictError } from '@hydraharness/harness-settings'
+import { createScope, scopeOf, scopeTarget } from '@hydraharness/harness-scope'
+import type { Agent } from '@hydraharness/harness-agent'
+import type ToolRuntime from '@hydraharness/harness-tools'
+import type { ToolExecution } from '@hydraharness/harness-tools'
 import HookRecordRegistry, { HOOKS_SETTINGS_NAMESPACE } from '@hydraharness/harness-hooks-registry/src/index.ts'
 import type { HookRecordSnapshot } from '@hydraharness/harness-hooks-registry/src/types.ts'
 import * as CodexHooks from '@hydraharness/harness-hooks-codex'
@@ -27,14 +31,19 @@ afterEach(async () => {
   await Promise.all(directories.splice(0).map(path => rm(path, { recursive: true, force: true })))
 })
 
-/** The one shell capability both bridges declare; no test here invokes it. */
+/** Shell stub that captures bridge requests without starting a process. */
 class StubShell extends Service {
   constructor(ctx: Context) {
     super(ctx, 'shell')
   }
 
-  run(): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 })
+  resolve(request: { command: string }): { command: string } {
+    return request
+  }
+
+  run(_request: { command: string; signal?: AbortSignal; workdir?: string }):
+  Promise<{ stdout: { text: string }; stderr: { text: string }; exitCode: number }> {
+    return Promise.resolve({ stdout: { text: '' }, stderr: { text: '' }, exitCode: 0 })
   }
 }
 
@@ -74,6 +83,134 @@ function nextReconciliation(ctx: Context): Promise<HookRecordSnapshot> {
 }
 
 describe('stored records', () => {
+  it.each(['claude-code', 'codex'] as const)('aborts and drains an active blocking %s hook when its project layer is revoked', async (dialect) => {
+    const { ctx, registry } = await harness()
+    const entered = Promise.withResolvers<undefined>()
+    const aborted = Promise.withResolvers<undefined>()
+    const exited = Promise.withResolvers<{ stdout: { text: string }; stderr: { text: string }; exitCode: number }>()
+    const run = vi.spyOn(ctx.get('shell') as unknown as StubShell, 'run').mockImplementation((request) => {
+      request.signal!.addEventListener('abort', () => { aborted.resolve(undefined) }, { once: true })
+      entered.resolve(undefined)
+      return exited.promise
+    })
+    await registry.define({ mode: 'create', name: 'blocking', dialect, enabled: true,
+      config: { PreToolUse: [{ hooks: [{ type: 'command', command: 'blocking-command' }, { type: 'command', command: 'later-command' }] }] },
+    })
+    const active = ctx.waterfall(scopeTarget(ctx as unknown as ToolRuntime, undefined), 'tools/pre-execute',
+      { name: 'blocked', arguments: {}, signal: new AbortController().signal } as ToolExecution,
+      () => Promise.resolve({ kind: 'allow' as const }))
+    await entered.promise
+    ctx.settings.setLayerEnabled(false)
+    const revoked = registry.settle()
+    let settled = false
+    void revoked.then(() => { settled = true })
+    await aborted.promise
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    exited.resolve({ stdout: { text: '' }, stderr: { text: '' }, exitCode: 0 })
+    await revoked
+    await active
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(registry.list().records).toEqual([])
+  })
+
+  it('reads relative hook documents and runs commands from its owning workspace while retaining Host inline storage', async () => {
+    const { ctx, root } = await harness()
+    const workspace = join(root, 'project')
+    await mkdir(workspace)
+    const owner = createScope(ctx, { workspace: 'paths' }).ctx.isolate('settings').isolate('hookRecords')
+    await owner.plugin(FileSettingsProvider, { path: join(workspace, 'settings.yaml'), watch: false })
+    await owner.plugin(HookRecordRegistry, { hydraHome: join(root, 'private'), cwd: workspace })
+    await writeFile(join(workspace, 'hooks.json'), JSON.stringify({ PreToolUse: [{ hooks: [{ type: 'command', command: './guard' }] }] }))
+    const registry = owner.get('hookRecords')!
+    await registry.define({ mode: 'create', name: 'relative', dialect: 'codex', configPath: 'hooks.json', enabled: true })
+    expect(registry.list().records[0]).toMatchObject({ status: 'started', configPath: 'hooks.json' })
+    const run = vi.spyOn(ctx.get('shell') as unknown as StubShell, 'run')
+    await ctx.waterfall(scopeTarget(ctx as unknown as ToolRuntime, scopeOf(owner)), 'tools/pre-execute',
+      { name: 'guarded', arguments: {}, signal: new AbortController().signal } as ToolExecution,
+      () => Promise.resolve({ kind: 'allow' as const }))
+    expect(run.mock.calls[0]?.[0]).toMatchObject({ command: './guard', workdir: workspace })
+    await registry.define({ mode: 'create', name: 'inline', dialect: 'codex', config: CLAUDE_HOOKS, enabled: true })
+    expect(await readFile(join(root, 'private', 'hooks', 'inline.json'), 'utf8')).toContain('guard.sh')
+    await expect(owner.isolate('hookRecords').plugin(HookRecordRegistry, { cwd: 'relative' })).rejects.toThrow('cwd must be absolute')
+  })
+
+  it('writes shared hooks without copying local definitions or removing a still-effective inline document', async () => {
+    const { ctx, registry, root } = await harness()
+    await registry.define({ mode: 'create', name: 'guardrails', dialect: 'codex',
+      config: { SessionStart: [{ hooks: [{ type: 'command', command: 'global' }] }] },
+    })
+    const sharedScope = createScope(ctx, { layer: 'shared' })
+    const localScope = createScope(ctx, { layer: 'local' })
+    const sharedCtx = sharedScope.ctx.isolate('settings')
+    const localCtx = localScope.ctx.isolate('settings').isolate('hookRecords')
+    await sharedCtx.plugin(FileSettingsProvider, { path: join(root, 'shared.yaml'), watch: false })
+    await localCtx.plugin(FileSettingsProvider, { path: join(root, 'local.yaml'), watch: false })
+    const shared = sharedCtx.get('settings')!
+    const local = localCtx.get('settings')!
+    shared.inherit(ctx.get('settings')!, [HOOKS_SETTINGS_NAMESPACE])
+    local.inherit(shared, [HOOKS_SETTINGS_NAMESPACE])
+    await localCtx.plugin(HookRecordRegistry, { hydraHome: join(root, 'runtime') })
+    const runtime = localCtx.get('hookRecords')!
+    await runtime.define({ mode: 'replace', name: 'guardrails', dialect: 'codex',
+      config: { SessionStart: [{ hooks: [{ type: 'command', command: 'shared' }] }] },
+    }, shared)
+    await runtime.define({ mode: 'replace', name: 'guardrails', dialect: 'codex', enabled: true,
+      config: { SessionStart: [{ hooks: [{ type: 'command', command: 'local' }] }] },
+    }, local)
+    const inlinePath = join(root, 'runtime', 'hooks', 'guardrails.json')
+    expect(runtime.list(shared).records[0]).toMatchObject({ status: 'stopped', events: [], hookCount: 0 })
+    const localBefore = await readFile(join(root, 'local.yaml'), 'utf8')
+    shared.setLayerEnabled(false)
+    await runtime.setEnabled({ name: 'guardrails', enabled: true }, shared)
+    expect(await readFile(join(root, 'shared.yaml'), 'utf8')).toContain('command: shared')
+    expect(await readFile(join(root, 'shared.yaml'), 'utf8')).not.toContain('command: local')
+    expect(await readFile(join(root, 'local.yaml'), 'utf8')).toBe(localBefore)
+    await runtime.remove('guardrails', shared)
+    await runtime.settle()
+    expect(runtime.list().records[0]?.status).toBe('started')
+    expect(await readFile(inlinePath, 'utf8')).toContain('local')
+  })
+
+  it('isolates same-name workspace hooks, inline documents, caller writes, and lifecycle events', async () => {
+    const { ctx, root } = await harness()
+    await ctx.settings.replace(HOOKS_SETTINGS_NAMESPACE, { records: [] })
+    const before = await readFile(join(root, 'settings.yaml'), 'utf8')
+    const run = vi.spyOn(ctx.get('shell') as unknown as StubShell, 'run')
+    const first = createScope(ctx, { workspace: 'first' })
+    const second = createScope(ctx, { workspace: 'second' })
+    const ownerA = first.ctx.isolate('settings').isolate('hookRecords')
+    const ownerB = second.ctx.isolate('settings').isolate('hookRecords')
+    for (const [index, owner] of [ownerA, ownerB].entries()) {
+      const home = join(root, String(index))
+      await owner.plugin(FileSettingsProvider, { path: join(home, 'settings.yaml'), watch: false })
+      await owner.plugin(HookRecordRegistry, { hydraHome: home })
+      await owner.get('hookRecords')!.define({ mode: 'create', name: 'startup', dialect: 'codex', enabled: true,
+        config: { SessionStart: [{ hooks: [{ type: 'command', command: `workspace-${String(index)}` }] }] },
+      })
+      expect(await readFile(join(home, 'hooks', 'startup.json'), 'utf8')).toContain(`workspace-${String(index)}`)
+    }
+    const agent = { session: { header: { id: 'workspace-agent', cwd: root } }, inject: vi.fn() } as unknown as Agent
+    ctx.emit(scopeTarget(agent, scopeOf(first.ctx)), 'agent/session-start', { agent, source: 'startup' })
+    await vi.waitFor(() => { expect(run).toHaveBeenCalledTimes(1) })
+    expect(run.mock.calls[0]?.[0].command).toBe('workspace-0')
+
+    const caller = ctx.isolate('hookRecords', ownerA[Context.isolate].hookRecords)
+    await caller.plugin({
+      inject: ['hookRecords'],
+      async apply(apiCtx) { await apiCtx.hookRecords.setEnabled({ name: 'startup', enabled: false }) },
+    })
+    expect(await readFile(join(root, 'settings.yaml'), 'utf8')).toBe(before)
+    expect(ownerB.get('hookRecords')!.list().records[0]?.status).toBe('started')
+
+    await first.dispose()
+    ctx.emit(scopeTarget(agent, scopeOf(first.ctx)), 'agent/session-start', { agent, source: 'startup' })
+    ctx.emit(scopeTarget(agent, scopeOf(second.ctx)), 'agent/session-start', { agent, source: 'startup' })
+    await vi.waitFor(() => { expect(run).toHaveBeenCalledTimes(2) })
+    expect(run.mock.calls[1]?.[0].command).toBe('workspace-1')
+    await second.dispose()
+  })
+
   it('rejects a fifty-first record before updating the document', async () => {
     const { ctx, registry } = await harness()
     const reconciled = nextReconciliation(ctx)

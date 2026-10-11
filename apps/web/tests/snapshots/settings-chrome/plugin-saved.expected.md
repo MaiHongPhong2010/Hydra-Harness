@@ -1,16 +1,16 @@
-- dialog "session-stats":
-  - heading "session-stats" [level=2]
+- dialog "command-feedback":
+  - heading "command-feedback" [level=2]
   - button "Close plugin details":
     - img
-  - paragraph: "@hydraharness/harness-session-stats"
+  - paragraph: "@hydraharness/harness-command-feedback"
   - table:
     - rowgroup:
-      - row "Description Whole-log conversation counts and wall times projection (sessionStats) for the Hydra harness":
+      - row "Description Log-only session feedback producer and human-facing slash command":
         - rowheader "Description"
-        - cell "Whole-log conversation counts and wall times projection (sessionStats) for the Hydra harness"
-      - row "Usage Show conversation counts and elapsed times derived from the session history.":
+        - cell "Log-only session feedback producer and human-facing slash command"
+      - row "Usage Record session feedback through a slash command.":
         - rowheader "Usage"
-        - cell "Show conversation counts and elapsed times derived from the session history."
+        - cell "Record session feedback through a slash command."
       - row "Scope All sessions":
         - rowheader "Scope"
         - cell "All sessions"

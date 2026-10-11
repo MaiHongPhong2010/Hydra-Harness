@@ -2,22 +2,34 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@hydraharness/cordis'
 import * as Jev from '@hydraharness/harness-jev'
 import type { ToolDefinition } from '@hydraharness/harness-tools'
-import { apply } from '../src/index.ts'
+import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@hydraharness/harness-settings'
+import { apply, type Config } from '../src/index.ts'
 
 let context: Context | undefined
 
 const args = { state: 'button', question: 'next', choices: ['click', 'stop'] }
 const execution = { callId: 'test', signal: new AbortController().signal }
 
-async function mount(systemOne?: Jev.JevService['systemOne']): Promise<ToolDefinition> {
+class MemorySettings extends SettingsProvider {
+  doc: Record<string, unknown> = {}
+  get writable(): boolean { return true }
+  protected load(): Promise<Record<string, unknown>> { return Promise.resolve(structuredClone(this.doc)) }
+  protected persist(ns: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
+    this.doc = { ...this.doc, [ns]: structuredClone(section) }
+    return Promise.resolve()
+  }
+}
+
+async function mount(systemOne?: Jev.JevService['systemOne'], config: Config = {}): Promise<ToolDefinition> {
   context = new Context()
+  await context.plugin(MemorySettings).await()
   let tool: ToolDefinition | undefined
   context.reflect.provide('tools', { register: (definition: ToolDefinition) => {
     tool = definition
     return () => {}
   } })
   if (systemOne !== undefined) context.reflect.provide('jev', { systemOne })
-  await context.plugin({ inject: ['tools'], apply }).await()
+  await context.plugin({ inject: ['tools'], apply }, config).await()
   return tool!
 }
 
@@ -27,6 +39,29 @@ afterEach(async () => {
 })
 
 describe('browser decisions', () => {
+  it('blocks new requests when disabled and lets a pending decision complete', async () => {
+    let finish!: (value: Awaited<ReturnType<Jev.JevService['systemOne']>>) => void
+    const systemOne = vi.fn<Jev.JevService['systemOne']>().mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    const tool = await mount(systemOne)
+    const pending = tool.execute(args, execution as never)
+    await context!.settings.update(settingsNamespace('browser-decisions'), { enabled: false })
+    await expect(tool.execute(args, execution as never)).resolves.toEqual({ available: false, reason: 'Decision model is Off.' })
+    expect(systemOne).toHaveBeenCalledTimes(1)
+    finish({ model: 'jev', answers: { decision: { type: 'choice', choice: 'click', confidence: 0.9 } } })
+    await expect(pending).resolves.toEqual({ available: true, decision: 'click', confidence: 0.9 })
+    await context!.settings.update(settingsNamespace('browser-decisions'), { enabled: true })
+    systemOne.mockResolvedValue({ model: 'jev', answers: { decision: { type: 'choice', choice: 'click', confidence: 0.9 } } })
+    await expect(tool.execute(args, execution as never)).resolves.toMatchObject({ available: true })
+    expect(systemOne).toHaveBeenCalledTimes(2)
+  })
+
+  it('honors an explicitly disabled composition without a settings write', async () => {
+    const systemOne = vi.fn<Jev.JevService['systemOne']>()
+    const tool = await mount(systemOne, { enabled: false })
+    await expect(tool.execute(args, execution as never)).resolves.toMatchObject({ available: false })
+    expect(systemOne).not.toHaveBeenCalled()
+  })
+
   it('forwards candidate labels and cancellation, and renders the selected action', async () => {
     const systemOne = vi.fn<Jev.JevService['systemOne']>().mockResolvedValue({
       model: 'jev', answers: { decision: { type: 'choice', choice: 'click', confidence: 0.925 } },

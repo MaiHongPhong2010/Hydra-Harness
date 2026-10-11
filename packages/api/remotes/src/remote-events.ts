@@ -15,6 +15,8 @@
  * else.
  */
 export const API_REMOTE_FORWARDED_EVENTS = [
+  'toys/confetti',
+  'notifications/requested',
   'file-review/changed',
   'agent-preset/selected',
   'commands/change',
@@ -30,5 +32,7 @@ export const API_REMOTE_FORWARDED_EVENTS = [
   'llm/adapters-updated',
   'settings/document-updated',
   'settings/registry-updated',
+  'workspace-config/updated',
+  'workspace-config/trust-updated',
   'skills/change',
 ] as const

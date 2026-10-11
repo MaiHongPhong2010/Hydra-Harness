@@ -20,6 +20,7 @@
     - /placeholder: "-y\n@modelcontextprotocol/server-filesystem"
   - text: Working directory
   - textbox "Working directory"
+  - paragraph: Leave empty to use the Host working directory.
   - text: Environment, one NAME=value per line
   - textbox "Environment, one NAME=value per line":
     - /placeholder: API_TOKEN=…

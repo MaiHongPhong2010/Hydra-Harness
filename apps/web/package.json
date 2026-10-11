@@ -26,6 +26,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@hydraharness/harness-atomic-write": "workspace:^",
     "@hydraharness/harness-attachment": "workspace:^",
     "@hydraharness/harness-tools": "workspace:^",
     "@hydraharness/harness-authorization": "workspace:^",

@@ -22,6 +22,7 @@ import {
   type StoredPrefix,
 } from '@hydraharness/harness-session-persistence'
 import type { SessionEvent, SessionId, SessionHeader, SessionPreparation } from '@hydraharness/harness-session'
+import { settingsNamespace } from '@hydraharness/harness-settings'
 import {
   encodeSegment, eventLines, logPath, logSuffix, parseHeaderMeta, projectDir, scanLog, sessionDir,
   SessionLogScanner, toHeaderLine,
@@ -146,7 +147,7 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
   private packChunks: boolean
   private compression: JsonlCompression
   private coordinator: PersistenceCoordinator<JsonlTornMarker>
-  private rootEncodingCheck: Promise<void> | undefined
+  private readonly artifactPaths = new Map<SessionId, string>()
 
   constructor(ctx: Context, config: Config) {
     super(ctx)
@@ -160,6 +161,16 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
       ?? DEFAULT_WRITE_BATCH_MAX_DELAY_MS
     this.packChunks = config.packChunks ?? DEFAULT_PACK_CHUNKS
     this.compression = config.compression ?? DEFAULT_COMPRESSION
+    let settingsAdopted = false
+    ctx.inject(['settings'], (sctx) => {
+      const scope = sctx.settings.register(settingsNamespace('session-history'), z.object({ compression: JsonlCompressionSchema }), {
+        base: { compression: config.compression ?? DEFAULT_COMPRESSION }, applies: 'restart',
+      })
+      if (!settingsAdopted) {
+        this.compression = scope.get().compression
+        settingsAdopted = true
+      }
+    })
     this.assertUsableRoot()
     this.coordinator = new PersistenceCoordinator<JsonlTornMarker>(this.ctx, this, {
       preparedSessionCacheSize,
@@ -174,7 +185,7 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
   /** Resolve the absolute target path without touching the filesystem. */
   locate(meta: SessionHeader): SessionLocation {
-    return { kind: 'jsonl', path: logPath(this.root, meta.cwd, meta.id, this.compression) }
+    return { kind: 'jsonl', path: this.artifactPaths.get(meta.id) ?? logPath(this.root, meta.cwd, meta.id, this.compression) }
   }
 
   create(meta: SessionHeader): Promise<void> {
@@ -220,7 +231,6 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
   /** Read a stored prefix by id across all project directories when cwd is unknown. */
   async loadStored(id: SessionId, signal?: AbortSignal): Promise<StoredPrefix<JsonlTornMarker> | undefined> {
     signal?.throwIfAborted()
-    await this.ensureRootEncoding()
     signal?.throwIfAborted()
     const path = await this.findLog(id, signal)
     if (path === undefined) return undefined
@@ -233,7 +243,6 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
    */
   async readStoredRevision(id: SessionId, signal?: AbortSignal): Promise<PersistenceRevision | undefined> {
     signal?.throwIfAborted()
-    await this.ensureRootEncoding()
     signal?.throwIfAborted()
     const path = await this.findLog(id, signal)
     if (path === undefined) return undefined
@@ -263,13 +272,12 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
    */
   override async readRaw(id: SessionId, signal?: AbortSignal): Promise<SessionRawArtifact | undefined> {
     signal?.throwIfAborted()
-    await this.ensureRootEncoding()
     signal?.throwIfAborted()
     const path = await this.findLog(id, signal)
     if (path === undefined) return undefined
     const { buffer } = await this.readStableFile(path, signal)
     let content: string
-    if (this.compression === 'zstd') {
+    if (path.endsWith('.zstd')) {
       const { frames } = scanZstdFrames(buffer)
       if (frames.length === 0) throw new Error('empty or header-less Zstandard session log')
       const decoder = createZstdFrameDecoder()
@@ -327,7 +335,7 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     const { buffer, revision } = await this.readStableFile(path, signal)
     let prefix: Omit<StoredPrefix<JsonlTornMarker>, 'revision'>
     try {
-      if (this.compression === 'zstd') {
+      if (path.endsWith('.zstd')) {
         prefix = await this.readZstdPrefix(buffer, signal)
       } else {
         signal?.throwIfAborted()
@@ -432,7 +440,6 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
   /** Durably append a batch, lazily materializing the file when not yet present. */
   async appendBatch(meta: SessionHeader, events: readonly SessionEvent[], isMaterialized: boolean): Promise<void> {
-    await this.ensureRootEncoding()
     if (isMaterialized) {
       await this.appendLines(meta, events)
     } else {
@@ -483,7 +490,6 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
   private async listArtifacts(signal?: AbortSignal): Promise<Array<{ header: SessionHeader; path: string }>> {
     signal?.throwIfAborted()
-    await this.ensureRootEncoding()
     signal?.throwIfAborted()
     const artifacts: Array<{ header: SessionHeader; path: string }> = []
     const ids = new Set<SessionId>()
@@ -491,16 +497,11 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
       signal?.throwIfAborted()
       for (const dir of await this.listSessionDirs(project, signal)) {
         signal?.throwIfAborted()
-        const opposite = join(dir, `session${logSuffix(this.oppositeCompression())}`)
-        const oppositeExists = await this.exists(opposite)
+        const path = await this.artifactIn(dir, signal)
         signal?.throwIfAborted()
-        if (oppositeExists) throw this.encodingMismatch(opposite)
-        const path = join(dir, `session${logSuffix(this.compression)}`)
-        const pathExists = await this.exists(path)
-        signal?.throwIfAborted()
-        if (!pathExists) continue
+        if (path === undefined) continue
         // Read only headers so listing scales with session count, not log size.
-        const first = this.compression === 'zstd'
+        const first = path.endsWith('.zstd')
           ? await this.readFirstZstdLine(path, signal)
           : await this.readFirstLine(path, signal)
         signal?.throwIfAborted()
@@ -513,6 +514,7 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
           throw new Error(`duplicate JSONL session id "${meta.id}" appears in multiple project directories`)
         }
         ids.add(meta.id)
+        this.artifactPaths.set(meta.id, path)
         artifacts.push({ header: meta, path })
       }
     }
@@ -535,6 +537,7 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     } else {
       await this.materializePosix(project, dir, finalPath, meta.id, content)
     }
+    this.artifactPaths.set(meta.id, finalPath)
   }
 
   /* v8 ignore start -- Windows uses the Win32 durable-publish path; POSIX coverage exercises this peer. */
@@ -638,9 +641,9 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
   }
 
   /** Encode one durable append batch in the configured physical representation. */
-  private async encodeEventBatch(events: readonly SessionEvent[]): Promise<Buffer | string> {
+  private async encodeEventBatch(events: readonly SessionEvent[], compression: JsonlCompression): Promise<Buffer | string> {
     const body = eventLines(events, this.packChunks) + '\n'
-    return this.compression === 'zstd' ? compressZstdFrame(body) : body
+    return compression === 'zstd' ? compressZstdFrame(body) : body
   }
 
   /** fsync a POSIX directory so a just-created/renamed entry is crash-durable. */
@@ -661,8 +664,9 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
    * batch; leaving partial bytes would create duplicate sequence numbers.
    */
   private async appendLines(meta: SessionHeader, events: readonly SessionEvent[]): Promise<void> {
-    const content = await this.encodeEventBatch(events)
-    const path = logPath(this.root, meta.cwd, meta.id, this.compression)
+    const path = this.artifactPaths.get(meta.id) ?? await this.findLog(meta.id)
+    if (path === undefined) throw new Error(`session "${meta.id}" has no stored log to append`)
+    const content = await this.encodeEventBatch(events, path.endsWith('.zstd') ? 'zstd' : 'none')
     const handle = await open(path, 'a')
     let closed = false
     const closeAppendHandle = async (): Promise<void> => {
@@ -702,7 +706,8 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
   /** Truncate the log file to `offset` bytes and fsync (discard the crash tail). */
   private async repair(meta: SessionHeader, offset: number): Promise<void> {
-    const path = logPath(this.root, meta.cwd, meta.id, this.compression)
+    const path = this.artifactPaths.get(meta.id) ?? await this.findLog(meta.id)
+    if (path === undefined) throw new Error(`session "${meta.id}" has no stored log to repair`)
     await truncate(path, offset)
     const handle = await open(path, 'r+')
     try {
@@ -790,19 +795,15 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
       await this.rejectLegacyFlatArtifact(project, id, signal)
       signal?.throwIfAborted()
       const dir = join(project, encodeSegment(id))
-      const path = join(dir, `session${logSuffix(this.compression)}`)
-      const opposite = join(dir, `session${logSuffix(this.oppositeCompression())}`)
-      const oppositeExists = await this.exists(opposite)
+      const path = await this.artifactIn(dir, signal)
       signal?.throwIfAborted()
-      if (oppositeExists) throw this.encodingMismatch(opposite)
-      const pathExists = await this.exists(path)
-      signal?.throwIfAborted()
-      if (pathExists) matches.push(path)
+      if (path !== undefined) matches.push(path)
     }
     if (matches.length > 1) {
       throw new Error(`duplicate JSONL session id "${id}" appears in multiple project directories`)
     }
     signal?.throwIfAborted()
+    if (matches[0] !== undefined) this.artifactPaths.set(id, matches[0])
     return matches[0]
   }
 
@@ -829,7 +830,7 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     }
     let expectedPath: string
     try {
-      expectedPath = logPath(this.root, meta.cwd, meta.id, this.compression)
+      expectedPath = logPath(this.root, meta.cwd, meta.id, path.endsWith('.zstd') ? 'zstd' : 'none')
     } catch (error) {
       throw new Error(`corrupt session log "${path}": header id cannot name a storage path`, { cause: error })
     }
@@ -884,19 +885,17 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     return entries.filter(entry => entry.isDirectory()).map(entry => join(project, entry.name))
   }
 
-  /** Reject a root that already belongs to the other physical encoding. */
-  private ensureRootEncoding(): Promise<void> {
-    this.rootEncodingCheck ??= this.checkRootEncoding()
-    return this.rootEncodingCheck
-  }
-
-  private async checkRootEncoding(): Promise<void> {
-    for (const project of await this.listProjectDirs()) {
-      for (const dir of await this.listSessionDirs(project)) {
-        const incompatible = join(dir, `session${logSuffix(this.oppositeCompression())}`)
-        if (await this.exists(incompatible)) throw this.encodingMismatch(incompatible)
-      }
+  /** Detect each artifact's encoding; two encodings for one session are ambiguous. */
+  private async artifactIn(dir: string, signal?: AbortSignal): Promise<string | undefined> {
+    let found: string | undefined
+    for (const compression of ['none', 'zstd'] as const) {
+      signal?.throwIfAborted()
+      const path = join(dir, `session${logSuffix(compression)}`)
+      if (!await this.exists(path)) continue
+      if (found !== undefined) throw new Error(`duplicate JSONL session artifacts in "${dir}"`)
+      found = path
     }
+    return found
   }
 
   private async rejectLegacyFlatArtifact(
@@ -925,9 +924,7 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
   private encodingMismatch(path: string): Error {
     return new Error(
-      `session artifact ${JSON.stringify(path)} uses ${logSuffix(this.oppositeCompression())}, `
-      + `but this backend is configured for compression ${JSON.stringify(this.compression)}; `
-      + 'use a separate root or select the matching compression mode',
+      `session artifact ${JSON.stringify(path)} already exists with a different encoding; creating a second artifact is refused`,
     )
   }
 

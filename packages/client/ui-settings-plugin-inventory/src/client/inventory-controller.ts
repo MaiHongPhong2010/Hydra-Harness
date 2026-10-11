@@ -39,6 +39,7 @@ export class PluginInventoryController {
   private importedRead = 0
 
   constructor(private readonly nativeApi?: NativePluginControls, private readonly importedApi?: ImportedPluginControls) {
+    const resetNative = nativeApi?.reset?.bind(nativeApi)
     if (nativeApi !== undefined) this.nativePlugins = {
       list: async () => {
         const generation = this.generation
@@ -58,6 +59,16 @@ export class PluginInventoryController {
         }
         return Promise.resolve({ snapshot: this.projectNative(), restartRequired: false })
       },
+      ...nativeApi.overridden === undefined ? {} : { overridden: nativeApi.overridden },
+      ...resetNative === undefined ? {} : { reset: async (id: Parameters<NativePluginControls['setEnabled']>[0]) => {
+        const snapshot = await resetNative(id)
+        if (!this.isDisposed()) {
+          this.nativeDrafts.delete(id)
+          this.receiveNative(snapshot)
+          this.store.update((state) => { state.revision++ })
+        }
+        return this.projectNative()
+      } },
     }
     if (importedApi !== undefined) {
       const stage = (identity: string, enabled: boolean): Promise<ImportedPluginSnapshot> => {
@@ -203,6 +214,11 @@ export class PluginInventoryController {
     this.importedDrafts.clear()
     this.store.update((state) => { state.error = null; state.revision++ })
     this.publish()
+  }
+
+  /** Refresh mounted catalogs after a matching Host settings invalidation. */
+  invalidate(): void {
+    if (!this.isDisposed()) this.store.update((state) => { state.revision++ })
   }
 
   /** Whether an imported plugin save would still write a pending enablement.

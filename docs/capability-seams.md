@@ -7,6 +7,19 @@ A service can be a core spine service, a swappable capability seam, or a bundle/
 
 ```mermaid
 flowchart LR
+  pkg_optional_plugins["optional-plugins"]
+  svc_optionalPlugins["ctx.optionalPlugins<br/>Optional plugin invocation policy"]
+  pkg_tools["tools"]
+  pkg_skill["skill"]
+  pkg_hooks_codex["hooks-codex"]
+  pkg_hooks_claude_code["hooks-claude-code"]
+  pkg_plugin_inventory["plugin-inventory"]
+  pkg_mcp_registry["mcp-registry"]
+  pkg_hooks_registry["hooks-registry"]
+  pkg_suggested_prompts["suggested-prompts"]
+  svc_suggestedPrompts["ctx.suggestedPrompts<br/>Bounded empty-chat suggestions"]
+  pkg_apiproxy["apiproxy"]
+  pkg_mcp_client["mcp-client"]
   pkg_jev["jev"]
   svc_jev["ctx.jev<br/>Optional unary Jev decision capability"]
   pkg_browser_decisions["browser-decisions"]
@@ -45,12 +58,9 @@ flowchart LR
   pkg_session_persistence_jsonl["session-persistence-jsonl"]
   pkg_session_persistence_sqlite["session-persistence-sqlite"]
   pkg_tool_bash["tool-bash"]
-  pkg_hooks_claude_code["hooks-claude-code"]
-  pkg_hooks_codex["hooks-codex"]
   pkg_settings["settings"]
   svc_settings["ctx.settings<br/>User-settings seam"]
   pkg_settings_file["settings-file"]
-  pkg_apiproxy["apiproxy"]
   pkg_credentials["credentials"]
   svc_credentials["ctx.credentials<br/>Credential seam"]
   pkg_credentials_local["credentials-local"]
@@ -70,6 +80,16 @@ flowchart LR
   pkg_workspace["workspace"]
   svc_messageFeedback["ctx.messageFeedback<br/>Lifecycle-bound message feedback"]
   svc_workspaceRegistry["ctx.workspaceRegistry<br/>Workspace entity registry"]
+  pkg_host_apiproxy["host-apiproxy"]
+  pkg_workspace_config["workspace-config"]
+  svc_workspaceConfig["ctx.workspaceConfig<br/>Workspace configuration environments"]
+  pkg_acp["acp"]
+  pkg_agent_instructions["agent-instructions"]
+  pkg_headless["headless"]
+  pkg_host_plugin_inventory["host-plugin-inventory"]
+  pkg_permission_presets["permission-presets"]
+  pkg_sdk_jsonrpc_server["sdk-jsonrpc-server"]
+  pkg_skill_filesystem["skill-filesystem"]
   svc_sessionQuery["ctx.sessionQuery<br/>Session reads, traces, filters, and search"]
   pkg_session_reference["session-reference"]
   pkg_tool_session_query["tool-session-query"]
@@ -83,7 +103,6 @@ flowchart LR
   pkg_session_title_all_prompts_llm["session-title-all-prompts-llm"]
   pkg_system_prompt["system-prompt"]
   svc_systemPrompt["ctx.systemPrompt<br/>System prompt assembly registry"]
-  pkg_tools["tools"]
   pkg_tool_fs["tool-fs"]
   pkg_tool_terminal["tool-terminal"]
   pkg_tool_web["tool-web"]
@@ -103,18 +122,13 @@ flowchart LR
   svc_commands["ctx.commands<br/>Human command registry"]
   pkg_session_projection["session-projection"]
   svc_sessionProjections["ctx.sessionProjections<br/>Session projection units"]
-  pkg_host_apiproxy["host-apiproxy"]
   pkg_session_projection_cache["session-projection-cache"]
   svc_sessionProjectionCache["ctx.sessionProjectionCache<br/>Persisted projection cache"]
-  pkg_skill["skill"]
   svc_skills["ctx.skills<br/>Skill provider registry"]
   pkg_skill_badge["skill-badge"]
-  pkg_skill_filesystem["skill-filesystem"]
   svc_agents["ctx.agents<br/>Agent service"]
-  pkg_acp["acp"]
   pkg_agent_default_model["agent-default-model"]
   svc_agentDefaultModel["ctx.agentDefaultModel<br/>Default Agent model selection"]
-  pkg_headless["headless"]
   svc_agentLoop["ctx.agentLoop<br/>Concrete loop driver"]
   pkg_agent_spine_demo["agent-spine-demo"]
   pkg_goal["goal"]
@@ -149,7 +163,6 @@ flowchart LR
   pkg_fs_sandbox["fs-sandbox"]
   pkg_approval["approval"]
   svc_approval["ctx.approval<br/>Approval seam"]
-  pkg_permission_presets["permission-presets"]
   svc_permissionPresets["ctx.permissionPresets<br/>Permission presets"]
   pkg_code_runtime["code-runtime"]
   svc_codeRuntime["ctx.codeRuntime<br/>Code-execution seam"]
@@ -212,10 +225,7 @@ flowchart LR
   svc_dynamicCordisRunner["ctx.dynamicCordisRunner<br/>Dynamic Cordis package host runner"]
   pkg_plugin_runtime["plugin-runtime"]
   svc_importedPlugins["ctx.importedPlugins<br/>Imported plugin lifecycle"]
-  pkg_plugin_inventory["plugin-inventory"]
-  pkg_mcp_registry["mcp-registry"]
   svc_mcpServers["ctx.mcpServers<br/>User-declared MCP server records"]
-  pkg_hooks_registry["hooks-registry"]
   svc_hookRecords["ctx.hookRecords<br/>User-declared hook records"]
   svc_cordisInspect["ctx.cordisInspect<br/>Dynamic Cordis inspect registry"]
   pkg_acp --> svc_approval
@@ -269,6 +279,7 @@ flowchart LR
   pkg_mcp_registry --> svc_mcpServers
   pkg_message_feedback --> svc_messageFeedback
   pkg_modules --> svc_clientModules
+  pkg_optional_plugins --> svc_optionalPlugins
   pkg_permission_presets --> svc_permissionPresets
   pkg_personalization --> svc_localMemories
   pkg_plan_mode --> svc_planMode
@@ -314,6 +325,7 @@ flowchart LR
   pkg_subprocess --> svc_subprocess
   pkg_subprocess_e2b --> svc_subprocess
   pkg_subprocess_local --> svc_subprocess
+  pkg_suggested_prompts --> svc_suggestedPrompts
   pkg_system_prompt --> svc_systemPrompt
   pkg_terminal --> svc_terminals
   pkg_terminal_bash --> svc_terminals
@@ -330,6 +342,7 @@ flowchart LR
   pkg_workflow --> svc_workflowEngine
   pkg_workflow_worker_thread --> svc_workflowEngine
   pkg_workspace --> svc_workspaceRegistry
+  pkg_workspace_config --> svc_workspaceConfig
   svc_agentDefaultModel --> pkg_headless
   svc_agentDefaultModel --> pkg_host_apiproxy
   svc_agentLoop --> pkg_agent_spine_demo
@@ -373,6 +386,13 @@ flowchart LR
   svc_localMemories --> pkg_apiproxy
   svc_lsp --> pkg_tool_lsp
   svc_mcpServers --> pkg_plugin_inventory
+  svc_optionalPlugins --> pkg_hooks_claude_code
+  svc_optionalPlugins --> pkg_hooks_codex
+  svc_optionalPlugins --> pkg_hooks_registry
+  svc_optionalPlugins --> pkg_mcp_registry
+  svc_optionalPlugins --> pkg_plugin_inventory
+  svc_optionalPlugins --> pkg_skill
+  svc_optionalPlugins --> pkg_tools
   svc_sandbox --> pkg_bash_sandbox
   svc_sandbox --> pkg_terminal_bash
   svc_sandboxPolicy --> pkg_bash_sandbox
@@ -423,6 +443,8 @@ flowchart LR
   svc_subprocess --> pkg_subagent_claude_code
   svc_subprocess --> pkg_subagent_codex
   svc_subprocess --> pkg_terminal_bash
+  svc_suggestedPrompts --> pkg_apiproxy
+  svc_suggestedPrompts --> pkg_mcp_client
   svc_systemPrompt --> pkg_agent_loop
   svc_systemPrompt --> pkg_tool_fs
   svc_systemPrompt --> pkg_tool_terminal
@@ -450,12 +472,23 @@ flowchart LR
   svc_webServer --> pkg_modules
   svc_workflowEngine --> pkg_tool_ralph
   svc_workflowEngine --> pkg_tool_workflow
-  svc_workspaceRegistry --> pkg_apiproxy
+  svc_workspaceConfig --> pkg_acp
+  svc_workspaceConfig --> pkg_agent_instructions
+  svc_workspaceConfig --> pkg_headless
+  svc_workspaceConfig --> pkg_host_apiproxy
+  svc_workspaceConfig --> pkg_host_plugin_inventory
+  svc_workspaceConfig --> pkg_permission_presets
+  svc_workspaceConfig --> pkg_sdk_jsonrpc_server
+  svc_workspaceConfig --> pkg_skill_filesystem
+  svc_workspaceRegistry --> pkg_host_apiproxy
+  svc_workspaceRegistry --> pkg_workspace_config
   svc_fs -. event gate .-> pkg_fs_observation_policy
 ```
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.optionalPlugins` | `core` | [`optional-plugins`](../packages/host/optional-plugins) | - | [`tools`](../packages/core/tools), [`skill`](../packages/skill/skill), [`hooks-codex`](../packages/hooks/hooks-codex), [`hooks-claude-code`](../packages/hooks/hooks-claude-code), `plugin-inventory`, [`mcp-registry`](../packages/mcp/mcp-registry), [`hooks-registry`](../packages/hooks/hooks-registry) | - | Rejects new optional work immediately and drains admitted operations before contribution removal. |
+| `ctx.suggestedPrompts` | `core` | [`suggested-prompts`](../packages/interaction/suggested-prompts) | - | `apiproxy`, [`mcp-client`](../packages/mcp/mcp-client) | - | Reads permission-scoped sources, logs auxiliary model requests, and returns draft choices without submitting them. |
 | `ctx.jev` | `seam` | [`jev`](../packages/llm/jev) | [`jev`](../packages/llm/jev) | [`browser-decisions`](../packages/browser/browser-decisions) | - | The provider evaluates structured choice, score, and yes/no questions independently from the chat LLM adapter registry. |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | `host-runtime`, [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | The host commits accepted images before session events; provider adapters resolve authorized durable references into provider-native content. |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | Adapters register provider implementations; the loop and compaction call the provider-neutral stream service. |
@@ -474,7 +507,8 @@ flowchart LR
 | `ctx.storage` | `seam` | [`storage`](../packages/storage/storage) | [`storage-json`](../packages/storage/storage-json), [`storage-sqlite`](../packages/storage/storage-sqlite) | [`storage-domain`](../packages/storage/storage-domain) | - | Backends register side by side under names; data forms (domain first) mount on the hub and translate typed operations into opaque KV-unit primitives. |
 | `ctx.storageDomain` | `core` | [`storage-domain`](../packages/storage/storage-domain) | - | [`workspace`](../packages/workspace/workspace), [`message-feedback`](../packages/feedback/message-feedback) | - | Waits for every configured backend, then publishes the domain form as one lifecycle-bound service for typed durable state. |
 | `ctx.messageFeedback` | `core` | [`message-feedback`](../packages/feedback/message-feedback) | - | - | - | Owns local per-assistant-message feedback, lifecycle and target validation, per-item compare-and-set, and the Host unary Remote contract without entering Session history or telemetry. |
-| `ctx.workspaceRegistry` | `core` | [`workspace`](../packages/workspace/workspace) | - | `apiproxy` | - | Owns WorkspaceId-branded records over the domain facility; stable sessionIds accounts drive Host RPC and GUI projections. |
+| `ctx.workspaceRegistry` | `core` | [`workspace`](../packages/workspace/workspace) | - | [`host-apiproxy`](../packages/host/apiproxy), [`workspace-config`](../packages/workspace/workspace-config) | - | Owns WorkspaceId-branded records over the domain facility; stable sessionIds accounts drive Host RPC and GUI projections. |
+| `ctx.workspaceConfig` | `core` | [`workspace-config`](../packages/workspace/workspace-config) | - | [`acp`](../packages/acp/acp), [`agent-instructions`](../packages/context/agent-instructions), [`headless`](../packages/bundle/headless), [`host-apiproxy`](../packages/host/apiproxy), [`host-plugin-inventory`](../packages/host/plugin-inventory), [`permission-presets`](../packages/interaction/permission-presets), [`sdk-jsonrpc-server`](../packages/sdk/server), [`skill-filesystem`](../packages/skill/skill-filesystem) | - | Owns settings layers, execution trust, and standing runtime environments per canonical workspace root; consumers resolve session composition and project context without changing Host-wide services. |
 | `ctx.sessionQuery` | `seam` | [`session-query`](../packages/session-query/session-query) | [`session-query-sqlite`](../packages/session-query/session-query-sqlite) | [`session-reference`](../packages/context/session-reference), [`tool-session-query`](../packages/session-query/tool-session-query) | - | The interface supplies exact reads, filters, and traces; its concrete backend adds full-text reconciliation, ranking, snippets, and cursor generations, while the model consumer owns workspace authority and cursor-free rendering. |
 | `ctx.fileReferences` | `seam` | [`file-reference`](../packages/context/file-reference) | [`file-reference-local`](../packages/context/file-reference-local) | - | - | The interface returns path-only completion candidates within the addressed Agent cwd through its unary Remote contract; providers own namespace access and ranking without reading file contents. |
 | `ctx.sessionReferenceResolver` | `core` | [`session-reference`](../packages/context/session-reference) | - | - | - | Projects bounded current-surface conversation snapshots into durable untrusted message context; host adapters own mention syntax. |

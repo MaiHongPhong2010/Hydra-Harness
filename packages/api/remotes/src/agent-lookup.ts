@@ -22,7 +22,7 @@ export type ApiRemoteAgentResult =
 export interface ApiRemoteAgentResolver {
   /** Resolve an ordinary session to its live Agent. */
   (sessionId: SessionId): Promise<ApiRemoteAgentResult>
-  /** Wait for an already-started resume to settle; does not start one. */
+  /** Wait for an already-started preparation or resume to settle; does not start one. */
   settle(sessionId: SessionId): Promise<void>
 }
 
@@ -32,8 +32,21 @@ export interface ApiRemoteAgentOptions {
   readonly onResume?: (handle: AgentHandle) => void
   /** Reject routing while an owning Host mutation is in progress. */
   readonly unavailable?: (sessionId: SessionId) => ApiRemoteLookupError | undefined
-  /** Read the per-Agent defaults when a cold identity must resume. */
-  readonly agentOptions?: () => AgentOptions
+  /**
+   * Prepare an ordinary live Agent before routing; disposing it permits a cold resume.
+   * Concurrent preparations of one identity share the same completion.
+   * @param agent - Live ordinary Agent whose lifecycle may require rebuilding.
+   * @returns a routing rejection, or fulfillment when the Agent is ready or disposed.
+   */
+  readonly prepareLive?: (agent: Agent) => Promise<ApiRemoteLookupError | undefined>
+  /**
+   * Resolve the per-Agent defaults from the inspected cold session.
+   * @param session - Detached header and events before Agent publication.
+   * @returns Defaults resolved for this resumed session.
+   */
+  readonly agentOptions?: (
+    session: { meta: SessionHeader; events: readonly SessionEvent[] },
+  ) => AgentOptions | Promise<AgentOptions>
   /**
    * Build the Host-specific Agent-scope composition completed before
    * publication. Keyed by the resumed session itself because what a Host
@@ -135,6 +148,7 @@ export function createApiRemoteAgentResolver(
   options: ApiRemoteAgentOptions,
 ): ApiRemoteAgentResolver {
   const resumes = new Map<SessionId, Promise<Agent>>()
+  const preparations = new Map<SessionId, Promise<ApiRemoteLookupError | undefined>>()
 
   const fencedLiveAgent = (sessionId: SessionId): ApiRemoteAgentResult | undefined => {
     const live = ctx.agents.get(sessionId)
@@ -149,7 +163,25 @@ export function createApiRemoteAgentResolver(
     const unavailable = options.unavailable?.(sessionId)
     if (unavailable !== undefined) return { error: unavailable }
     const fenced = fencedLiveAgent(sessionId)
-    if (fenced !== undefined) return fenced
+    if (fenced !== undefined && 'error' in fenced) return fenced
+    let preparing = preparations.get(sessionId)
+    const prepareLive = options.prepareLive
+    if (preparing === undefined && fenced !== undefined && prepareLive !== undefined) {
+      preparing = Promise.resolve().then(() => prepareLive(fenced.agent)).catch((error: unknown) => ({
+        code: 'internal' as const,
+        message: `live preparation failed for session "${sessionId}": ${String(error)}`,
+        details: {},
+      })).finally(() => { preparations.delete(sessionId) })
+      preparations.set(sessionId, preparing)
+    }
+    if (preparing !== undefined) {
+      const rejection = await preparing
+      if (rejection !== undefined) return { error: rejection }
+      const unavailable = options.unavailable?.(sessionId)
+      if (unavailable !== undefined) return { error: unavailable }
+      const prepared = fencedLiveAgent(sessionId)
+      if (prepared !== undefined) return prepared
+    } else if (fenced !== undefined) return fenced
     const attached = ctx.sessions.get(sessionId)
     if (attached !== undefined && hasApiRemoteSubagentOwner(ctx, attached, undefined)) {
       return { error: apiRemoteSubagentOwnershipError(sessionId) }
@@ -167,6 +199,7 @@ export function createApiRemoteAgentResolver(
           // awaits (composing a preset, say) does not widen the collision
           // window.
           const setup = options.setup === undefined ? undefined : await options.setup(inspected)
+          const agentOptions = options.agentOptions === undefined ? undefined : await options.agentOptions(inspected)
           const publishedSession = ctx.sessions.get(sessionId)
           const publishedAgent = ctx.agents.get(sessionId)
           if (publishedSession !== undefined
@@ -175,7 +208,7 @@ export function createApiRemoteAgentResolver(
           }
           const handle = await ctx.agents.resume({
             resumeSessionId: sessionId,
-            ...options.agentOptions === undefined ? {} : { agentOptions: options.agentOptions() },
+            ...agentOptions === undefined ? {} : { agentOptions },
             ...setup === undefined ? {} : { setup },
           })
           options.onResume?.(handle)
@@ -224,6 +257,8 @@ export function createApiRemoteAgentResolver(
 
   return Object.assign(agentFor, {
     async settle(sessionId: SessionId): Promise<void> {
+      const preparing = preparations.get(sessionId)
+      if (preparing !== undefined) await Promise.allSettled([preparing])
       const pending = resumes.get(sessionId)
       if (pending !== undefined) await Promise.allSettled([pending])
     },

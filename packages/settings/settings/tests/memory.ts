@@ -9,6 +9,8 @@ import { SettingsProvider, type SettingsNamespace } from '../src/index.ts'
 
 /** In-memory provider exposing the protected provider hooks to tests. */
 export class MemorySettings extends SettingsProvider {
+  /** Test owner context for mounting lifecycle consumers without exposing service internals. */
+  readonly ownerContext: ConstructorParameters<typeof SettingsProvider>[0]
   /** Raw document the provider "storage" currently holds. */
   doc: Record<string, unknown>
   /** Every persist() call observed, in order. */
@@ -25,6 +27,7 @@ export class MemorySettings extends SettingsProvider {
     persistDelayMs?: number
   }) {
     super(ctx)
+    this.ownerContext = ctx
     this.doc = structuredClone(options?.doc ?? {})
     this.writableFlag = options?.writable ?? true
     this.persistDelayMs = options?.persistDelayMs ?? 0

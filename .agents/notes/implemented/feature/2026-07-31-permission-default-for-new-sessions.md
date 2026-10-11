@@ -18,9 +18,9 @@ ApiProxy explicitly adds `permission` to its Web settings allowlist beside the c
 
 ## Consequences
 
-Changing Permission in Settings updates `settings.yaml` and the selector immediately, but does not alter an existing session by itself. Every later session is reconstructable from its three pinned permission facts, including after the user changes the default again or the process restarts. A Workspace blank may receive a new pinned triplet only when Web confirms it as the reuse target and its effective selection is still default-origin. Deployments whose composed sandbox and approval defaults match no preset must configure `defaultPreset` explicitly.
+Changing Permission in Settings updates `settings.yaml` and explicitly applies the preset through each compatible live agent's logged setter, with per-session results and retry. Cold and archived sessions retain their existing facts. Every session is reconstructable from its pinned permission facts. [General Settings feature ownership](../architecture/2026-10-11-general-settings-feature-ownership.md) owns live broadcast and partial-failure behavior. Deployments whose composed sandbox and approval defaults match no preset must configure `defaultPreset` explicitly.
 
-The assembled Web snapshot contains a functional Permission selector. Its keyless browser scenario writes `read-only`, verifies an existing `workspace-write` session is unchanged, and verifies a subsequently created session starts with the read-only event triplet.
+The assembled Web snapshot contains a functional Permission selector. Its keyless browser scenario writes `read-only`, verifies a cold `workspace-write` session is unchanged, and verifies a subsequently created session starts with the read-only event triplet. The Host integration fixture covers logged live-session application and retry after a partial failure.
 
 ## Alternatives considered
 

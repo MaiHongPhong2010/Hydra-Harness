@@ -20,7 +20,7 @@ A **bundle** is a distribution format for Cordis config rows and the code they m
 
 Each declares itself in its own `package.json` under a `hydra` field: `hydra.profile` lists a profile's bundles, and `hydra.bundle` points at a bundle's patch file.
 
-[`@hydraharness/harness-base`](../packages/bundle/base/README.md) is the first layer of every profile: model adapters, tools, persistence, sandbox and approval policy, settings, credentials, telemetry. [`@hydraharness/harness-web-app`](../packages/bundle/web-app/README.md) adds the browser application; [`@hydraharness/harness-headless`](../packages/bundle/headless/README.md) adds a one-shot runner with no server at all.
+[`@hydraharness/harness-base`](../packages/bundle/base/README.md) is the first layer of every profile: model adapters, tools, persistence, sandbox and approval policy, settings, credentials, telemetry, and the workspace configuration and agent preset rosters. [`@hydraharness/harness-web-app`](../packages/bundle/web-app/README.md) adds the browser application; [`@hydraharness/harness-headless`](../packages/bundle/headless/README.md) adds a one-shot runner with no server at all.
 
 Layers apply to an empty entry list in this order: each bundle in the profile's listed order, then the profile's `cordis.patch.yml`, then the home-level one, then any `--patch` overlay. A patch targets a row by id and replaces its whole config, or inserts new rows.
 
@@ -131,3 +131,5 @@ New behavior attaches to a documented extension point. Changing the loop itself 
 | Scope a registration to one agent | use that agent's `agent.ctx` |
 
 The [extension cookbook](cookbook/extension-cookbook.md) maps features to capabilities and indexes the step-by-step guides for [packages](cookbook/adding-a-package.md), [tools](cookbook/adding-a-tool.md), [LLM adapters](cookbook/adding-an-llm-adapter.md), [Chat nodes](cookbook/adding-a-conversation-node.md), and [settings cards](cookbook/adding-a-settings-card.md).
+
+General Settings uses feature-owned namespaces and grouped typed slots. Permission broadcast records a policy change per live session and reports partial application. Optional-plugin work leases block new calls before draining and unloading contributions; required functionality is independent of restart-only metadata. See [General Settings ownership](../.agents/notes/implemented/architecture/2026-10-11-general-settings-feature-ownership.md) for the lifecycle and environment decisions.

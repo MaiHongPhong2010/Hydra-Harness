@@ -14,12 +14,12 @@ import css from './LanguageRow.module.css'
 /** Injected business face: the preference write (t rides the standard locale seat). */
 export interface LanguageRowInjected {
   /** Switch the active locale (a registered locale id). */
-  setLocale: (id: string) => void
+  setLocale: (id: string) => Promise<void>
 }
 
 /** Full component props: runtime share + store share + locale seat + injected face. */
 export type LanguageRowComponentProps =
-  PropsRuntime<'settings.general.item'> & PropsStore<ReturnType<typeof createLanguageRowStore>>
+  PropsRuntime<'settings.general.general.item'> & PropsStore<ReturnType<typeof createLanguageRowStore>>
   & PropsLocale<'settings.locale'> & LanguageRowInjected
 
 /**
@@ -31,12 +31,17 @@ export function LanguageRow({ t, setLocale, useStore }: LanguageRowComponentProp
   const active = useStore(s => s.active)
   const options = useStore(s => s.options)
   const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string>()
   const activeLabel = options.find(o => o.id === active)?.label ?? active
 
   return (
     <div className={css.row}>
       <div className={css.rowText}>
         <div className={css.title}>{t('language.title')}</div>
+        <div role="status" className={css.description}>{saving ? t('language.saving') : saved ? t('language.applies') : t('language.description')}</div>
+        {error !== undefined && <div role="alert">{error}</div>}
       </div>
       <Menu
         open={open}
@@ -44,8 +49,11 @@ export function LanguageRow({ t, setLocale, useStore }: LanguageRowComponentProp
         items={options.map(o => ({ id: o.id, label: o.label }))}
         selectedId={active}
         onSelect={(id) => {
-          setLocale(id)
           setOpen(false)
+          setSaving(true); setSaved(false); setError(undefined)
+          void setLocale(id).then(() => { setSaved(true) }, (failure: unknown) => {
+            setError(failure instanceof Error ? failure.message : String(failure))
+          }).finally(() => { setSaving(false) })
         }}
         align="end"
         portal
@@ -55,6 +63,7 @@ export function LanguageRow({ t, setLocale, useStore }: LanguageRowComponentProp
             className={css.selector}
             aria-haspopup="menu"
             aria-expanded={open}
+            disabled={saving}
             onClick={() => { setOpen(v => !v) }}
           >
             {activeLabel}

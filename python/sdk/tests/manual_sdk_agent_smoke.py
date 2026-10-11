@@ -56,6 +56,7 @@ def run_smoke(repo_root: Path, keep_sessions: bool) -> None:
 
     try:
         with HydraHarness(
+            provider="deepseek-official",
             model="sdk-smoke-model",
             cwd=str(repo_root / "python/sdk"),
             runtime_cwd=str(repo_root),

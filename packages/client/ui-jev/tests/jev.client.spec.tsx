@@ -1,135 +1,112 @@
 // @vitest-environment jsdom
-/** Credential acknowledgement and draft isolation in the optional provider card. */
+/** Decision preference acknowledgements and isolated credential drafts. */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { Context, FiberState } from '@hydraharness/cordis'
 import { JevProviderOption } from '../src/client/JevProviderOption.tsx'
 import { apply } from '../src/client/index.ts'
 import * as Host from '../src/index.ts'
+import { en } from '../../ui-settings-models/src/client/locales.ts'
 
 afterEach(cleanup)
-
+function owner() {
+  const snapshot = { status: 'ready', error: null, view: { namespaces: [
+    { ns: 'jev', value: { apiKeyEnv: 'CUSTOM_JEV_KEY', model: 'jev-test' }, revision: 1 },
+    { ns: 'browser-decisions', value: { enabled: true }, revision: 7 },
+  ] } }
+  return { snapshot, props: { readOnly: false, credentials: {}, openSection: vi.fn(),
+    useSessions: (() => { throw new Error('unused') }) as never,
+    useWorkspaces: (() => { throw new Error('unused') }) as never,
+    useSettings: (() => snapshot) as never, t: ((key: keyof typeof en) => en[key]) as never,
+    saveKey: vi.fn(async () => true),
+    saveEnabled: vi.fn(async (enabled: boolean) => { snapshot.view.namespaces[1]!.value.enabled = enabled }),
+  } }
+}
 it('boots the Host entry without browser services', async () => {
   const ctx = new Context()
-  try {
-    const fiber = ctx.plugin(Host)
-    await fiber.await()
-    expect(fiber.state).toBe(FiberState.ACTIVE)
-    expect(ctx.get('slots')).toBeUndefined()
-  } finally { await ctx.fiber.dispose() }
+  try { const fiber = ctx.plugin(Host); await fiber.await(); expect(fiber.state).toBe(FiberState.ACTIVE) }
+  finally { await ctx.fiber.dispose() }
 })
-
-it('contributes a native option for the Models provider select', () => {
-  render(<JevProviderOption
-    mode="option"
-    useSessions={() => { throw new Error('unused') }}
-    useWorkspaces={() => { throw new Error('unused') }}
-    useSettings={((select: (value: unknown) => unknown) => select({ status: 'ready', error: null, view: undefined })) as never}
-    saveKey={async () => true}
-  />)
-  expect(screen.getByRole('option', { name: 'Jev' }).getAttribute('data-hydra-provider-option')).toBe('jev')
-})
-
-it('uses the Host credential reference and closes only after successful acknowledgement', async () => {
-  const saveKey = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
-  const onClose = vi.fn()
-  const props = {
-    mode: 'editor' as const, readOnly: false, onClose, saveKey,
-    useSessions: (() => { throw new Error('unused') }) as never,
-    useWorkspaces: (() => { throw new Error('unused') }) as never,
-    useSettings: (() => ({ status: 'ready' as const, error: null, view: {
-      writable: true, hasDocument: true,
-      namespaces: [{ ns: 'jev', value: { apiKeyEnv: 'CUSTOM_JEV_KEY', model: 'jev-test' } }],
-    } })) as never,
-  }
-  render(<JevProviderOption {...props} />)
+it('saves Off separately from the unchanged credential and model', async () => {
+  const p = owner()
+  render(<JevProviderOption {...p.props} />)
+  expect(screen.getByLabelText<HTMLSelectElement>(en.decisionModel).value).toBe('jev')
+  expect(screen.queryByLabelText(en.keyInput)).toBeNull()
+  fireEvent.change(screen.getByLabelText(en.decisionModel), { target: { value: 'off' } })
+  await waitFor(() => { expect(screen.getByText(en.decisionSaved)).toBeTruthy() })
+  expect(p.props.saveEnabled).toHaveBeenCalledWith(false, 7)
+  expect(p.props.saveKey).not.toHaveBeenCalled()
   expect(screen.getByText('Model: jev-test')).toBeTruthy()
-  fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'fixture-secret' } })
-  fireEvent.click(screen.getByText('Apply'))
-  await screen.findByRole('alert')
-  expect(onClose).not.toHaveBeenCalled()
-  expect(saveKey).toHaveBeenCalledWith('CUSTOM_JEV_KEY', 'fixture-secret')
-  fireEvent.click(screen.getByText('Apply'))
-  await waitFor(() => { expect(onClose).toHaveBeenCalledWith(true) })
-  expect(screen.getByLabelText<HTMLInputElement>('API key').value).toBe('')
 })
-
-it('shows a saved provider only for its confirmed Host credential and reopens its editor', () => {
-  const onEdit = vi.fn()
-  const props = {
-    mode: 'row' as const, onEdit, saveKey: vi.fn(),
-    useSessions: (() => { throw new Error('unused') }) as never,
-    useWorkspaces: (() => { throw new Error('unused') }) as never,
-    useSettings: (() => ({ status: 'ready', error: null, view: {
-      namespaces: [{ ns: 'jev', value: { apiKeyEnv: 'CUSTOM_JEV_KEY', model: 'jev-test' } }],
-    } })) as never,
-  }
-  const { rerender } = render(<JevProviderOption {...props} credentials={{}} />)
-  expect(screen.queryByRole('listitem')).toBeNull()
-  rerender(<JevProviderOption {...props} credentials={{ CUSTOM_JEV_KEY: { configured: true, writable: true } }} />)
-  expect(screen.getByRole('listitem').textContent).toContain('Jev')
-  expect(screen.getByRole('img', { name: 'API key configured' })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: 'Edit Jev' }))
-  expect(onEdit).toHaveBeenCalledWith('jev')
-  rerender(<JevProviderOption {...props} credentials={{ CUSTOM_JEV_KEY: { configured: false, writable: true } }} />)
-  expect(screen.queryByRole('listitem')).toBeNull()
+it('retains a failed preference for Retry and does not announce success before acknowledgement', async () => {
+  const p = owner()
+  p.props.saveEnabled.mockRejectedValueOnce(new Error('Revision conflict'))
+  render(<JevProviderOption {...p.props} />)
+  fireEvent.change(screen.getByLabelText(en.decisionModel), { target: { value: 'off' } })
+  expect((await screen.findByRole('alert')).textContent).toBe('Revision conflict')
+  expect(screen.queryByText(en.decisionSaved)).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: en.retry }))
+  await screen.findByText(en.decisionSaved)
+  expect(p.props.saveEnabled).toHaveBeenCalledTimes(2)
 })
-
-it('registers the provider slot and saves through the connection API', async () => {
+it('uses the existing key reference, retains a rejected draft, and clears it after acknowledgement', async () => {
+  const p = owner()
+  p.props.saveKey.mockResolvedValueOnce(false)
+  render(<JevProviderOption {...p.props} />)
+  fireEvent.click(screen.getByRole('button', { name: en.configureDecision }))
+  fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: 'fixture-secret' } })
+  fireEvent.click(screen.getByRole('button', { name: en.apply }))
+  expect((await screen.findByRole('alert')).textContent).toBe(en.decisionKeyError)
+  expect(screen.getByLabelText<HTMLInputElement>(en.keyInput).value).toBe('fixture-secret')
+  fireEvent.click(screen.getByRole('button', { name: en.apply }))
+  await screen.findByText(en.decisionKeySaved)
+  expect(p.props.saveKey).toHaveBeenCalledWith('CUSTOM_JEV_KEY', 'fixture-secret')
+  fireEvent.click(screen.getByRole('button', { name: en.configureDecision }))
+  expect(screen.getByLabelText<HTMLInputElement>(en.keyInput).value).toBe('')
+  fireEvent.click(screen.getByRole('button', { name: en.cancel }))
+  expect(screen.queryByLabelText(en.keyInput)).toBeNull()
+})
+it('validates keys and contains upstream errors without exposing key material', async () => {
+  const p = owner()
+  p.props.saveKey.mockRejectedValue(new Error('secret upstream body'))
+  render(<JevProviderOption {...p.props} />)
+  fireEvent.click(screen.getByRole('button', { name: en.configureDecision }))
+  fireEvent.click(screen.getByRole('button', { name: en.apply }))
+  expect((await screen.findByRole('alert')).textContent).toBe(en.decisionKeyRequired)
+  fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: 'secret' } })
+  fireEvent.click(screen.getByRole('button', { name: en.apply }))
+  await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe(en.decisionKeyError) })
+})
+it('shows unavailable settings and keeps read-only controls disabled', () => {
+  const p = owner()
+  const view = render(<JevProviderOption {...p.props} readOnly />)
+  expect(screen.getByLabelText<HTMLSelectElement>(en.decisionModel).disabled).toBe(true)
+  view.rerender(<JevProviderOption {...p.props} useSettings={(() => ({ status: 'error', error: 'offline' })) as never} />)
+  expect(screen.getByText(en.decisionSettingsUnavailable)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: en.managePlugins }))
+  expect(p.props.openSection).toHaveBeenCalledWith('plugins')
+})
+it('registers the decision slot and acknowledges settings through the shared mirror', async () => {
   const register = vi.fn()
   const inject = vi.fn((_: string, factory: () => unknown) => factory())
-  const describe = vi.fn(() => ({ status: 'ready', error: null, view: undefined }))
+  const acceptView = vi.fn()
+  const refresh = vi.fn()
   const set = vi.fn().mockResolvedValueOnce({ result: { ok: true } }).mockResolvedValueOnce({ result: { ok: false } })
-  const ctx = {
-    get: () => ({ api: { credentials: { set } } }),
-    settingsScope: { describe }, slots: { inject, register },
-  }
-  apply(ctx as never)
-  expect(inject).toHaveBeenCalledWith('settings.models.provider-option', expect.any(Function))
-  const spec = register.mock.calls[0]?.[0] as { inject: () => { saveKey: (ref: string, value: string) => Promise<boolean> } }
+  const view = { ns: 'browser-decisions', revision: 8, value: { enabled: false } }
+  const mutate = vi.fn().mockResolvedValueOnce({ result: { ok: true, value: view } })
+    .mockResolvedValueOnce({ result: { ok: false, error: { message: 'conflict' } } })
+  apply({ get: () => ({ api: { credentials: { set }, settings: { mutate } } }),
+    settingsScope: { describe: () => ({ acceptView }), refresh }, slots: { inject, register } } as never)
+  expect(inject).toHaveBeenCalledWith('settings.models.decision', expect.any(Function))
+  const spec = register.mock.calls[0]?.[0] as { inject: () => {
+    saveKey: (ref: string, value: string) => Promise<boolean>
+    saveEnabled: (value: boolean, revision: number) => Promise<void>
+  } }
   await expect(spec.inject().saveKey('JEV_KEY', 'secret')).resolves.toBe(true)
-  expect(set).toHaveBeenCalledWith({ ref: 'JEV_KEY', value: 'secret' })
   await expect(spec.inject().saveKey('JEV_KEY', 'secret')).resolves.toBe(false)
-})
-
-it.each([
-  ['loading', 'Loading Jev settings…'],
-  ['error', 'Jev provider settings are unavailable. Check Plugins.'],
-] as const)('shows the %s settings state', (status, text) => {
-  render(<JevProviderOption
-    mode="editor" readOnly={false} onClose={vi.fn()} saveKey={vi.fn()}
-    useSessions={() => { throw new Error('unused') }}
-    useWorkspaces={() => { throw new Error('unused') }}
-    useSettings={(() => ({ status, error: status === 'error' ? new Error('offline') : null, view: undefined })) as never}
-  />)
-  expect(screen.getByRole('status').textContent).toBe(text)
-})
-
-it('validates an empty key, ignores read-only saves, and reports wire failures', async () => {
-  const onClose = vi.fn()
-  const saveKey = vi.fn().mockRejectedValue(new Error('network'))
-  const props = {
-    mode: 'editor' as const, readOnly: false, onClose, saveKey,
-    useSessions: (() => { throw new Error('unused') }) as never,
-    useWorkspaces: (() => { throw new Error('unused') }) as never,
-    useSettings: (() => ({ status: 'ready' as const, error: null, view: {
-      writable: true, hasDocument: true,
-      namespaces: [{ ns: 'jev', value: { apiKeyEnv: 'JEV_KEY', model: 'jev-test' } }],
-    } })) as never,
-  }
-  render(<JevProviderOption {...props} />)
-  fireEvent.click(screen.getByText('Apply'))
-  expect((await screen.findByRole('alert')).textContent).toBe('Enter a Jev API key.')
-  fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'secret' } })
-  fireEvent.click(screen.getByText('Apply'))
-  expect((await screen.findByRole('alert')).textContent).toBe('Jev credential could not be saved.')
-  expect(onClose).not.toHaveBeenCalled()
-  cleanup()
-  render(<JevProviderOption {...props} readOnly />)
-  expect(screen.getByLabelText<HTMLInputElement>('API key').disabled).toBe(true)
-  fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'secret' } })
-  fireEvent.click(screen.getByText('Apply'))
-  expect(saveKey).toHaveBeenCalledOnce()
-  fireEvent.click(screen.getByText('Cancel'))
-  expect(onClose).toHaveBeenCalledWith(false)
+  await spec.inject().saveEnabled(false, 7)
+  expect(mutate).toHaveBeenCalledWith({ ns: 'browser-decisions', expectedRevision: 7, ops: [{ op: 'set', path: ['enabled'], value: false }] })
+  expect(acceptView).toHaveBeenCalledWith(view)
+  await expect(spec.inject().saveEnabled(true, 7)).rejects.toThrow('conflict')
+  expect(refresh).toHaveBeenCalledOnce()
 })

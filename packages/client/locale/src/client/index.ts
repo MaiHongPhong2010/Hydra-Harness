@@ -203,8 +203,9 @@ export class LocaleRuntime {
    * is conditional: republishing an unchanged locale would churn every
    * subscriber for nothing.
    * @param id - a registered locale id; unknown ids throw.
+   * @returns accepted durable write, or a resolved process-local change.
    */
-  setLocale(id: string): void {
+  setLocale(id: string): Promise<void> {
     const match = this.snapshot.locales.find(l => l.id === id)
     if (match === undefined) throw new Error(`locale "${id}" is not registered`)
     /* v8 ignore start -- en is the only shipped locale, so validated selections cannot change the active id. */
@@ -214,7 +215,7 @@ export class LocaleRuntime {
      * implements (republishing an unchanged locale would churn subscribers). */
     if (this.snapshot.active !== match.id) this.publish(match.id, true)
     /* v8 ignore stop */
-    void this.host?.set(LOCALE_PREFERENCE_FIELD, match.id)
+    return this.host?.set(LOCALE_PREFERENCE_FIELD, match.id) ?? Promise.resolve()
   }
 
   /**
@@ -408,15 +409,17 @@ export function apply(ctx: ClientContext): void {
 
   const store = createLanguageRowStore()
   let bound: BoundActions<typeof store> | undefined
+  let rowRevision = 0
   const sync = (snapshot: LocaleSnapshot): void => {
     syncDocumentLanguage(snapshot.active)
     bound?.sync(
-      snapshot.active,
-      snapshot.locales.map(l => ({ id: l.id, label: l.label })),
-      snapshot.revision,
+      host.getSnapshot().value?.preference ?? 'auto',
+      [{ id: 'auto', label: settingsEn['language.auto'] }, ...snapshot.locales.map(l => ({ id: l.id, label: l.label }))],
+      rowRevision++,
     )
   }
   ctx.on('locale/change', sync)
+  ctx.effect(() => host.subscribe(() => { sync(locale.getLocale()) }), 'locale: preference row adoption')
   // The served markup declares one language; the resolved locale may differ
   // (browser detection, or a stored preference adopted after activation), so
   // state it once at activation rather than waiting for the first change.
@@ -427,12 +430,17 @@ export function apply(ctx: ClientContext): void {
     // first render (the store's revision guard drops stale duplicates).
     sync(locale.getLocale())
     return {
-      setLocale: (id) => { locale.setLocale(id) },
+      setLocale: async (id) => {
+        if (id === 'auto') await host.unset(LOCALE_PREFERENCE_FIELD)
+        else await locale.setLocale(id)
+        if ((host.getSnapshot().value?.preference ?? 'auto') !== id) throw new Error('Could not save language. Try again.')
+      },
     }
   }
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
+  ctx.slots.inject('settings.general.general.item', () => ctx.slots.register({
+    name: 'settings.general.general.item',
     id: 'language',
+    label: () => ctx.locale.bind(SETTINGS_NS)('language.title'),
     order: 0,
     store,
     locale: SETTINGS_NS,

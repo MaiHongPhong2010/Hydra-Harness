@@ -9,6 +9,7 @@
  * Script vocabulary (all optional):
  * - `FAKE_TEXT`: assistant text for each turn (default `hello from fake runtime`).
  * - `FAKE_MODEL_CALL_LOG`: include model attribution and timing events.
+ * - `FAKE_GENERAL_SETTINGS`: include auxiliary suggestions and a reported processing tier.
  * - `FAKE_VERSION_CONTROLS`: emit same-session version creation and selection records.
  * - `FAKE_STATUS`: the `session.finished` status (default `ok`).
  * - `FAKE_REASON_KIND`: the `session.finished` reason kind (default `completed`; `none` omits the reason).
@@ -92,6 +93,11 @@ function assistantText(): string {
 
 function runTurn(sessionId: string): void {
   const text = assistantText()
+  if (env.FAKE_GENERAL_SETTINGS !== undefined) {
+    event(sessionId, 'suggestions/request', { config: { provider: 'mock', model: 'model-a', serviceTier: 'priority', requestedServiceTier: 'priority' }, system: 'Return prompts', context: 'Project README' })
+    event(sessionId, 'suggestions/result', { items: ['Explain this project'] })
+    event(sessionId, 'assistant/chunk', { turn: 0, step: 0, chunk: { type: 'finish', reason: { kind: 'stop' }, serviceTier: 'default' } })
+  }
   if (env.FAKE_MALFORMED_EVENT !== undefined) {
     notify('session.event', { sessionId, event: 42 })
     return

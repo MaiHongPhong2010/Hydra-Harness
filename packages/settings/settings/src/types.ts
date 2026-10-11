@@ -18,9 +18,11 @@ export type SettingsUpdateSource = 'update' | 'provider'
 declare module '@hydraharness/cordis' {
   interface Events {
     /**
-     * Committed change to one registered namespace's resolved value. Emitted
-     * after the provider persisted (for `update`) or published (`provider`)
-     * the change; never emitted when the resolved value is deep-equal.
+     * Committed change to one registered namespace's resolved value, after
+     * the provider persisted (for `update`) or published (`provider`) the
+     * change; never emitted when the resolved value is deep-equal. The
+     * committing provider is the Cordis receiver, so ordinary listeners
+     * receive only their settings service's isolation realm.
      * Listener failures are contained and logged — a sync throw and an async
      * rejection alike — except `INVARIANT`-coded failures, which rethrow
      * after every listener ran; that rethrow reaches the emitter only from
@@ -41,6 +43,7 @@ declare module '@hydraharness/cordis' {
      * which must learn that a field went from inherited to overridden (same
      * resolved value, different meaning) and that their held revision is
      * stale. Listener containment matches `settings/updated`.
+     * The emitting provider is the Cordis receiver for service-realm routing.
      * @param ns - the namespace whose stored section changed.
      * @param revision - the namespace's new revision.
      * @mode emit
@@ -51,6 +54,7 @@ declare module '@hydraharness/cordis' {
      * A settings namespace was registered or removed with its owning plugin.
      * Configuration surfaces use this to refresh their served-namespace list
      * after plugin lifecycle changes that do not modify the settings file.
+     * The emitting provider is the Cordis receiver for service-realm routing.
      * @param ns - the namespace whose registration changed.
      * @mode emit
      */

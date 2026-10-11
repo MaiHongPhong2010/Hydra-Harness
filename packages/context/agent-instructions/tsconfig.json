@@ -33,6 +33,9 @@
       "path": "../../util/home-paths"
     },
     {
+      "path": "../../workspace/workspace-config"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     }
   ]

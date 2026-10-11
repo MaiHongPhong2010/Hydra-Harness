@@ -4,7 +4,7 @@ The `jsonrpc` plugin serves newline-delimited JSON-RPC over stdio so out-of-proc
 
 ## Wiring
 
-`inject: ['agents']`. The server gets or creates one agent per `sessionId`. It forwards subagent completions only when the service-snapshotted lifecycle `local` flag is true; provider names, child ids, and durable lineage never establish locality. A registered adapter wins, an unowned `deepseek-official` route mounts `@hydraharness/harness-llm-deepseek`, and any other unowned provider fails initialization. Other capabilities come from the surrounding `cordis.yml`.
+`inject: ['agents']`. The server gets or creates one agent per `sessionId`. When [`workspace-config`](../../workspace/workspace-config/README.md) is composed, each new agent joins the workspace resolved from `initialize.cwd`, including its effective MCP/hooks and optional preset. An explicit provider/model pair wins; omission uses the global [`agent-default-model`](../../core/agent-default-model/README.md). Missing defaults or an incomplete pair reject initialization. Changed defaults apply only to later sessions. Without workspace configuration, capabilities come from the surrounding `cordis.yml`; a configured preset roster is joined before publication. It forwards subagent completions only when the service-snapshotted lifecycle `local` flag is true; provider names, child ids, and durable lineage never establish locality. A registered adapter wins, an unowned `deepseek-official` route mounts `@hydraharness/harness-llm-deepseek`, and any other unowned provider fails initialization.
 
 ## Config
 

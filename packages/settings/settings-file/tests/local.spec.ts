@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@hydraharness/cordis'
 import z from '@hydraharness/schemastery'
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeFileAtomic } from '@hydraharness/harness-atomic-write'
@@ -47,6 +47,81 @@ describe('resolveSpec', () => {
 })
 
 describe('boot and reads', () => {
+  it('prepares and writes an absent document within its canonical workspace', async () => {
+    const root = await tempDir()
+    const path = join(root, '.hydra', 'settings.yaml')
+    const ctx = await boot({ path, confinedRoot: root, watch: false })
+    await expect(ctx.settings.prepareDocument()).resolves.toBe(path)
+    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    await scope.update({ theme: 'light' })
+    expect(await readFile(path, 'utf8')).toContain('theme: light')
+  })
+
+  it('rejects a confined file outside the canonical workspace', async () => {
+    const root = await tempDir()
+    const outside = await tempDir()
+    await expect(boot({ path: join(outside, 'settings.yaml'), confinedRoot: root, watch: false }))
+      .rejects.toThrow('escapes workspace')
+  })
+
+  it('rejects a workspace settings file that is itself a symbolic link', async () => {
+    const root = await tempDir()
+    const actual = join(root, 'actual.yaml')
+    await writeFile(actual, 'ui-theme:\n  theme: light\n')
+    const path = join(root, 'settings.yaml')
+    await symlink(actual, path)
+    await expect(boot({ path, confinedRoot: root, watch: false })).rejects.toThrow('regular file')
+  })
+
+  it('refuses writes and document preparation after a workspace directory becomes an escaping link', async () => {
+    const root = await tempDir()
+    const outside = await tempDir()
+    const directory = join(root, '.hydra')
+    const backup = join(root, 'original-hydra')
+    await mkdir(directory)
+    const path = join(directory, 'settings.yaml')
+    await writeFile(path, 'ui-theme:\n  theme: light\n')
+    const victim = join(outside, 'settings.yaml')
+    await writeFile(victim, 'precious\n')
+    const ctx = await boot({ path, confinedRoot: root, watch: false })
+    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    await scope.update({ fontSize: 18 })
+    await rename(directory, backup)
+    await symlink(outside, directory, 'junction')
+    try {
+      await expect(scope.update({ theme: 'dark' })).rejects.toThrow('escapes workspace')
+      await expect(ctx.settings.prepareDocument()).rejects.toThrow('escapes workspace')
+      expect(await readFile(victim, 'utf8')).toBe('precious\n')
+      expect(scope.get().theme).toBe('light')
+    } finally {
+      await unlink(directory)
+      await rename(backup, directory)
+    }
+  })
+
+  it('rejects unsupported namespaces even when the raw layer is disabled', async () => {
+    const path = join(await tempDir(), 'settings.yaml')
+    await writeFile(path, 'credentials:\n  key: private\n')
+    await expect(boot({ path, watch: false, allowedNamespaces: ['ui-theme'], layerEnabled: false }))
+      .rejects.toThrow('namespace "credentials" is not allowed')
+  })
+
+  it('retains a disabled raw layer for editing and applies it after enablement', async () => {
+    const path = join(await tempDir(), 'settings.yaml')
+    await writeFile(path, 'ui-theme:\n  theme: light\n')
+    const ctx = await boot({ path, watch: false, allowedNamespaces: ['ui-theme'], layerEnabled: false })
+    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    expect(scope.get().theme).toBe('dark')
+    expect(ctx.settings.describe()[0]?.user).toEqual({ theme: 'light' })
+    await scope.update({ fontSize: 18 })
+    expect(scope.get()).toEqual({ theme: 'dark', fontSize: 14 })
+    ctx.settings.setLayerEnabled(true)
+    expect(scope.get()).toEqual({ theme: 'light', fontSize: 18 })
+    ctx.settings.setLayerEnabled(false)
+    expect(scope.get()).toEqual({ theme: 'dark', fontSize: 14 })
+    expect(await readFile(path, 'utf8')).toContain('theme: light')
+  })
+
   it('resolves defaults over an absent file and reports writable', async () => {
     const dir = await tempDir()
     const path = join(dir, 'settings.yaml')
@@ -166,6 +241,25 @@ describe('boot and reads', () => {
 })
 
 describe('persist', () => {
+  it('rejects a write outside the permitted namespace set before persistence', async () => {
+    const path = join(await tempDir(), 'settings.yaml')
+    const ctx = await boot({ path, watch: false, allowedNamespaces: ['ui-theme'] })
+    const scope = ctx.settings.register(settingsNamespace('unsupported'), ThemeSchema)
+    await expect(scope.update({ fontSize: 18 })).rejects.toThrow('namespace "unsupported" is not allowed')
+    await expect(readFile(path, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('refuses to overwrite an unseen document with unsupported namespaces', async () => {
+    const path = join(await tempDir(), 'settings.yaml')
+    const ctx = await boot({ path, watch: false, allowedNamespaces: ['ui-theme'] })
+    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const contents = 'unsupported:\n  private: keep\n'
+    await writeFile(path, contents)
+    await expect(scope.update({ fontSize: 18 })).rejects.toThrow('not allowed')
+    expect(await readFile(path, 'utf8')).toBe(contents)
+    expect(scope.get().fontSize).toBe(14)
+  })
+
   it('writes the merged section, creating the file with owner-only permissions', async () => {
     const dir = await tempDir()
     const path = join(dir, 'settings.yaml')
@@ -376,6 +470,19 @@ describe('persist', () => {
 })
 
 describe('watch', () => {
+  it('keeps the last good allowed document over an unsupported external section', async () => {
+    const path = join(await tempDir(), 'settings.yaml')
+    await writeFile(path, 'ui-theme:\n  theme: light\n')
+    const ctx = await boot({ path, debounceMs: 10, allowedNamespaces: ['ui-theme'] })
+    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const warned = vi.spyOn(ctx.logger, 'warn')
+    await writeFileAtomic(path, 'ui-theme:\n  theme: dark\nunsupported:\n  value: true\n', { mode: 0o600 })
+    await vi.waitFor(() => { expect(warned).toHaveBeenCalled() }, { timeout: 5000 })
+    expect(scope.get().theme).toBe('light')
+    await writeFileAtomic(path, 'ui-theme:\n  theme: dark\n', { mode: 0o600 })
+    await vi.waitFor(() => { expect(scope.get().theme).toBe('dark') }, { timeout: 5000 })
+  })
+
   it('publishes an external edit to registered scopes', async () => {
     const dir = await tempDir()
     const path = join(dir, 'settings.yaml')

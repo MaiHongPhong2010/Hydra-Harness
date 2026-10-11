@@ -16,10 +16,10 @@ import type { SubagentStopReason } from '@hydraharness/harness-subagent'
 export interface InitializeParams {
   /** Working directory recorded on every SDK-created session's header. */
   cwd: string
-  /** Provider route every SDK-created agent runs on. */
-  provider: string
-  /** Model name every SDK-created agent runs on (the server may mount a fallback adapter; see `HarnessSdkJsonRpcServer.initialize`). */
-  model: string
+  /** Explicit provider route; omit with model to use the runtime's workspace or user default. */
+  provider?: string
+  /** Explicit model id; supply with provider. The server may mount a fallback adapter. */
+  model?: string
   /** Optional positive output-token cap inherited by SDK-created agents and their in-process descendants. */
   maxTokens?: number
 }

@@ -8,7 +8,7 @@ import { credentialRef } from '@hydraharness/harness-credentials'
 import { settingsNamespace } from '@hydraharness/harness-settings'
 import * as Catalog from '../../../packages/llm/llm-pi-ai/src/catalog.ts'
 import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, webSnapshotMode, type WebScaffold } from './scaffold.ts'
-import { newEnglishPage, REPO_ROOT } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, REPO_ROOT } from './support.ts'
 
 describe.skipIf(webSnapshotMode() === 'record').each(['openai', 'google', 'xai'] as const)('web e2e: %s live default model discovery', (provider) => {
   let server: Server
@@ -63,6 +63,10 @@ describe.skipIf(webSnapshotMode() === 'record').each(['openai', 'google', 'xai']
     page = await newEnglishPage(browser)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await connectFreshWorkspace(page, scaffold.workspaceCwd)
+    await page.getByRole('button', { name: /^Select model/ }).click()
+    await page.getByRole('menuitem', { name: /^Image model/ }).waitFor()
+    await page.keyboard.press('Escape')
     await mkdir(shots, { recursive: true })
     await mkdir(join(REPO_ROOT, 'apps/web/tests/snapshots/live-model-discovery'), { recursive: true })
   }, 120_000)
@@ -109,8 +113,8 @@ describe.skipIf(webSnapshotMode() === 'record').each(['openai', 'google', 'xai']
     await catalog.getByRole('checkbox', { name: `Image ${ids[1]}`, exact: true }).check()
     await catalog.getByRole('checkbox', { name: `Video ${ids[1]}`, exact: true }).check()
     await catalog.getByRole('checkbox', { name: `Video ${ids[1]}`, exact: true }).uncheck()
-    await settings.getByRole('button', { name: 'Apply', exact: true }).click()
-    await settings.getByText(`Saved Live discovery (${provider}).`, { exact: true }).waitFor()
+    await settings.getByRole('region', { name: 'API keys', exact: true }).getByRole('button', { name: 'Apply', exact: true }).click()
+    await settings.getByText(`Saved Live discovery (${provider}).`, { exact: true }).waitFor({ timeout: 15_000 })
     const generation = settings.getByRole('region', { name: 'Image and video generation' })
     for (const [label, id] of [['Image model', ids[1]], ['Video model', ids[2]]] as const) {
       const select = generation.getByLabel(label, { exact: true })
@@ -118,6 +122,7 @@ describe.skipIf(webSnapshotMode() === 'record').each(['openai', 'google', 'xai']
       expect(await select.locator(`optgroup[label='Live discovery (${provider})'] option`)
         .evaluateAll(options => options.map(option => (option as HTMLOptionElement).value)))
         .toEqual([JSON.stringify([provider, id])])
+      expect(await select.locator(`optgroup[label='Live discovery (${provider})'] option`).allTextContents()).toEqual([id])
     }
     await generation.getByLabel('Image model', { exact: true }).selectOption(JSON.stringify([provider, ids[1]]))
     await generation.getByLabel('Video model', { exact: true }).selectOption(JSON.stringify([provider, ids[2]]))
@@ -135,6 +140,23 @@ describe.skipIf(webSnapshotMode() === 'record').each(['openai', 'google', 'xai']
       await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd), webSnapshotMode())
     await page.screenshot({ path: join(shots, `${provider}.png`) })
     expect(paths).toEqual([...expectedPaths, ...expectedPaths])
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: /^Select model/ }).click()
+    const menu = page.getByRole('menu', { name: 'Model and reasoning effort' })
+    for (const [label, id] of [['Image model', ids[1]], ['Video model', ids[2]]] as const) {
+      await expect.poll(() => menu.getByRole('menuitem', { name: new RegExp(`^${label}`) }).textContent()).toBe(`${label}${id}`)
+    }
+    await compareOrRefreshGolden(join(REPO_ROOT, `apps/web/tests/snapshots/live-model-discovery/${provider}-composer.expected.md`),
+      await captureStableAria(page, '[role="menu"]', scaffold.workspaceCwd), webSnapshotMode())
+    await page.screenshot({ path: join(shots, `${provider}-composer.png`) })
+    for (const [label, id] of [['Image model', ids[1]], ['Video model', ids[2]]] as const) {
+      await menu.getByRole('menuitem', { name: new RegExp(`^${label}`) }).click()
+      const selected = menu.getByRole('group', { name: `Live discovery (${provider})` }).getByRole('menuitemradio', { name: id, exact: true })
+      await expect.poll(() => selected.getAttribute('aria-checked')).toBe('true')
+      await page.getByRole('button', { name: /^Select model/ }).focus()
+      await page.keyboard.press('Escape')
+    }
+    await page.keyboard.press('Escape')
     await page.reload({ waitUntil: 'load' })
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     await settings.getByRole('button', { name: 'Models', exact: true }).click()
@@ -158,8 +180,8 @@ describe.skipIf(webSnapshotMode() === 'record').each(['openai', 'google', 'xai']
     expect(scaffold.ctx.settings.get(settingsNamespace('llm-pi-ai'))).toMatchObject({
       videoModel: { provider, model: ids[2] },
     })
-    await settings.getByRole('button', { name: 'Apply', exact: true }).click()
-    await settings.getByText(`Saved Live discovery (${provider}).`, { exact: true }).waitFor()
+    await settings.getByRole('region', { name: 'API keys', exact: true }).getByRole('button', { name: 'Apply', exact: true }).click()
+    await settings.getByText(`Saved Live discovery (${provider}).`, { exact: true }).waitFor({ timeout: 15_000 })
     const generation = settings.getByRole('region', { name: 'Image and video generation' })
     await expect.poll(() => generation.getByLabel('Image model', { exact: true }).isEnabled()).toBe(true)
     await expect.poll(() => generation.getByLabel('Video model', { exact: true }).isEnabled()).toBe(true)

@@ -79,7 +79,7 @@ describe('web e2e: Settings drafts and dialog interaction', () => {
 
   it('keeps the Language menu inside Settings and dismisses the menu first', async () => {
     const settings = page.getByRole('dialog', { name: 'Settings', exact: true })
-    await settings.getByRole('button', { name: 'English', exact: true }).click()
+    await settings.getByRole('button', { name: 'Auto', exact: true }).click()
     const menu = settings.getByRole('menu')
     await menu.waitFor()
     const english = menu.getByRole('menuitem', { name: 'English', exact: true })

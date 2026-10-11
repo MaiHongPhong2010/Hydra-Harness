@@ -56,7 +56,8 @@
     "@hydraharness/harness-user-approval": "workspace:^",
     "@hydraharness/harness-user-questions": "workspace:^",
     "@hydraharness/schemastery": "workspace:^",
-    "electron": "^44.0.0"
+    "electron": "^44.0.0",
+    "@hydraharness/harness-native-command": "workspace:^"
   },
   "peerDependenciesMeta": {
     "electron": {
@@ -76,7 +77,8 @@
     "@hydraharness/harness-browseragent-core": "workspace:^",
     "@hydraharness/harness-browseragent-page-controller": "workspace:^",
     "electron": "^44.0.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "@hydraharness/harness-native-command": "workspace:^"
   },
   "dependencies": {
     "playwright-core": "1.61.1"

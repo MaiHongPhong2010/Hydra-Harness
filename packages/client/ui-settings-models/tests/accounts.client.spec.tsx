@@ -162,16 +162,14 @@ it.each(['first', 'second'])('starts the explicitly selected authorization %s me
 it.each(['antigravity', 'gemini-api'])('starts the selected %s method on the shared Google pool', async (provider) => {
   const key = 'llm-account-auth/antigravity'
   const begin = vi.fn(async () => ok({ attemptId: 'google-login' }))
-  const config = Schema.object({ providers: Schema.dict(Schema.object({ models: Schema.array(Schema.object({ id: Schema.string() })) })) })
-  render(<ProviderEditor provider={provider} displayName="Google" settingsPath={['providers', provider]}
-    namespace={{ ns: 'llm-account-auth', schema: config.toJSON(), revision: 1, applies: 'live', secrets: [],
-      value: { providers: {} }, base: {}, user: {} }} schema={settingsSchema} t={t} readOnly={false} onClose={vi.fn()}
-    api={{ authorization: { list: async () => ok({ entries: [{ key, label: 'Google', methods: [
+  render(<ProviderAccounts flowKey={key} t={t} disabled={false} onBusy={vi.fn()}
+    api={{ list: async () => ok({ entries: [{ key, label: 'Google', methods: [
       { id: 'oauth', label: 'Antigravity' }, { id: 'gemini-api', label: 'Gemini API' },
     ], inFlight: false, accounts: [] }] }), begin,
     state: async () => ok({ attempt: { id: 'google-login', status: 'authorized' } }),
-    usage: async () => ok({}), cancel: async () => ok({}) } } as never} />)
+    usage: async () => ok({}), cancel: async () => ok({}) } as never} />)
   await screen.findByText(en.accountsEmpty)
+  fireEvent.change(screen.getByLabelText(en.accountSignInMethod), { target: { value: provider === 'gemini-api' ? 'gemini-api' : 'oauth' } })
   fireEvent.click(screen.getByRole('button', { name: en.accountAdd }))
   await screen.findByText(en.accountAdded)
   expect(begin).toHaveBeenCalledWith({ key, method: provider === 'gemini-api' ? 'gemini-api' : 'oauth' })
@@ -447,14 +445,14 @@ it.each(['chatgpt', 'future-provider'])('saves %s without requiring or storing a
         inFlight: false, accounts: [] }] }), usage: async () => ok({}) } } as never} />)
   expect(screen.queryByLabelText(en.keyInput)).toBeNull()
   if (provider === 'chatgpt') {
-    await screen.findByText(en.accountsEmpty)
     fireEvent.click(screen.getByText(en.customized))
     fireEvent.click(screen.getByRole('button', { name: en.addModel }))
     fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'custom-model' } })
     expect(screen.getByDisplayValue('custom-model')).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: en.resetModels }))
     expect(screen.queryByDisplayValue('custom-model')).toBeNull()
-  } else expect(screen.getByRole<HTMLButtonElement>('button', { name: en.accountAdd }).disabled).toBe(true)
+  }
+  expect(screen.queryByRole('button', { name: en.accountAdd })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: en.apply }))
   await waitFor(() => { expect(onClose).toHaveBeenCalledWith(true) })
   expect(mutate).toHaveBeenCalledWith({ ns: 'llm-account-auth', expectedRevision: 1,

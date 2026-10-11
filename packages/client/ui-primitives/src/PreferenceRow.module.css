@@ -1,0 +1,18 @@
+.row { display: flex; align-items: center; gap: 16px; padding: 14px 0; }
+.text { flex: 1; min-width: 0; }
+.title { display: block; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-primary); }
+.description { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.error { font-size: 12px; line-height: 18px; color: var(--dsw-alias-state-error-primary); }
+.control { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 50%; }
+.control input { min-width: 0; max-width: 230px; }
+.control input, .control select {
+  box-sizing: border-box; max-width: 100%; padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-control);
+  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit;
+}
+.control input:focus-visible, .control select:focus-visible { outline: 2px solid var(--dsw-alias-focus-ring); outline-offset: 2px; }
+@media (max-width: 720px) {
+  .row { flex-wrap: wrap; gap: 10px; }
+  .text { flex-basis: 100%; }
+  .control { max-width: 100%; }
+}

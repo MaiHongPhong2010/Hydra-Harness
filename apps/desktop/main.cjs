@@ -10,15 +10,20 @@ const { basename, dirname, isAbsolute, join, relative, resolve, sep } = require(
 const { createInterface } = require('node:readline')
 const { setTimeout: delay } = require('node:timers/promises')
 const { stripVTControlCharacters } = require('node:util')
-const { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell, utilityProcess } = require('electron')
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, Notification, shell, utilityProcess } = require('electron')
+const { createNativePreferences } = require('./native-preferences.cjs')
+const { createEnvironmentLauncher, launchWslHost } = require('./environment-launcher.cjs')
 const nodePty = require('node-pty')
 
 const CLI_ENTRY = process.env.HYDRA_DESKTOP_CLI_ENTRY || join(require.resolve('@hydraharness/harness/package.json'), '..', 'lib', 'bin.js')
 const BROWSER_ENTRY = join(require.resolve('@hydraharness/harness-browser-electron/package.json'), '..', 'electron-app', 'main.cjs')
 const DESKTOP_ICON = join(__dirname, 'assets', process.platform === 'win32' ? 'hydra.ico' : 'hydra.png')
+const DESKTOP_APP_ID = 'org.hydraharness.desktop'
 const SMOKE_ZOOM = process.argv.includes('--smoke-zoom')
+const SMOKE_WORKSPACE_SETTINGS = process.argv.includes('--smoke-workspace-settings')
 const SMOKE_FILES = process.argv.includes('--smoke-files')
-const SMOKE = process.argv.includes('--smoke') || SMOKE_ZOOM || SMOKE_FILES
+const SMOKE_GENERAL = process.argv.includes('--smoke-general')
+const SMOKE = process.argv.includes('--smoke') || SMOKE_ZOOM || SMOKE_WORKSPACE_SETTINGS || SMOKE_FILES || SMOKE_GENERAL
 const HOST_READY_TIMEOUT_MS = 90_000
 const HOST_REQUEST_TIMEOUT_MS = 15_000
 const HOST_SHUTDOWN_TIMEOUT_MS = 7_000
@@ -37,13 +42,25 @@ const TITLEBAR_HEIGHT = 36
 const TITLEBAR_OVERLAY_TRANSPARENT = 'rgba(0,0,0,0)'
 
 app.setName('Hydra harness')
+if (process.platform === 'win32') app.setAppUserModelId(DESKTOP_APP_ID)
 app.setPath('userData', join(process.env.HYDRA_HOME || join(app.getPath('home'), '.hydra'), 'desktop-electron'))
+const desktopDataRoot = app.getPath('userData')
+const environmentLauncher = createEnvironmentLauncher({ storePath: join(desktopDataRoot, 'environment.json') })
 
 let mainWindow
+const trustedWindows = new Set()
+const windowContexts = new Map()
+const closeShortcuts = new WeakSet()
+const closingWindows = new WeakSet()
+const nativePreferences = createNativePreferences({ app, globalShortcut, Notification, shell,
+  onPopout: () => { void openPopout().catch(error => { process.stderr.write(`desktop: popout failed: ${String(error)}\n`) }) },
+  onNotificationClick: sessionId => { void openPopout(sessionId).catch(error => { process.stderr.write(`desktop: notification click failed: ${String(error)}\n`) }) },
+})
 let host
 let hostBaseUrl
 let smokeWorkspace
 let browser
+let browserWindow
 let browserConnection
 let browserBounds = { x: 0, y: 0, width: 0, height: 0, visible: false, present: true }
 const terminals = new Map()
@@ -75,7 +92,15 @@ function applyZoom(contents, step) {
 
 app.on('web-contents-created', (_event, contents) => {
   contents.on('before-input-event', (event, input) => {
-    if (mainWindow === undefined || mainWindow.isDestroyed() || contents !== mainWindow.webContents) return
+    const window = BrowserWindow.fromWebContents(contents)
+    if (!trustedWindows.has(window)) return
+    if (input.type === 'keyDown' && ((input.key.toLowerCase() === 'w' && (input.control || input.meta))
+      || (input.key === 'F4' && input.alt))) {
+      event.preventDefault()
+      closeShortcuts.add(window)
+      window.close()
+      return
+    }
     const zoom = zoomShortcut(input)
     if (zoom !== undefined) {
       event.preventDefault()
@@ -85,7 +110,7 @@ app.on('web-contents-created', (_event, contents) => {
     const shortcut = panelShortcut(input)
     if (shortcut === undefined) return
     event.preventDefault()
-    mainWindow.webContents.send('hydra-desktop:panel-shortcut', shortcut)
+    contents.send('hydra-desktop:panel-shortcut', shortcut)
   })
 })
 let shuttingDown
@@ -94,8 +119,20 @@ let hostExitCode
 
 function postBrowser(connectionId, type, payload = {}) {
   if (host === undefined || hostExited) return
+  if (type === 'hydra-browser-line' && environmentLauncher.active().value !== 'native') {
+    browserBridgeTail = browserBridgeTail.then(async () => {
+      const message = parseBrowserLine(payload.line)
+      if (message === undefined) throw new Error('Invalid browser bridge response')
+      const line = JSON.stringify(await hostBridgePaths(message))
+      if (host !== undefined && !hostExited) host.postMessage({ type, connectionId, line })
+    }).catch(error => {
+      if (host !== undefined && !hostExited) host.postMessage({ type: 'hydra-browser-error', connectionId, error: String(error) })
+    })
+    return
+  }
   host.postMessage({ type, connectionId, ...payload })
 }
+let browserBridgeTail = Promise.resolve()
 
 function parseBrowserLine(line) {
   try {
@@ -107,6 +144,7 @@ function parseBrowserLine(line) {
 
 async function handleBrowserMessage(message) {
   if (typeof message !== 'object' || message === null || !('type' in message)) return
+  if (message.type === 'hydra-native-request') { await handleNativeRequest(message); return }
   if (message.type === 'hydra-browser-connect') {
     if (typeof message.connectionId !== 'string') return
     const previous = browserConnection
@@ -114,7 +152,7 @@ async function handleBrowserMessage(message) {
     await browser.cancelRequests()
     if (previous !== undefined && previous !== message.connectionId) postBrowser(previous, 'hydra-browser-close')
     if (browserConnection !== message.connectionId) return
-    const settings = typeof message.settings === 'object' && message.settings !== null ? message.settings : {}
+    const settings = typeof message.settings === 'object' && message.settings !== null ? nativeBridgePaths(message.settings) : {}
     try {
       await browser.command('configure_browser', settings)
     } catch (error) {
@@ -143,10 +181,45 @@ async function handleBrowserMessage(message) {
   if (message.type !== 'hydra-browser-line' || message.connectionId !== browserConnection || typeof message.line !== 'string') return
   const request = parseBrowserLine(message.line)
   if (request === undefined) return
-  const reply = await browser.request(request)
+  const reply = await browser.request(nativeBridgePaths(request))
   if (reply !== undefined) {
     postBrowser(message.connectionId, 'hydra-browser-line', { line: JSON.stringify(reply) })
   }
+}
+
+const bridgePathKeys = new Set(['path', 'filePath', 'directory', 'userDataDir', 'downloadDirectory', 'cwd', 'root', 'parentPath', 'oldPath', 'newPath', 'destinationDirectory'])
+function nativeBridgePaths(value, key) {
+  if (environmentLauncher.active().value === 'native') return value
+  if (typeof value === 'string' && bridgePathKeys.has(key) && value.startsWith('/')) return environmentLauncher.nativePath(value)
+  if (Array.isArray(value)) return value.map(item => nativeBridgePaths(item))
+  if (typeof value === 'object' && value !== null) return Object.fromEntries(Object.entries(value).map(([field, item]) => [field, nativeBridgePaths(item, field)]))
+  return value
+}
+async function hostBridgePaths(value, key) {
+  if (environmentLauncher.active().value === 'native') return value
+  if (typeof value === 'string' && bridgePathKeys.has(key) && /^(?:[a-z]:\\|\\\\)/iu.test(value)) return environmentLauncher.hostPath(value)
+  if (Array.isArray(value)) return Promise.all(value.map(item => hostBridgePaths(item)))
+  if (typeof value === 'object' && value !== null) return Object.fromEntries(await Promise.all(Object.entries(value).map(async ([field, item]) => [field, await hostBridgePaths(item, field)])))
+  return value
+}
+async function handleNativeRequest(message) {
+  if (typeof message.requestId !== 'string' || message.requestId.length > 128 || !['pick-directory', 'open-path', 'open-text'].includes(message.operation)) return
+  try {
+    let value
+    if (message.operation === 'pick-directory') {
+      const selected = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow() ?? mainWindow, { properties: ['openDirectory'] })
+      value = selected.canceled ? null : await environmentLauncher.hostPath(selected.filePaths[0])
+    } else {
+      if (typeof message.path !== 'string' || message.path.length > 32768 || message.path.includes('\0')) throw new Error('Invalid native filesystem path')
+      const path = environmentLauncher.active().value === 'native' ? message.path : environmentLauncher.nativePath(message.path)
+      if (!isAbsolute(path)) throw new Error('Native file targets must be absolute')
+      await stat(path)
+      if (message.operation === 'open-text' && process.platform === 'win32') {
+        await new Promise((resolve, reject) => { const child = spawn('notepad.exe', [path], { windowsHide: true, stdio: 'ignore' }); child.once('spawn', () => { child.unref(); resolve() }); child.once('error', reject) })
+      } else { const error = await shell.openPath(path); if (error !== '') throw new Error(error) }
+    }
+    if (host !== undefined && !hostExited) host.postMessage({ type: 'hydra-native-result', requestId: message.requestId, value })
+  } catch (error) { if (host !== undefined && !hostExited) host.postMessage({ type: 'hydra-native-result', requestId: message.requestId, error: error.message }) }
 }
 
 function createWindow() {
@@ -171,6 +244,13 @@ function createWindow() {
       nodeIntegration: false,
     },
   })
+  // Electron's toast registration creates an executable-icon shortcut under the process ID.
+  if (process.platform === 'win32') window.setAppDetails({
+    appId: `${DESKTOP_APP_ID}.window`,
+    appIconPath: DESKTOP_ICON,
+    relaunchCommand: `"${process.execPath}" "${app.getAppPath()}"`,
+    relaunchDisplayName: 'Hydra harness',
+  })
   window.webContents.setWindowOpenHandler(({ url }) => {
     void routeAppUrl(url)
     return { action: 'deny' }
@@ -185,7 +265,66 @@ function createWindow() {
     void routeAppUrl(url)
   })
   window.on('page-title-updated', event => { event.preventDefault() })
+  registerTrustedWindow(window)
   return window
+}
+
+/** Only app-owned main frames at the current Host origin receive native privileges. */
+function registerTrustedWindow(window) {
+  const contents = window.webContents
+  trustedWindows.add(window)
+  window.on('close', event => {
+    if (shuttingDown !== undefined || closingWindows.has(window)) return
+    event.preventDefault()
+    closingWindows.add(window)
+    const shortcut = closeShortcuts.has(window)
+    closeShortcuts.delete(window)
+    void (async () => {
+      const policy = nativePreferences.closeConfirmation()
+      if (policy === 'always' || (policy === 'shortcut' && shortcut)) {
+        const answer = await dialog.showMessageBox(window, { type: 'question', title: 'Close Hydra window?',
+          message: 'Close this window?', detail: 'Check any unsaved editor drafts before closing.',
+          buttons: ['Cancel', 'Close'], defaultId: 0, cancelId: 0, noLink: true })
+        if (answer.response !== 1) { closingWindows.delete(window); return }
+      }
+      if (trustedWindows.size === 1) { await shutdown(); return }
+      trustedWindows.delete(window)
+      windowContexts.delete(window)
+      const remaining = [...trustedWindows].find(item => !item.isDestroyed())
+      if (browserWindow === window && remaining !== undefined) { browser.setWindow(remaining); browserWindow = remaining }
+      if (window === mainWindow) mainWindow = remaining
+      window.close()
+    })().catch(error => { closingWindows.delete(window); process.stderr.write(`desktop: window close failed: ${String(error)}\n`) })
+  })
+  window.on('closed', () => {
+    trustedWindows.delete(window)
+    windowContexts.delete(window)
+    for (const [id, terminal] of terminals) {
+      if (terminal.owner === contents) void queueTerminal(id, () => stopTerminal(id)).catch(error => {
+        process.stderr.write(`desktop: terminal cleanup failed: ${String(error)}\n`)
+      })
+    }
+  })
+}
+
+async function openPopout(sessionId) {
+  if (shuttingDown !== undefined || hostBaseUrl === undefined) throw new Error('Desktop is unavailable')
+  if (sessionId === undefined) {
+    const focused = BrowserWindow.getFocusedWindow()
+    const workspaceId = windowContexts.get(focused) ?? windowContexts.get(mainWindow)
+    const created = await hostRequest('session.create', nativePreferences.standaloneChat() || workspaceId === undefined ? { projectless: true } : { workspaceId })
+    sessionId = created.sessionId
+  }
+  const url = new URL(hostBaseUrl)
+  url.searchParams.set('session', sessionId)
+  const child = createWindow()
+  child.setMinimumSize(800, 600)
+  child.setSize(1200, 800)
+  try {
+    await child.loadURL(url.href)
+    if (!SMOKE) child.show()
+  } catch (error) { child.destroy(); throw error }
+  return child
 }
 
 async function routeAppUrl(url) {
@@ -198,6 +337,7 @@ async function routeAppUrl(url) {
 }
 
 function installBrowserController(window) {
+  browserWindow = window
   const registered = Promise.withResolvers()
   globalThis.__HYDRA_BROWSER_EMBED__ = {
     window,
@@ -217,13 +357,13 @@ function installBrowserController(window) {
       void state
     },
     onAnnotation(annotation) {
-      if (!window.isDestroyed()) window.webContents.send('hydra-desktop:browser-annotation', annotation)
+      if (!browserWindow.isDestroyed()) browserWindow.webContents.send('hydra-desktop:browser-annotation', annotation)
     },
     openBrowser() {
-      if (!window.isDestroyed()) window.webContents.send('hydra-desktop:panel-shortcut', 'browser')
+      if (!browserWindow.isDestroyed()) browserWindow.webContents.send('hydra-desktop:panel-shortcut', 'browser')
     },
     closeBrowser() {
-      if (!window.isDestroyed()) window.webContents.send('hydra-desktop:panel-close', 'browser')
+      if (!browserWindow.isDestroyed()) browserWindow.webContents.send('hydra-desktop:panel-close', 'browser')
     },
     register(controller) { registered.resolve(controller) },
   }
@@ -232,12 +372,19 @@ function installBrowserController(window) {
 }
 
 function startHost() {
-  if (!existsSync(CLI_ENTRY)) {
+  const selection = environmentLauncher.active()
+  if (selection.value === 'native' && !existsSync(CLI_ENTRY)) {
     throw new Error('Desktop Host is not built. Run `pnpm run build` first.')
   }
   const hostEnv = { ...process.env, HYDRA_DESKTOP_BROWSER_BRIDGE: 'parent-port' }
   delete hostEnv.ELECTRON_RUN_AS_NODE
-  const child = utilityProcess.fork(CLI_ENTRY, [
+  const ready = Promise.withResolvers()
+  const onLine = line => {
+    process.stdout.write(`${line}\n`)
+    const match = HOST_URL.exec(line.trim())
+    if (match?.[1] !== undefined) ready.resolve(match[1])
+  }
+  const child = selection.value !== 'native' ? launchWslHost(selection, spawn, onLine) : utilityProcess.fork(CLI_ENTRY, [
     'web', '--no-open', '--host', '127.0.0.1', '--port', '0',
   ], {
     cwd: process.cwd(),
@@ -257,13 +404,8 @@ function startHost() {
   })
   child.stderr?.on('data', chunk => { process.stderr.write(chunk) })
 
-  const ready = Promise.withResolvers()
-  const lines = createInterface({ input: child.stdout })
-  lines.on('line', line => {
-    process.stdout.write(`${line}\n`)
-    const match = HOST_URL.exec(line.trim())
-    if (match?.[1] !== undefined) ready.resolve(match[1])
-  })
+  if (selection.value === 'native') createInterface({ input: child.stdout }).on('line', onLine)
+  child.once('error', error => { ready.reject(error) })
   child.once('exit', (code) => {
     ready.reject(new Error(`Hydra harness Host exited before readiness (code ${String(code)})`))
   })
@@ -274,7 +416,9 @@ function startHost() {
 }
 
 function validSender(event) {
-  return mainWindow !== undefined && event.sender === mainWindow.webContents
+  const window = BrowserWindow.fromWebContents(event.sender)
+  if (!trustedWindows.has(window) || event.senderFrame !== event.sender.mainFrame || hostBaseUrl === undefined) return false
+  try { return new URL(event.senderFrame.url).origin === new URL(hostBaseUrl).origin } catch { return false }
 }
 
 function overlayColor(value) {
@@ -292,9 +436,14 @@ function terminalSize(value) {
   return { cols, rows }
 }
 
-function sendTerminalEvent(terminalId, value) {
-  if (mainWindow === undefined || mainWindow.isDestroyed()) return
-  mainWindow.webContents.send('hydra-desktop:terminal-event', { terminalId, event: value })
+function sendTerminalEvent(key, value, owner) {
+  if (owner === undefined || owner.isDestroyed()) return
+  owner.send('hydra-desktop:terminal-event', { terminalId: key.slice(key.indexOf(':') + 1), event: value })
+}
+
+function terminalKey(event, value) {
+  const id = terminalId(value)
+  return id === undefined ? undefined : `${event.sender.id}:${id}`
 }
 
 function terminalId(value) {
@@ -325,14 +474,16 @@ function releaseTerminal(id, instance) {
   for (const subscription of record.subscriptions) subscription.dispose()
 }
 
-async function startTerminal(id, size, workspaceId) {
+async function startTerminal(id, size, workspaceId, owner, requestedCwd) {
   const current = terminals.get(id)
   if (current !== undefined) {
     if (current.workspaceId !== workspaceId) throw new Error('terminal belongs to another workspace')
     try { current.instance.resize(size.cols, size.rows) } catch {}
     return { running: true }
   }
-  const cwd = workspaceId === undefined ? process.cwd() : await registeredWorkspaceRoot(workspaceId)
+  const root = workspaceId === undefined ? process.cwd() : await registeredWorkspaceRoot(workspaceId)
+  const cwd = requestedCwd === undefined ? root : await confinedPath(root, requestedCwd)
+  if (!(await stat(cwd)).isDirectory()) throw new Error('terminal directory is unavailable')
   const { scrubbedParentEnv } = await import('@hydraharness/harness-subprocess')
   const env = scrubbedParentEnv()
   let shell = env.SHELL ?? '/bin/sh'
@@ -347,7 +498,10 @@ async function startTerminal(id, size, workspaceId) {
       shellName = 'powershell.exe'
     }
   }
-  const args = process.platform === 'win32' ? ['-NoLogo', '-NoProfile', '-NoExit'] : ['-i']
+  const selectedShell = nativePreferences.terminalShell()
+  if (selectedShell !== '') { shell = selectedShell; shellName = basename(shell) }
+  const args = /(?:powershell|pwsh)(?:\.exe)?$/iu.test(shellName) ? ['-NoLogo', '-NoProfile', '-NoExit']
+    : process.platform === 'win32' ? [] : ['-i']
   const instance = nodePty.spawn(shell, args, {
     name: 'xterm-256color',
     cols: size.cols,
@@ -355,15 +509,15 @@ async function startTerminal(id, size, workspaceId) {
     cwd,
     env,
   })
-  const record = { instance, subscriptions: [], output: '', shellName, workspaceId }
+  const record = { instance, subscriptions: [], output: '', shellName, workspaceId, owner }
   terminals.set(id, record)
   const data = instance.onData((value) => {
     record.output = (record.output + value).slice(-200_000)
-    sendTerminalEvent(id, { type: 'data', data: value })
+    sendTerminalEvent(id, { type: 'data', data: value }, owner)
   })
   const exited = instance.onExit(({ exitCode }) => {
     releaseTerminal(id, instance)
-    sendTerminalEvent(id, { type: 'exit', code: exitCode })
+    sendTerminalEvent(id, { type: 'exit', code: exitCode }, owner)
   })
   record.subscriptions = [data, exited]
   return { running: true }
@@ -424,12 +578,13 @@ async function registeredWorkspaceRoot(workspaceId) {
   if (!Array.isArray(value?.items)) throw new Error('workspace.list returned an invalid response')
   const workspace = value.items.find(item => item?.workspaceId === workspaceId)
   if (typeof workspace?.path !== 'string') throw new Error('workspace is not registered')
-  const root = await realpath(workspace.path)
+  const root = await realpath(environmentLauncher.active().value === 'native' ? workspace.path : environmentLauncher.nativePath(workspace.path))
   if (!(await stat(root)).isDirectory()) throw new Error('workspace path is invalid')
   return root
 }
 
 async function confinedPath(root, target = root) {
+  if (environmentLauncher.active().value !== 'native' && typeof target === 'string' && target.startsWith('/')) target = environmentLauncher.nativePath(target)
   if (typeof root !== 'string' || !isAbsolute(root)
     || typeof target !== 'string' || !isAbsolute(target)) {
     throw new Error('workspace path is invalid')
@@ -662,6 +817,63 @@ async function formatWorkspaceFile(root, target, content) {
 }
 
 function installRendererIpc() {
+  function filesOperation(channel, handler) {
+    ipcMain.handle(channel, async (event, value) => {
+      const result = await handler(event, nativeBridgePaths(value))
+      return channel === 'hydra-desktop:files-root' ? environmentLauncher.hostPath(result) : hostBridgePaths(result)
+    })
+  }
+  ipcMain.handle('hydra-desktop:environment-status', event => {
+    if (!validSender(event) || shuttingDown !== undefined) throw new Error('Desktop is unavailable')
+    return environmentLauncher.status()
+  })
+  ipcMain.handle('hydra-desktop:environment-select', (event, value) => {
+    if (!validSender(event) || shuttingDown !== undefined) throw new Error('Desktop is unavailable')
+    return environmentLauncher.select(value)
+  })
+  ipcMain.handle('hydra-desktop:notification-settings', async event => {
+    if (!validSender(event) || shuttingDown !== undefined) throw new Error('Desktop is unavailable')
+    if (process.platform === 'win32') await shell.openExternal('ms-settings:notifications')
+    else if (process.platform === 'darwin') await shell.openExternal('x-apple.systempreferences:com.apple.Notifications-Settings.extension')
+    else throw new Error('Open notification permissions in your system settings')
+  })
+  ipcMain.handle('hydra-desktop:panel-open', (event, kind) => {
+    if (!validSender(event) || shuttingDown !== undefined || !['files', 'side-chat', 'browser', 'terminal', 'review'].includes(kind)) throw new Error('Invalid panel request')
+    event.sender.send('hydra-desktop:panel-shortcut', kind)
+  })
+  filesOperation('hydra-desktop:files-open-system', async (event, value) => {
+    if (!validSender(event) || shuttingDown !== undefined) throw new Error('Desktop is unavailable')
+    const root = await registeredWorkspaceRoot(value?.workspaceId)
+    const path = await confinedPath(root, value?.path)
+    if (!(await stat(path)).isFile()) throw new Error('File is unavailable')
+    const error = await shell.openPath(path)
+    if (error !== '') throw new Error(error)
+  })
+  ipcMain.handle('hydra-desktop:preferences-status', event => {
+    if (!validSender(event) || shuttingDown !== undefined) throw new Error('Desktop is unavailable')
+    return nativePreferences.status()
+  })
+  ipcMain.handle('hydra-desktop:preferences-configure', (event, value) => {
+    if (!validSender(event) || shuttingDown !== undefined) throw new Error('Desktop is unavailable')
+    return nativePreferences.configure(value)
+  })
+  ipcMain.handle('hydra-desktop:preferences-startup', event => {
+    if (!validSender(event) || shuttingDown !== undefined) throw new Error('Desktop is unavailable')
+    return nativePreferences.openStartup()
+  })
+  ipcMain.handle('hydra-desktop:notification', (event, value) => {
+    if (!validSender(event) || shuttingDown !== undefined) throw new Error('Desktop is unavailable')
+    if (!['completion', 'question'].includes(value?.kind) || !['never', 'background', 'always'].includes(value?.completionPolicy)) throw new Error('Invalid notification policy')
+    if (value.kind === 'completion' && (value.completionPolicy === 'never'
+      || (value.completionPolicy === 'background' && [...trustedWindows].some(window => !window.isDestroyed() && window.isFocused())))) {
+      return { delivered: false, reason: 'Completion policy' }
+    }
+    return nativePreferences.notify(value)
+  })
+  ipcMain.on('hydra-desktop:window-context', (event, value) => {
+    if (!validSender(event) || (value !== undefined && (typeof value !== 'string' || value.length > 256))) return
+    windowContexts.set(BrowserWindow.fromWebContents(event.sender), value)
+  })
   ipcMain.handle('hydra-desktop:open-external', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('desktop is unavailable')
     if (typeof value?.url !== 'string' || value.url.length > 2_048) throw new Error('external URL is invalid')
@@ -678,23 +890,12 @@ function installRendererIpc() {
       || value.sessionId.length === 0 || value.sessionId.length > 256 || value.sessionId.includes('\0')) {
       throw new Error('invalid session window request')
     }
-    const url = new URL(hostBaseUrl)
-    url.searchParams.set('session', value.sessionId)
-    const child = new BrowserWindow({
-      width: 1200, height: 800, minWidth: 800, minHeight: 600,
-      show: !SMOKE,
-      title: 'Hydra harness', icon: DESKTOP_ICON,
-      webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
-    })
-    child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    child.webContents.on('will-navigate', (navigation, target) => {
-      if (new URL(target).origin !== url.origin) navigation.preventDefault()
-    })
-    try { await child.loadURL(url.href) } catch (error) { child.destroy(); throw error }
+    await openPopout(value.sessionId)
   })
   ipcMain.handle('hydra-desktop:chrome-action', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('desktop is unavailable')
     if (typeof value !== 'string') throw new Error('desktop action is invalid')
+    const window = BrowserWindow.fromWebContents(event.sender)
     const nativeAction = {
       undo: 'undo',
       redo: 'redo',
@@ -713,13 +914,13 @@ function installRendererIpc() {
     if (nativeAction !== undefined && CHROME_EXECUTE_ACTIONS.has(nativeAction)) {
       if (nativeAction === 'undo' || nativeAction === 'redo' || nativeAction === 'cut' || nativeAction === 'copy'
         || nativeAction === 'paste' || nativeAction === 'delete' || nativeAction === 'selectAll') {
-        mainWindow.webContents[nativeAction]()
+        event.sender[nativeAction]()
       }
-      else if (nativeAction === 'zoomIn') applyZoom(mainWindow.webContents, 1)
-      else if (nativeAction === 'zoomOut') applyZoom(mainWindow.webContents, -1)
-      else if (nativeAction === 'resetZoom') applyZoom(mainWindow.webContents, 0)
-      else if (nativeAction === 'fullscreen') mainWindow.setFullScreen(!mainWindow.isFullScreen())
-      else if (nativeAction === 'close') mainWindow.close()
+      else if (nativeAction === 'zoomIn') applyZoom(event.sender, 1)
+      else if (nativeAction === 'zoomOut') applyZoom(event.sender, -1)
+      else if (nativeAction === 'resetZoom') applyZoom(event.sender, 0)
+      else if (nativeAction === 'fullscreen') window.setFullScreen(!window.isFullScreen())
+      else if (nativeAction === 'close') window.close()
       else if (nativeAction === 'quit') app.quit()
       return
     }
@@ -736,22 +937,23 @@ function installRendererIpc() {
       'keyboard-shortcuts': 'shortcuts',
     }[value]
     if (dispatchAction !== undefined && CHROME_DISPATCH_ACTIONS.has(dispatchAction)) {
-      mainWindow.webContents.send('hydra-desktop:chrome-dispatch', dispatchAction)
+      event.sender.send('hydra-desktop:chrome-dispatch', dispatchAction)
       return
     }
     throw new Error('desktop action is unavailable')
   })
   ipcMain.on('hydra-desktop:chrome-theme', (event, value) => {
     if (shuttingDown !== undefined || !validSender(event) || !TITLEBAR_OVERLAY_SUPPORTED) return
+    const window = BrowserWindow.fromWebContents(event.sender)
     if (value === null) {
-      mainWindow.setTitleBarOverlay({ color: TITLEBAR_OVERLAY_TRANSPARENT, symbolColor: '#c7ccd4', height: TITLEBAR_HEIGHT })
+      window.setTitleBarOverlay({ color: TITLEBAR_OVERLAY_TRANSPARENT, symbolColor: '#c7ccd4', height: TITLEBAR_HEIGHT })
       return
     }
     if (typeof value !== 'object' || value === null) return
     const color = overlayColor(value.color)
     const symbolColor = overlayColor(value.symbolColor)
     if (color === undefined || symbolColor === undefined) return
-    mainWindow.setTitleBarOverlay({ color, symbolColor, height: TITLEBAR_HEIGHT })
+    window.setTitleBarOverlay({ color, symbolColor, height: TITLEBAR_HEIGHT })
   })
   const browserOperation = async (event, method, args = {}) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('browser management is unavailable')
@@ -759,8 +961,11 @@ function installRendererIpc() {
   }
   ipcMain.on('hydra-desktop:browser-bounds', (event, value) => {
     if (shuttingDown !== undefined || !validSender(event) || typeof value !== 'object' || value === null) return
-    const [windowWidth, windowHeight] = mainWindow.getContentSize()
-    const zoom = mainWindow.webContents.getZoomFactor()
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (value.visible === true && browserWindow !== window) { browser.setWindow(window); browserWindow = window }
+    if (browserWindow !== window) return
+    const [windowWidth, windowHeight] = window.getContentSize()
+    const zoom = event.sender.getZoomFactor()
     const dip = input => Math.round((Number(input) || 0) * zoom)
     const x = Math.min(windowWidth, Math.max(0, dip(value.x)))
     const y = Math.min(windowHeight, Math.max(0, dip(value.y)))
@@ -834,26 +1039,26 @@ function installRendererIpc() {
     browserOperation(event, 'autofill_remove_contact', value))
   ipcMain.handle('hydra-desktop:terminal-start', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('terminal is unavailable')
-    const id = terminalId(value?.terminalId)
+    const id = terminalKey(event, value?.terminalId)
     const size = terminalSize(value?.size)
     if (id === undefined || size === undefined) throw new Error('terminal request is invalid')
-    return await queueTerminal(id, () => startTerminal(id, size, value?.workspaceId))
+    return await queueTerminal(id, () => startTerminal(id, size, value?.workspaceId, event.sender, value?.cwd))
   })
   ipcMain.handle('hydra-desktop:terminal-stop', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('terminal is unavailable')
-    const id = terminalId(value?.terminalId)
+    const id = terminalKey(event, value?.terminalId)
     if (id === undefined) throw new Error('terminal request is invalid')
     await queueTerminal(id, () => stopTerminal(id))
   })
   ipcMain.on('hydra-desktop:terminal-write', (event, value) => {
-    const id = terminalId(value?.terminalId)
+    const id = terminalKey(event, value?.terminalId)
     if (shuttingDown !== undefined || !validSender(event) || id === undefined
       || typeof value?.data !== 'string' || value.data.length > 65_536) return
     try { terminals.get(id)?.instance.write(value.data) } catch {}
   })
   ipcMain.on('hydra-desktop:terminal-resize', (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) return
-    const id = terminalId(value?.terminalId)
+    const id = terminalKey(event, value?.terminalId)
     const size = terminalSize(value?.size)
     if (id === undefined || size === undefined) return
     try { terminals.get(id)?.instance.resize(size.cols, size.rows) } catch {}
@@ -862,8 +1067,9 @@ function installRendererIpc() {
     if (shuttingDown !== undefined || !validSender(event)) return []
     const list = []
     for (const [id, record] of terminals) {
+      if (record.owner !== event.sender) continue
       list.push({
-        id,
+        id: id.slice(id.indexOf(':') + 1),
         pid: record.instance.pid,
         shell: record.shellName || (process.platform === 'win32' ? 'powershell.exe' : 'bash'),
       })
@@ -876,23 +1082,23 @@ function installRendererIpc() {
       mainWindow.webContents.send('hydra-desktop:browser-annotation', annotation)
     }
   })
-  ipcMain.handle('hydra-desktop:files-root', async (event, value) => {
+  filesOperation('hydra-desktop:files-root', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await registeredWorkspaceRoot(value?.workspaceId)
   })
-  ipcMain.handle('hydra-desktop:files-list', async (event, value) => {
+  filesOperation('hydra-desktop:files-list', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await listFiles(await registeredWorkspaceRoot(value?.workspaceId), value?.path)
   })
-  ipcMain.handle('hydra-desktop:files-search', async (event, value) => {
+  filesOperation('hydra-desktop:files-search', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await searchFiles(await registeredWorkspaceRoot(value?.workspaceId), value?.query)
   })
-  ipcMain.handle('hydra-desktop:files-read', async (event, value) => {
+  filesOperation('hydra-desktop:files-read', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await readWorkspaceFile(await registeredWorkspaceRoot(value?.workspaceId), value?.path)
   })
-  ipcMain.handle('hydra-desktop:files-create', async (event, value) => {
+  filesOperation('hydra-desktop:files-create', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await createWorkspaceEntry(
       await registeredWorkspaceRoot(value?.workspaceId),
@@ -901,7 +1107,7 @@ function installRendererIpc() {
       value?.kind,
     )
   })
-  ipcMain.handle('hydra-desktop:files-rename', async (event, value) => {
+  filesOperation('hydra-desktop:files-rename', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await renameWorkspaceEntry(
       await registeredWorkspaceRoot(value?.workspaceId),
@@ -909,7 +1115,7 @@ function installRendererIpc() {
       value?.newName,
     )
   })
-  ipcMain.handle('hydra-desktop:files-move', async (event, value) => {
+  filesOperation('hydra-desktop:files-move', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await moveWorkspaceEntry(
       await registeredWorkspaceRoot(value?.workspaceId),
@@ -917,21 +1123,21 @@ function installRendererIpc() {
       value?.destinationDirectory,
     )
   })
-  ipcMain.handle('hydra-desktop:files-delete', async (event, value) => {
+  filesOperation('hydra-desktop:files-delete', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await deleteWorkspaceEntry(
       await registeredWorkspaceRoot(value?.workspaceId),
       value?.path,
     )
   })
-  ipcMain.handle('hydra-desktop:files-reveal', async (event, value) => {
+  filesOperation('hydra-desktop:files-reveal', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await revealWorkspaceEntry(
       await registeredWorkspaceRoot(value?.workspaceId),
       value?.path,
     )
   })
-  ipcMain.handle('hydra-desktop:files-save', async (event, value) => {
+  filesOperation('hydra-desktop:files-save', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await saveWorkspaceFile(
       await registeredWorkspaceRoot(value?.workspaceId),
@@ -940,7 +1146,7 @@ function installRendererIpc() {
       value?.expectedVersion,
     )
   })
-  ipcMain.handle('hydra-desktop:files-format', async (event, value) => {
+  filesOperation('hydra-desktop:files-format', async (event, value) => {
     if (shuttingDown !== undefined || !validSender(event)) throw new Error('files are unavailable')
     return await formatWorkspaceFile(
       await registeredWorkspaceRoot(value?.workspaceId),
@@ -997,10 +1203,13 @@ async function selectControl(label, scope) {
   if (!clicked) throw new Error(`desktop panel control is missing: ${label}`)
 }
 
+function smokeTerminal(id) { return terminals.get(mainWindow.webContents.id + ':' + id) }
+function hasSmokeTerminal(id) { return smokeTerminal(id) !== undefined }
+
 async function waitForTerminal(id, label, predicate) {
   const deadline = Date.now() + 15_000
   while (Date.now() < deadline) {
-    const terminal = terminals.get(id)
+    const terminal = smokeTerminal(id)
     if (terminal !== undefined && predicate(terminal)) return
     await delay(100)
   }
@@ -1010,9 +1219,18 @@ async function waitForTerminal(id, label, predicate) {
 async function waitForRenderer(label, expression) {
   const deadline = Date.now() + 15_000
   while (Date.now() < deadline) {
-    if (await mainWindow.webContents.executeJavaScript(`(async () => Boolean(await (${expression})))()`)) return
+    let ready
+    try { ready = await mainWindow.webContents.executeJavaScript(`(async () => Boolean(await (${expression})))()`) }
+    catch (error) { throw new Error(`${label} renderer script failed: ${String(error)}`, { cause: error }) }
+    if (ready) return
     await delay(100)
   }
+  process.stderr.write(JSON.stringify({ event: 'desktop-renderer-failure', label,
+    state: await mainWindow.webContents.executeJavaScript(`({
+      dialogs: [...document.querySelectorAll('[role="dialog"]')].map(node => node.getAttribute('aria-label') ?? document.getElementById(node.getAttribute('aria-labelledby'))?.textContent),
+      buttons: [...document.querySelectorAll('button')].map(node => ({ label: node.getAttribute('aria-label'), text: node.textContent.trim().slice(0, 100) })),
+    })`),
+  }) + '\n')
   throw new Error(`${label} renderer check failed`)
 }
 
@@ -1124,6 +1342,143 @@ async function smokeZoomShortcuts() {
   if (transcript !== expected.replaceAll('\r\n', '\n')) {
     throw new Error(`desktop zoom shortcuts differ from the snapshot:\n${transcript}`)
   }
+}
+
+async function smokeWorkspaceSettings() {
+  const evaluate = async (label, script) => {
+    try { return await mainWindow.webContents.executeJavaScript(script) }
+    catch (error) { throw new Error(`desktop workspace Settings ${label}: ${String(error)}`, { cause: error }) }
+  }
+  const clickText = async (label, dialogTitle = 'Settings') => {
+    const control = `(() => {
+      const dialog = [...document.querySelectorAll('[role="dialog"]')].find(node => {
+        const title = node.getAttribute('aria-label') ?? document.getElementById(node.getAttribute('aria-labelledby'))?.textContent
+        return title === ${JSON.stringify(dialogTitle)}
+      })
+      return dialog && [...dialog.querySelectorAll('button')].find(node => node.textContent.trim() === ${JSON.stringify(label)})
+    })()`
+    await waitForRenderer(`${label} enabled`, `(() => {
+      const button = ${control}
+      return button && !button.disabled
+    })()`)
+    const clicked = await evaluate(label, `(() => {
+      const button = ${control}
+      if (!button || button.disabled) return false
+      button.click()
+      return true
+    })()`)
+    if (!clicked) throw new Error(`desktop Settings control is missing: ${label}`)
+  }
+  const saveInstructions = async (text, path) => {
+    await clickText('Personalization')
+    await evaluate('open instructions', `[...document.querySelectorAll('[role="dialog"] summary')].find(node => node.textContent.trim() === 'Custom instructions')?.click()`)
+    await waitForRenderer('global instructions editor', `document.querySelector('textarea[aria-label="Custom instructions"]')?.disabled === false`)
+    await evaluate('edit instructions', `(() => {
+      const input = document.querySelector('textarea[aria-label="Custom instructions"]')
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${JSON.stringify(text)})
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })()`)
+    await waitForRenderer('global instructions Save', `[...document.querySelectorAll('[role="dialog"] button')].some(node => node.textContent.trim() === 'Save' && !node.disabled)`)
+    await clickText('Save')
+    const deadline = Date.now() + 15_000
+    while (Date.now() < deadline) {
+      if (existsSync(path) && await readFile(path, 'utf8') === text) return
+      await delay(100)
+    }
+    throw new Error('desktop global instructions were not saved')
+  }
+  await waitForRenderer('workspace Settings entry', `(() => {
+    const dialogs = [...document.querySelectorAll('[role="dialog"]')]
+    const title = node => node.getAttribute('aria-label') ?? document.getElementById(node.getAttribute('aria-labelledby'))?.textContent
+    const notice = dialogs.find(node => title(node) === 'Internal Testing Notice')
+    if (notice) {
+      [...notice.querySelectorAll('button')].find(node => node.textContent.trim() === 'Continue')?.click()
+      return false
+    }
+    if (dialogs.some(node => title(node) === 'Settings')) return true
+    const trigger = [...document.querySelectorAll('button')].find(node => node.getAttribute('aria-label') === 'Settings' || node.textContent.trim() === 'Settings')
+    if (trigger) trigger.click()
+    else document.querySelector('button[aria-label="Open sidebar"]')?.click()
+    return false
+  })()`)
+  const hasTargetSelector = await evaluate('global Settings', `document.querySelector('[aria-label="Settings for"]') !== null`)
+  if (hasTargetSelector) throw new Error('desktop Settings exposes a workspace configuration selector')
+  const roots = [smokeWorkspace.root, ...smokeWorkspace.terminalWorkspaces.map(workspace => workspace.path)]
+  const projectInstructions = await Promise.all(roots.map(root => readFile(join(root, '.hydra', 'AGENTS.md'), 'utf8')))
+  const globalInstructions = 'Desktop global instructions.\n'
+  await saveInstructions(globalInstructions, join(process.env.HYDRA_HOME || join(app.getPath('home'), '.hydra'), 'AGENTS.md'))
+  for (const [index, root] of roots.entries()) {
+    if (await readFile(join(root, '.hydra', 'AGENTS.md'), 'utf8') !== projectInstructions[index]) {
+      throw new Error('desktop global Settings changed workspace instructions')
+    }
+  }
+  await clickText('Models')
+  await waitForRenderer('global provider Settings', `['Account sign-in', 'API keys'].every(label => [...document.querySelectorAll('[role="dialog"] h3')].some(node => node.textContent === label))`)
+  await evaluate('Settings paint', 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))')
+  const screenshot = join(process.env.HYDRA_HOME || smokeWorkspace.root, 'desktop-workspace-settings.png')
+  await writeFile(screenshot, (await mainWindow.webContents.capturePage()).toPNG())
+  await clickText('Close')
+  return { globalSettings: true, workspaceInstructionsPreserved: true, providerCredentialsGlobal: true, screenshot }
+}
+
+/** Real renderer, trusted IPC, and multi-window lifecycle in an isolated smoke home. */
+async function smokeGeneral() {
+  const original = mainWindow
+  await waitForRenderer('General Settings', `(() => {
+    const dialogs = [...document.querySelectorAll('[role="dialog"]')]
+    const title = node => node.getAttribute('aria-label') ?? document.getElementById(node.getAttribute('aria-labelledby'))?.textContent
+    const notice = dialogs.find(node => title(node) === 'Internal Testing Notice')
+    if (notice) { [...notice.querySelectorAll('button')].find(node => node.textContent.trim() === 'Continue')?.click(); return false }
+    if (dialogs.some(node => title(node) === 'Settings')) return true
+    const trigger = [...document.querySelectorAll('button')].find(node => node.getAttribute('aria-label') === 'Settings' || node.textContent.trim() === 'Settings')
+    if (trigger) trigger.click()
+    else document.querySelector('button[aria-label="Open sidebar"]')?.click()
+    return false
+  })()`)
+  await original.webContents.executeJavaScript(`[...document.querySelectorAll('[role="dialog"] button')].find(node => node.textContent.trim() === 'General')?.click()`)
+  const screenshot = join(process.env.HYDRA_HOME || smokeWorkspace.root, 'desktop-general.png')
+  try { await waitForRenderer('six General groups', `['Permissions','General','Composer','Popout Window','Notifications','Toys'].every(name => [...document.querySelectorAll('[role="dialog"] h2, [role="dialog"] h3')].some(node => node.textContent === name))`) }
+  finally {
+    await delay(1000)
+    await original.webContents.executeJavaScript(`[...document.querySelectorAll('[role="dialog"] button')].find(node => node.textContent.trim() === 'General')?.click()`)
+    await waitForRenderer('General settled', `document.querySelector('[role="dialog"] h1')?.textContent === 'General'`)
+    await original.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    original.webContents.invalidate()
+    await delay(250)
+    await writeFile(screenshot, (await original.webContents.capturePage(undefined, { stayAwake: true })).toPNG())
+    process.stdout.write(JSON.stringify({ event: 'desktop-general-headings', headings: await original.webContents.executeJavaScript(`[...document.querySelectorAll('[role="dialog"] h1, [role="dialog"] h2, [role="dialog"] h3')].map(node => node.textContent)`), screenshot }) + '\n')
+  }
+  const status = await original.webContents.executeJavaScript('window.hydraDesktop.preferences.status()')
+  if (!status.shells.length) throw new Error('No selectable native terminal shell')
+  const settings = await hostRequest('settings.describe', {})
+  const desktop = settings.namespaces.find(row => row.ns === 'desktop-ui')
+  if (desktop === undefined) throw new Error('Desktop preferences are unavailable')
+  await hostRequest('settings.mutate', { ns: 'desktop-ui', expectedRevision: desktop.revision,
+    ops: [{ op: 'set', path: ['fullView'], value: true }] })
+  const created = await hostRequest('session.create', { projectless: true })
+  const child = await openPopout(created.sessionId)
+  child.webContents.setBackgroundThrottling(false)
+  const deadline = Date.now() + 20000
+  while (Date.now() < deadline && !await child.webContents.executeJavaScript('document.querySelector("[role=tab]") !== null')) await delay(100)
+  const childStatus = await child.webContents.executeJavaScript('window.hydraDesktop.preferences.status()')
+  if (!childStatus.shells.length || !await child.webContents.executeJavaScript('document.querySelector("[role=tab]") !== null')) throw new Error('Popout failed to share Settings and Full view')
+  if (new URL(child.webContents.getURL()).searchParams.get('session') !== created.sessionId) throw new Error('Popout opened the wrong chat')
+  const messageBox = dialog.showMessageBox
+  let confirmations = 0
+  dialog.showMessageBox = async () => { confirmations += 1; return { response: 0 } }
+  try {
+    nativePreferences.configure({ closeConfirmation: 'always' })
+    original.close()
+    await delay(100)
+    if (original.isDestroyed() || confirmations !== 1 || shuttingDown !== undefined) throw new Error('Canceled close began shutdown')
+  } finally { dialog.showMessageBox = messageBox; nativePreferences.configure({ closeConfirmation: 'never' }) }
+  original.close()
+  const closeDeadline = Date.now() + 15000
+  while (!original.isDestroyed() && Date.now() < closeDeadline) await delay(100)
+  if (!original.isDestroyed() || hostExited || shuttingDown !== undefined || child.isDestroyed()) throw new Error('Closing the main window stopped a live popout Host')
+  await child.webContents.executeJavaScript('window.hydraDesktop.preferences.status()')
+  await hostRequest('session.list', {})
+  return { sixGroups: true, trustedPopout: true, fullView: true, cancelBeforeShutdown: true, sharedHostSurvives: true, screenshot }
 }
 
 async function smokeFiles() {
@@ -1286,7 +1641,7 @@ async function smoke() {
   await mainWindow.webContents.executeJavaScript(`window.hydraDesktop.openSessionWindow(${JSON.stringify(windowSession.sessionId)})`)
   const sessionWindow = BrowserWindow.getAllWindows().find(window => window !== mainWindow)
   if (sessionWindow === undefined) throw new Error('session window did not open')
-  const sessionWindowReady = await sessionWindow.webContents.executeJavaScript(`typeof window.hydraDesktop === 'undefined'
+  const sessionWindowReady = await sessionWindow.webContents.executeJavaScript(`typeof window.hydraDesktop?.preferences?.status === 'function'
     && new URL(location.href).searchParams.get('session') === ${JSON.stringify(windowSession.sessionId)}`)
   if (!sessionWindowReady) throw new Error('session window URL or native isolation is invalid')
   sessionWindow.destroy()
@@ -1417,6 +1772,16 @@ async function smoke() {
   }
   await smokeFiles()
   await selectControl('Terminal')
+  await waitForTerminal('bottom-1-1', 'default bottom startup', () => true)
+  const defaultTerminal = smokeTerminal('bottom-1-1').instance
+  const desktopSettings = (await hostRequest('settings.describe', {})).namespaces.find(row => row.ns === 'desktop-ui')
+  await hostRequest('settings.mutate', { ns: 'desktop-ui', expectedRevision: desktopSettings.revision,
+    ops: [{ op: 'set', path: ['terminalLocation'], value: 'right' }] })
+  if (smokeTerminal('bottom-1-1').instance !== defaultTerminal) throw new Error('Changing terminal location replaced the existing PTY')
+  await selectControl('Toggle bottom terminal')
+  await waitForRenderer('hidden bottom terminal', `document.querySelector('section[aria-label="Terminal"]')?.hidden === true`)
+  if (smokeTerminal('bottom-1-1').instance !== defaultTerminal) throw new Error('Hiding the bottom panel ended its PTY')
+  await selectControl('Terminal')
   await waitForHiddenBrowser('right Terminal')
   await waitForRenderer('right Terminal panel', `document.querySelector('[aria-label="Right terminal"]:not([hidden])')`)
   await waitForTerminal('right', 'right startup', () => true)
@@ -1428,6 +1793,7 @@ async function smoke() {
   })()`)
   if (!terminalsVisible) throw new Error('right and bottom Terminal panels did not open together')
   await waitForTerminal('bottom-1-1', 'bottom startup', () => true)
+  if (smokeTerminal('bottom-1-1').instance !== defaultTerminal) throw new Error('Reopening the bottom panel replaced its PTY')
   const workspaceTranscript = []
   const assertTerminalCwd = async (id, expected) => {
     const command = process.platform === 'win32'
@@ -1435,7 +1801,7 @@ async function smoke() {
       : "printf 'HYDRA_CWD:%s\\n' \"$PWD\"\r"
     await mainWindow.webContents.executeJavaScript(`window.hydraDesktop.terminal.write(${JSON.stringify(id)}, ${JSON.stringify(command)})`)
     await waitForTerminal(id, 'workspace cwd', terminal => terminal.output.includes(`HYDRA_CWD:${expected}`))
-    const output = stripVTControlCharacters(terminals.get(id).output)
+    const output = stripVTControlCharacters(smokeTerminal(id).output)
     const cwd = [...output.matchAll(/HYDRA_CWD:([^\r\n]+)/g)].at(-1)?.[1]
     if (cwd !== expected) throw new Error(`unexpected terminal cwd: ${JSON.stringify(cwd)}`)
     workspaceTranscript.push({ terminal: id, cwd: relative(smokeWorkspace.root, cwd).split(sep).join('/') || '.' })
@@ -1455,10 +1821,10 @@ async function smoke() {
   })()`)
   await waitForTerminal('right', 'right command output', terminal => terminal.output.includes(rightMarker))
   await waitForTerminal('bottom-1-1', 'bottom command output', terminal => terminal.output.includes(bottomMarker))
-  if (terminals.get('right').output.includes(bottomMarker) || terminals.get('bottom-1-1').output.includes(rightMarker)) {
+  if (smokeTerminal('right').output.includes(bottomMarker) || smokeTerminal('bottom-1-1').output.includes(rightMarker)) {
     throw new Error('right and bottom Terminal output crossed PTY boundaries')
   }
-  const firstTerminal = terminals.get('right').instance
+  const firstTerminal = smokeTerminal('right').instance
   await selectControl('Terminal')
   await waitForRenderer('second Terminal tab', `document.querySelector('[aria-label="Right terminal 2"]:not([hidden])')`)
   await waitForTerminal('right-2', 'second right startup', () => true)
@@ -1466,13 +1832,13 @@ async function smoke() {
   const secondMarker = `${marker}_SECOND`
   await mainWindow.webContents.executeJavaScript(`window.hydraDesktop.terminal.write('right-2', ${JSON.stringify(markerCommand(secondMarker))})`)
   await waitForTerminal('right-2', 'second right output', terminal => terminal.output.includes(secondMarker))
-  if (terminals.get('right').instance !== firstTerminal || terminals.get('right').output.includes(secondMarker)
-    || terminals.get('right-2').output.includes(rightMarker) || terminals.get('bottom-1-1').output.includes(secondMarker)) {
+  if (smokeTerminal('right').instance !== firstTerminal || smokeTerminal('right').output.includes(secondMarker)
+    || smokeTerminal('right-2').output.includes(rightMarker) || smokeTerminal('bottom-1-1').output.includes(secondMarker)) {
     throw new Error(`Terminal tabs did not preserve independent PTYs: ${JSON.stringify({
-      firstPreserved: terminals.get('right')?.instance === firstTerminal,
-      firstHasSecond: terminals.get('right')?.output.includes(secondMarker),
-      secondHasFirst: terminals.get('right-2')?.output.includes(rightMarker),
-      bottomHasSecond: terminals.get('bottom-1-1')?.output.includes(secondMarker),
+      firstPreserved: smokeTerminal('right')?.instance === firstTerminal,
+      firstHasSecond: smokeTerminal('right')?.output.includes(secondMarker),
+      secondHasFirst: smokeTerminal('right-2')?.output.includes(rightMarker),
+      bottomHasSecond: smokeTerminal('bottom-1-1')?.output.includes(secondMarker),
     })}`)
   }
   if (process.platform === 'win32') {
@@ -1481,11 +1847,11 @@ async function smoke() {
   }
   await selectControl('Close Terminal 2')
   await waitForRenderer('second Terminal closed', `!document.querySelector('[aria-label="Close Terminal 2"]')`)
-  if (terminals.has('right-2') || terminals.get('right')?.instance !== firstTerminal || !terminals.has('bottom-1-1')) {
+  if (hasSmokeTerminal('right-2') || smokeTerminal('right')?.instance !== firstTerminal || !hasSmokeTerminal('bottom-1-1')) {
     throw new Error('closing the second Terminal affected another PTY')
   }
   const bottomPanel = 'section[aria-label="Terminal"]'
-  const firstBottom = terminals.get('bottom-1-1').instance
+  const firstBottom = smokeTerminal('bottom-1-1').instance
   await selectControl('New Terminal', bottomPanel)
   await waitForTerminal('bottom-1-2', 'second bottom tab startup', () => true)
   await assertTerminalCwd('bottom-1-2', smokeWorkspace.root)
@@ -1507,7 +1873,7 @@ async function smoke() {
   await selectControl('Close Terminal 2', bottomPanel)
   await waitForRenderer('bottom tab processes stopped', `window.hydraDesktop.terminal.list().then(items =>
     !items.some(item => item.id === 'bottom-1-2' || item.id === 'bottom-1-2-2'))`)
-  if (terminals.get('bottom-1-1')?.instance !== firstBottom || terminals.get('right')?.instance !== firstTerminal) {
+  if (smokeTerminal('bottom-1-1')?.instance !== firstBottom || smokeTerminal('right')?.instance !== firstTerminal) {
     throw new Error('closing the bottom tab affected another terminal')
   }
   await selectControl('New Terminal', bottomPanel)
@@ -1520,7 +1886,7 @@ async function smoke() {
   await waitForRenderer('trash closes the terminal tab and process', `!document.querySelector(${JSON.stringify(bottomPanel)})
     .querySelector('[aria-label="Close Terminal 2"]') && window.hydraDesktop.terminal.list().then(items =>
       !items.some(item => item.id === 'bottom-1-3'))`)
-  if (terminals.get('bottom-1-1')?.instance !== firstBottom || terminals.get('right')?.instance !== firstTerminal) {
+  if (smokeTerminal('bottom-1-1')?.instance !== firstBottom || smokeTerminal('right')?.instance !== firstTerminal) {
     throw new Error('trash affected another terminal')
   }
   workspaceTranscript.push({ action: 'trash-close', tabs: await mainWindow.webContents.executeJavaScript(`
@@ -1544,7 +1910,7 @@ async function smoke() {
       rejected(api.start('right', { cols: 80, rows: 24 }, ${JSON.stringify(smokeWorkspace.terminalWorkspaces[0].workspaceId)})),
     ])
   })()`)
-  if (!workspaceRejections.every(Boolean) || terminals.has('right-9001')) throw new Error('invalid terminal workspace was accepted')
+  if (!workspaceRejections.every(Boolean) || hasSmokeTerminal('right-9001')) throw new Error('invalid terminal workspace was accepted')
   for (const workspace of smokeWorkspace.terminalWorkspaces) {
     await mainWindow.webContents.executeJavaScript(`window.hydraDesktop.terminal.start('right-9001', { cols: 80, rows: 24 }, ${JSON.stringify(workspace.workspaceId)})`)
     await assertTerminalCwd('right-9001', workspace.path)
@@ -1566,7 +1932,7 @@ async function smoke() {
       api.stop('right-9000'),
     ])
   })()`)
-  if (terminals.has('right-9000')) throw new Error('closing during Terminal startup left a PTY alive')
+  if (hasSmokeTerminal('right-9000')) throw new Error('closing during Terminal startup left a PTY alive')
   const panels = await mainWindow.webContents.executeJavaScript(`(() => {
     const right = document.querySelector('[aria-label="Right panel"]')?.getBoundingClientRect()
     const bottom = document.querySelector('section[aria-label="Terminal"]')?.getBoundingClientRect()
@@ -1611,6 +1977,8 @@ async function smoke() {
   await waitForHiddenBrowser('right panel close')
   mainWindow.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'T', modifiers: ['control'] })
   mainWindow.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'T', modifiers: ['control'] })
+  await waitForRenderer('right panel shortcut', `document.querySelector('[aria-label="Toggle right panel"]')?.getAttribute('aria-pressed') === 'true'`)
+  await selectControl('Browser')
   assertNativeViews(await waitForBounds('right panel reopen', bounds => bounds.width < expanded.width))
   if (BrowserWindow.getAllWindows().length !== 1) {
     throw new Error(`desktop opened ${BrowserWindow.getAllWindows().length} BrowserWindows instead of one`)
@@ -1619,7 +1987,13 @@ async function smoke() {
   if (beforeClose?.tabs.length !== 1 || beforeClose.activeTabId !== beforeClose.tabs[0]?.id) {
     throw new Error(`desktop browser tab state is invalid: ${JSON.stringify(beforeClose)}`)
   }
-  const nativeChrome = mainWindow.contentView.children.find(view => view.webContents.getURL().endsWith('/chrome.html'))
+  let nativeChrome
+  const chromeDeadline = Date.now() + 5000
+  while (nativeChrome === undefined && Date.now() < chromeDeadline) {
+    nativeChrome = mainWindow.contentView.children.find(view => view.webContents.getURL().split(/[?#]/u)[0].endsWith('/chrome.html') && !view.webContents.isLoadingMainFrame())
+    if (nativeChrome === undefined) await delay(50)
+  }
+  if (nativeChrome === undefined) throw new Error('Native Browser chrome did not finish loading')
   nativeChrome.webContents.focus()
   nativeChrome.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'T', modifiers: ['control'] })
   nativeChrome.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'T', modifiers: ['control'] })
@@ -1693,6 +2067,7 @@ async function smoke() {
   await waitForHiddenBrowser('Browser panel tab closed')
   await browser.command('get_browser_state')
   assertNativeViews(await waitForBounds('agent restores Browser panel tab', bounds => bounds.width < expanded.width))
+  const settings = await smokeWorkspaceSettings()
   process.stdout.write(`${JSON.stringify({
     event: 'desktop-smoke',
     ok: true,
@@ -1700,6 +2075,7 @@ async function smoke() {
     files: { root: files.root, shortcut: 'Ctrl+P', search: true, preview: true, confined: true },
     terminal: { rightMarker, bottomMarker, secondMarker, bottomTabs, workspaceCwd: true, simultaneous: true, isolated: true, appTheme: true, multipleTabs: true, powershell: process.platform === 'win32' },
     browser: { lastTabClosesPanel: true, agentReopens: true, appTheme: true },
+    settings,
     bounds: { right, simultaneous, expanded, restored },
   })}\n`)
 }
@@ -1707,6 +2083,7 @@ async function smoke() {
 async function shutdown() {
   if (shuttingDown !== undefined) return await shuttingDown
   shuttingDown = (async () => {
+    nativePreferences.dispose()
     const terminalIds = new Set([...terminals.keys(), ...terminalTails.keys()])
     try { await Promise.all([...terminalIds].map(id => queueTerminal(id, () => stopTerminal(id)))) } catch (error) { process.stderr.write(`${String(error)}\n`) }
     try { await browser?.dispose() } catch (error) { process.stderr.write(`${String(error)}\n`) }
@@ -1724,6 +2101,8 @@ async function shutdown() {
         process.exitCode = 1
       }
     }
+    if (host === undefined || (hostExited && hostExitCode === 0)) await environmentLauncher.cleanShutdown()
+    for (const window of trustedWindows) window.destroy()
     mainWindow?.destroy()
     app.exit(process.exitCode ?? 0)
   })()
@@ -1732,24 +2111,26 @@ async function shutdown() {
 
 app.whenReady().then(async () => {
   try {
+    const environment = await environmentLauncher.initialize()
+    if (environment.value !== 'native') app.setPath('userData', join(desktopDataRoot, 'environments', encodeURIComponent(environment.value)))
     mainWindow = createWindow()
-    if (SMOKE_FILES) mainWindow.webContents.setBackgroundThrottling(false)
+    if (SMOKE_WORKSPACE_SETTINGS || SMOKE_FILES || SMOKE_GENERAL) mainWindow.webContents.setBackgroundThrottling(false)
     browser = await installBrowserController(mainWindow)
     installRendererIpc()
     hostBaseUrl = await startHost()
     if (SMOKE) await prepareSmokeWorkspace()
     await mainWindow.loadURL(hostBaseUrl)
     if (!SMOKE) mainWindow.show()
-    mainWindow.on('close', event => {
-      if (shuttingDown === undefined) {
-        event.preventDefault()
-        void shutdown()
-      }
-    })
     if (SMOKE) {
-      if (SMOKE_FILES) {
+      if (SMOKE_GENERAL) {
+        const general = await smokeGeneral()
+        process.stdout.write(`${JSON.stringify({ event: 'desktop-general-smoke', ok: true, general })}\n`)
+      } else if (SMOKE_FILES) {
         const files = await smokeFiles()
         process.stdout.write(`${JSON.stringify({ event: 'desktop-files-smoke', ok: true, files })}\n`)
+      } else if (SMOKE_WORKSPACE_SETTINGS) {
+        const settings = await smokeWorkspaceSettings()
+        process.stdout.write(`${JSON.stringify({ event: 'desktop-workspace-settings-smoke', ok: true, settings })}\n`)
       } else if (SMOKE_ZOOM) {
         await smokeZoomShortcuts()
         process.stdout.write(`${JSON.stringify({ event: 'desktop-zoom-smoke', ok: true })}\n`)
@@ -1760,6 +2141,11 @@ app.whenReady().then(async () => {
     }
   } catch (error) {
     process.stderr.write(`desktop: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`)
+    if (host === undefined && environmentLauncher.active().value !== 'native' && !SMOKE) {
+      const answer = await dialog.showMessageBox({ type: 'error', title: 'Agent environment unavailable', message: String(error),
+        buttons: ['Use Native on next launch', 'Close'], defaultId: 0, cancelId: 1, noLink: true })
+      if (answer.response === 0) { await environmentLauncher.select('native'); await environmentLauncher.cleanShutdown() }
+    }
     process.exitCode = 1
     await shutdown()
   }

@@ -92,6 +92,9 @@ interface BenchOptions {
   addImages?: (files: readonly File[]) => string | null
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
+  sendShortcut?: 'enter' | 'mod-enter'
+  plainText?: boolean
+  showContextUsage?: boolean
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
 }
 
@@ -179,10 +182,13 @@ function bench(over?: BenchOptions) {
     resolveSubmitMode: (running, gesture, steeringAvailable) => {
       if (!running || !steeringAvailable) return 'queue'
       const preferred = over?.busyEnter ?? 'queue'
-      return gesture === 'enter' ? preferred : preferred === 'queue' ? 'steer' : 'queue'
+      const opposite = gesture === 'alternate' || (gesture === 'accelerated' && over?.sendShortcut !== 'mod-enter')
+      return opposite ? preferred === 'queue' ? 'steer' : 'queue' : preferred
     },
     toggleCommandMenu: over?.toggleCommandMenu ?? vi.fn(),
     useNotices: bindSnapshotSelector(shell.notices),
+    useComposerPreferences: select => select({ busyEnter: over?.busyEnter ?? 'queue', plainText: over?.plainText ?? false,
+      showContextUsage: over?.showContextUsage ?? true, sendShortcut: over?.sendShortcut ?? 'enter' }),
     useLexicon: bindSnapshotSelector(shell.lexicon),
     useMenuLauncher: bindSnapshotSelector(menuLauncher),
     stop,
@@ -202,7 +208,7 @@ function bench(over?: BenchOptions) {
   }
   const view = render(<InputBar {...props} />)
   const textarea = view.container.querySelector('textarea')!
-  const primaryStops = over?.running === true && over.subagent === undefined
+  const primaryStops = over?.running === true && over.subagent === undefined && !over.draft
   const button = view.container.querySelector<HTMLButtonElement>(
     `button[aria-label="${primaryStops ? 'Stop generating' : 'Send message'}"]`,
   )!
@@ -612,14 +618,28 @@ describe('Enter semantics', () => {
 })
 
 describe('running and lock semantics', () => {
-  it('running keeps the input free (typing + Enter queue) while the primary turns stop', () => {
-    const { textarea, button, stop, sink } = bench({ running: true, draft: 'queued message' })
+  it('Ctrl/Cmd+Enter mode keeps Enter and Shift+Enter as newlines and sends the requested mode once', () => {
+    const b = bench({ sendShortcut: 'mod-enter', busyEnter: 'steer', running: true, draft: 'follow-up' })
+    for (const chord of [{}, { shiftKey: true }]) fireEvent.keyDown(b.textarea, { key: 'Enter', ...chord })
+    expect(b.sink).not.toHaveBeenCalled()
+    fireEvent.keyDown(b.textarea, { key: 'Enter', ctrlKey: true, shiftKey: true })
+    fireEvent.keyDown(b.textarea, { key: 'Enter', ctrlKey: true, shiftKey: true, repeat: true })
+    expect(b.sink).toHaveBeenCalledExactlyOnceWith('follow-up', [], 'queue', expect.any(AbortSignal))
+    const primary = bench({ sendShortcut: 'mod-enter', busyEnter: 'steer', running: true, draft: 'button follow-up' })
+    fireEvent.click(primary.button)
+    expect(primary.sink).toHaveBeenCalledExactlyOnceWith('button follow-up', [], 'steer', expect.any(AbortSignal))
+    const normal = bench({ sendShortcut: 'mod-enter', busyEnter: 'steer', running: true, draft: 'keyboard follow-up' })
+    fireEvent.keyDown(normal.textarea, { key: 'Enter', metaKey: true })
+    expect(normal.sink).toHaveBeenCalledExactlyOnceWith('keyboard follow-up', [], 'steer', expect.any(AbortSignal))
+  })
+  it('running keeps typed Send beside Stop and Enter queues once', () => {
+    const { textarea, button, interruptButton, stop, sink } = bench({ running: true, draft: 'queued message' })
     expect(textarea.disabled).toBe(false)
     fireEvent.change(textarea, { target: { value: 'queued message2' } })
     fireEvent.keyDown(textarea, { key: 'Enter' })
     expect(sink).toHaveBeenCalledWith('queued message2', [], 'queue', expect.any(AbortSignal))
-    expect(button.getAttribute('aria-label')).toBe('Stop generating')
-    fireEvent.click(button)
+    expect(button.getAttribute('aria-label')).toBe('Send message')
+    fireEvent.click(interruptButton!)
     expect(stop).toHaveBeenCalledTimes(1)
   })
 

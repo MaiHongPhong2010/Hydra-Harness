@@ -205,4 +205,50 @@ A command was registered or unregistered. This is an unfiltered registry notific
 ```
 
 Source: [`packages/interaction/commands/src/types.ts`](../../packages/interaction/commands/src/types.ts)
+
+<a id="notifications-events"></a>
+
+### `notifications/*` events
+
+<a id="notificationsrequested--parallel"></a>
+
+#### `notifications/requested` — parallel
+
+A live turn ended or a new question awaits an answer; connected providers may deliver it.
+
+```ts cordis-catalog
+/**
+ * A live turn ended or a new question awaits an answer; connected providers may deliver it.
+ * @mode parallel
+ * @param request - stable delivery identity and destination chat.
+ */
+'notifications/requested'(request: NotificationRequest): void
+```
+
+Types: [NotificationRequest](../../packages/interaction/notifications/README.md)
+
+Source: [`packages/interaction/notifications/src/types.ts`](../../packages/interaction/notifications/src/types.ts)
+
+<a id="toys-events"></a>
+
+### `toys/*` events
+
+<a id="toysconfetti--parallel"></a>
+
+#### `toys/confetti` — parallel
+
+A human requested one transient effect; renderers may display it unless reduced motion is active.
+
+```ts cordis-catalog
+/**
+ * A human requested one transient effect; renderers may display it unless reduced motion is active.
+ * @mode parallel
+ * @param request - bounded effect and destination chat; never emitted from history.
+ */
+'toys/confetti'(request: ConfettiRequest): void
+```
+
+Types: [ConfettiRequest](../../packages/interaction/toys/README.md)
+
+Source: [`packages/interaction/toys/src/types.ts`](../../packages/interaction/toys/src/types.ts)
 <!-- END GENERATED cordis-surface -->

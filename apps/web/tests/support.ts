@@ -46,12 +46,8 @@ export function probeFreePort(): Promise<number> {
 }
 
 /**
- * Drive the hero's workspace picker through the composed directory dialog
- * until the live composer unlocks. A fresh world has no Workspace, so the boot
- * lands in the Workspace-trigger view state (startup auto-selection has nothing to
- * select); every scenario that types into the composer must connect one
- * first. With nothing to list, activating the textarea raises the dialog directly —
- * adding a workspace is the picker's only entry. The directory is staged here
+ * Add and select a project through the sidebar's composed directory dialog.
+ * The directory is staged here
  * and adopted through the path editor, which is idempotent across the repeated
  * connects a scenario may make; creating a folder from inside the dialog (the
  * product's other half of the same route) is covered by
@@ -64,7 +60,7 @@ export function probeFreePort(): Promise<number> {
  */
 export async function connectFreshWorkspace(page: Page, root: string, name = 'workspace'): Promise<void> {
   mkdirSync(join(root, name), { recursive: true })
-  await page.getByRole('textbox', { name: 'Choose workspace' }).click()
+  await page.getByRole('button', { name: 'Add workspace', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Select Workspace Directory' })
   await dialog.waitFor({ timeout: 10_000 })
   await dialog.getByRole('button', { name: 'Edit path' }).click()
@@ -72,13 +68,8 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
   await pathInput.fill(join(root, name))
   await pathInput.press('Enter')
   await dialog.getByRole('button', { name: 'Open', exact: true }).click()
-  // [data-composer-card] is mounted unconditionally (it doubles as the
-  // pre-pick trigger clicked above), so waiting on it proves nothing about the
-  // pick landing. The trigger textarea's "Choose workspace" name is dropped
-  // the moment chipTitle resolves from the pick, before any model-selection
-  // state exists, so it is the one signal every caller can rely on.
-  await page.getByRole('textbox', { name: 'Choose workspace' })
-    .waitFor({ state: 'detached', timeout: 15_000 })
+  await page.getByRole('button', { name: 'Choose workspace', exact: true })
+    .getByText(name, { exact: true }).waitFor({ timeout: 15_000 })
 }
 
 /** Failure evidence goes to the gitignored .artifacts/ (repo convention). */

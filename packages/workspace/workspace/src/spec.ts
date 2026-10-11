@@ -19,6 +19,7 @@ const workspaceId = z.string().transform(value => value as WorkspaceId)
  * order is display order); timestamps are ISO-8601 strings.
  */
 export const workspaceRecord = z.object({
+  kind: z.enum(['project', 'task']).optional(),
   path: z.string(),
   title: z.string(),
   sessionIds: z.array(z.string().transform(SessionId)),

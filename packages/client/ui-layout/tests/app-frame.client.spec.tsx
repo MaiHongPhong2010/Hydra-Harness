@@ -65,7 +65,7 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   return function useSelector<S>(sel: (s: T) => S): S { return sel(useSyncExternalStore(inst.subscribe, inst.getSnapshot)) }
 }
 
-function mountFrame(workspaceOverrides: Partial<WorkspaceListState> = {}) {
+function mountFrame(workspaceOverrides: Partial<WorkspaceListState> = {}, preferenceOverrides: { terminalLocation?: 'bottom' | 'right'; fullView?: boolean; bottomPanelControl?: boolean } = {}) {
   window.innerWidth = frameWidth // first-render viewport source before the observer fires
   const instance = createLayoutStore().create()
   const createSideSession = vi.fn(async () => 's-side' as SessionId)
@@ -102,6 +102,7 @@ function mountFrame(workspaceOverrides: Partial<WorkspaceListState> = {}) {
       actions={instance.actions}
       renderSlot={renderSlot}
       useSessions={useSessions}
+      useDesktopPreferences={((sel: (s: object) => unknown) => sel({ value: { bottomPanelControl: true, terminalLocation: 'bottom', fullView: false, ...preferenceOverrides } })) as never}
       useWorkspaces={((sel: (s: WorkspaceListState) => unknown) => sel(workspaceState)) as never}
       SessionProvider={SessionProviderStub}
       createSideSession={createSideSession}
@@ -183,10 +184,10 @@ describe('AppFrame', () => {
     expect(tabs.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Terminal', 'Terminal 2'])
     expect(tabs.getByRole('tab', { name: 'Terminal 2' }).getAttribute('aria-selected')).toBe('true')
     expect(view.getAllByRole('button', { name: 'Split Terminal' })).toHaveLength(1)
-    expect(start).toHaveBeenLastCalledWith('bottom-1-2', { cols: 80, rows: 24 }, undefined)
+    expect(start).toHaveBeenLastCalledWith('bottom-1-2', { cols: 80, rows: 24 }, undefined, undefined)
     fireEvent.click(view.getByRole('button', { name: 'Split Terminal' }))
     await act(async () => { await vi.advanceTimersByTimeAsync(20) })
-    expect(start).toHaveBeenLastCalledWith('bottom-1-2-2', { cols: 80, rows: 24 }, undefined)
+    expect(start).toHaveBeenLastCalledWith('bottom-1-2-2', { cols: 80, rows: 24 }, undefined, undefined)
     expect(view.getAllByRole('button', { name: 'Split Terminal' })).toHaveLength(2)
     fireEvent.click(tabs.getByRole('tab', { name: 'Terminal' }))
     await act(async () => { await vi.advanceTimersByTimeAsync(20) })
@@ -217,15 +218,15 @@ describe('AppFrame', () => {
     const view = mountFrame({ items, recentWorkspaceId: items[2]!.workspaceId })
     fireEvent.click(view.getByRole('button', { name: 'Toggle bottom terminal' }))
     await act(async () => { await vi.advanceTimersByTimeAsync(20) })
-    expect(start).toHaveBeenLastCalledWith('bottom-1-1', { cols: 80, rows: 24 }, 'workspace-a')
+    expect(start).toHaveBeenLastCalledWith('bottom-1-1', { cols: 80, rows: 24 }, 'workspace-a', undefined)
     fireEvent.click(view.getByRole('button', { name: 'Split Terminal' }))
     await act(async () => { await vi.advanceTimersByTimeAsync(20) })
-    expect(start).toHaveBeenLastCalledWith('bottom-1-1-2', { cols: 80, rows: 24 }, 'workspace-a')
+    expect(start).toHaveBeenLastCalledWith('bottom-1-1-2', { cols: 80, rows: 24 }, 'workspace-a', undefined)
     for (const [name, id] of [['b', 'bottom-2-1'], ['c', 'bottom-3-1'], ['a', 'bottom-1-1-2']]) {
       selectedSession.current = `session-${name}` as SessionId
       view.rerenderFrame()
       await act(async () => { await vi.advanceTimersByTimeAsync(20) })
-      expect(start).toHaveBeenLastCalledWith(id, { cols: 80, rows: 24 }, `workspace-${name}`)
+      expect(start).toHaveBeenLastCalledWith(id, { cols: 80, rows: 24 }, `workspace-${name}`, undefined)
       expect(view.getAllByRole('region', { name: 'Terminal' })).toHaveLength(1)
     }
     expect(view.getAllByRole('button', { name: 'Split Terminal' })).toHaveLength(2)
@@ -299,7 +300,7 @@ describe('AppFrame', () => {
         onClose: () => () => {},
       },
     }
-    const view = mountFrame()
+    const view = mountFrame({}, { terminalLocation: 'right' })
     const shell = view.container.firstElementChild as HTMLElement
     expect(shell.hasAttribute('data-browser-open')).toBe(false)
     expect(shell.hasAttribute('data-terminal-open')).toBe(false)

@@ -87,6 +87,7 @@ def test_python_sdk_boots_minimal_jsonrpc_config(tmp_path: Path, mode: str) -> N
     launch_args = _launch_args(mode)
     model = "minimal-environment-model"
     harness = HydraHarness(
+        provider="deepseek-official",
         model=model,
         cwd=str(tmp_path),
         session_root=str(tmp_path / "sessions"),
@@ -137,6 +138,7 @@ def test_zero_config_run_injects_bundled_default_cordis_config(
         monkeypatch.setenv("HYDRA_CORDIS_CONFIG", ambient_config)
 
     harness = HydraHarness(
+        provider="deepseek-official",
         model="deepseek-v4-pro",
         cwd=str(tmp_path),
         session_root=str(tmp_path / "sessions"),

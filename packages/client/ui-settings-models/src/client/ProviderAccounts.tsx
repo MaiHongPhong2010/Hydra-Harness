@@ -200,9 +200,9 @@ interface ProviderAccountsProps {
   api: AuthorizationApi
   /** Section copy. */
   t: (key: keyof typeof en) => string
-  /** Prevent account changes in a read-only editor. */
+  /** Prevent account changes. */
   disabled: boolean
-  /** Disable the enclosing Apply action while a login is running. */
+  /** Notify the owner when login activity changes. */
   onBusy: (busy: boolean) => void
 }
 
@@ -210,8 +210,8 @@ interface ProviderAccountsProps {
  * Render login controls and a searchable, paginated account inventory.
  * Multi-account pools fetch usage only for the expanded row; a sole account opens automatically.
  * Bulk removal requires confirmation and retains failed accounts for retry.
- * Closing the editor cancels the attempt it owns, including a late begin response.
- * @param props - flow identity, wire methods, and editor state.
+ * Leaving the account view cancels the attempt it owns, including a late begin response.
+ * @param props - flow identity, wire methods, and account controls.
  * @returns the account controls and status.
  */
 export function ProviderAccounts({ flowKey, method, mode = 'manage', api, t, disabled, onBusy }: ProviderAccountsProps): ReactNode {

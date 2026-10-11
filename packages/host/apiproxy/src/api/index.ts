@@ -20,6 +20,7 @@ import type { WebSearchApi } from './web-search.ts'
 import type { LlmApi } from './llm.ts'
 import type { DownloadsApi } from './downloads.ts'
 import type { ClientResponse, RpcReceipt } from './rpc.ts'
+export type { NotificationRequest } from '@hydraharness/harness-notifications/types'
 
 /** Root interface of the unified API. New client-request domain = one new file pair + one field here + one map row. */
 export interface ApiProxy {
@@ -62,11 +63,11 @@ export type {
 export type { JobView } from './jobs.ts'
 export type { WorkspaceApi, WorkspaceId, WorkspaceView } from './workspace.ts'
 export type { SkillsApi, SkillEntry } from './skills.ts'
-export type { AgentPresetsApi, AgentPresetEntry } from './agent-presets.ts'
+export type { AgentPresetsApi, AgentPresetEntry, AgentPresetTarget } from './agent-presets.ts'
 export type { EventsApi, MuxFrame, HostFrame, QueuedInboxItem, ToolCallView, ToolEventView, ToolResultView } from './events.ts'
 export type { GoalsApi, GoalId, GoalRef } from './goals.ts'
 export type { ReviewApi } from './review.ts'
-export type { InstructionsDocumentView, MemoryEntryView, SettingsApi, SettingsNamespaceView, SettingsPathOpView, SettingsSecretView } from './settings.ts'
+export type { InstructionsDocumentView, MemoryEntryView, SettingsApi, SettingsNamespaceView, SettingsPathOpView, SettingsSecretView, SettingsTarget, WorkspaceSettingsStatus } from './settings.ts'
 export type { CredentialsApi, CredentialView } from './credentials.ts'
 export type {
   AuthorizationAccountView,

@@ -13,10 +13,9 @@ import {
 import { FallbackKeysEditor, useFallbackKeys } from './FallbackKeysEditor.tsx'
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
-import { ProviderAccounts } from './ProviderAccounts.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
 import type { ModelDraft } from './ModelListEditor.tsx'
-import { deriveKeyRef, messageOf, protocolChoices, providerAccountKey } from './store.ts'
+import { deriveKeyRef, messageOf, protocolChoices } from './store.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
@@ -35,8 +34,6 @@ export interface ProviderEditorProps {
   displayName: string
   /** Hide the title row (the add card renders its own provider select). */
   hideTitle?: boolean
-  /** Add mode keeps account inventory and usage in the provider's Edit card. */
-  accountMode?: 'add' | 'manage'
   /**
    * Whether the adapter reports this route as hand-declared — absent from its
    * installed catalog. Such a route carries its own wire protocol, chosen when
@@ -136,7 +133,6 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const [keyDraft, setKeyDraft] = useState('')
   const [keyState, setKeyState] = useState<CredentialView | undefined>(undefined)
   const [busy, setBusy] = useState(false)
-  const [accountBusy, setAccountBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   // A settings success advances both retry baselines immediately. Keeping the
   // derived fields in the draft prevents a pushed namespace refresh from
@@ -163,7 +159,6 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     : relatedModels ?? relatedInheritedModels)
   const relatedLabel = relatedProvider === 'antigravity' ? 'Antigravity' : 'Gemini API'
   const catalogLabel = googleCounterpart === undefined ? undefined : props.provider === 'antigravity' ? 'Antigravity' : 'Gemini API'
-  const accountKey = providerAccountKey(namespace.ns, props.provider)
   const keyRef = refFor(schema, namespace, settingsPath, props.provider)
   // The same schema read the create card makes, so the choices offered here
   // and there cannot drift apart: both come from the adapter's own `Config`.
@@ -525,13 +520,6 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         ? <p className={styles['advancedHint']}>{`${t('advancedHint')} (${namespace.ns})`}</p>
         : layout === 'accounts'
           ? <>
-            {props.provider === 'gemini-api' || props.provider === 'antigravity' ? <p className={styles['advancedHint']}>
-              {t(props.provider === 'antigravity' ? 'antigravityOAuthHint' : 'geminiApiOAuthHint')}
-            </p> : null}
-            <ProviderAccounts flowKey={accountKey as string} api={api.authorization} t={t}
-              {...props.provider === 'gemini-api' ? { method: 'gemini-api' }
-                : props.provider === 'antigravity' ? { method: 'oauth' } : {}}
-              mode={props.accountMode ?? 'manage'} disabled={disabled} onBusy={setAccountBusy} />
             {props.provider === 'cursor' ? <p className={styles['advancedHint']}>{t('accountTransportUnavailable')}</p> : null}
             <details className={styles['customized']}>
               <summary className={styles['customizedSummary']}>{t('customized')}</summary>
@@ -569,7 +557,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       <EditorFooter
         t={t}
         busy={busy}
-        submitDisabled={disabled || accountBusy || layout === 'unknown'
+        submitDisabled={disabled || layout === 'unknown'
           || modelFailure !== undefined
           || relatedModelFailure !== undefined
           || keyFailure !== undefined}

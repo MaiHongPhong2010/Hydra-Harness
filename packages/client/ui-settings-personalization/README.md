@@ -10,6 +10,8 @@ Section entry refreshes a clean instructions editor. Unsaved edits, conflicts, a
 
 Saved custom instructions enter chat requests through the [agent-instructions loader](../../context/agent-instructions/README.md#state-and-refresh), including subsequent requests of an existing chat. They are logged user-role guidance and do not replace the agent's system prompt or override system, developer, or direct user instructions.
 
+Personalization edits the global user instructions and preferences. Workspace instructions in `.hydra/AGENTS.md` and `.hydra/AGENTS.local.md` apply automatically to chats in that workspace; selecting a workspace does not change the Settings editor.
+
 ## Model Experience
 
 Indirectly, through the custom-instructions document and personality value this section edits — `@hydraharness/harness-agent-instructions` and `@hydraharness/harness-personalization` own their model-visible rendering.

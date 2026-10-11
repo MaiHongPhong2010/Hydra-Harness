@@ -1,6 +1,7 @@
 - dialog "Settings":
   - navigation:
     - text: Settings
+    - searchbox "Search settings"
     - button "General":
       - img
       - text: General
@@ -10,6 +11,9 @@
     - button "Models":
       - img
       - text: Models
+    - button "Accounts":
+      - img
+      - text: Accounts
     - button "Web Search":
       - img
       - text: Web Search
@@ -27,82 +31,41 @@
   - button "Close":
     - img
     - text: Close
-  - heading "Models" [level=2]
-  - paragraph: Sign in with your accounts or enter API keys to use models from these providers.
-  - region "Image and video generation":
-    - heading "Image and video generation" [level=3]
-    - button "Refresh models"
-    - paragraph: Choose models marked Image or Video, grouped by provider. Fetch and save a provider's models to add them here. Generation requires a connected provider that supports the selected task.
-    - text: Image model
-    - combobox "Image model":
-      - option "Automatic fallback" [selected]
-    - text: Video model
-    - combobox "Video model":
-      - option "Automatic fallback" [selected]
-  - region "API keys":
-    - heading "API keys" [level=3]
-    - paragraph: Configure provider API keys and optional fallback keys.
-    - list:
-      - listitem:
-        - text: minimax-cn
-        - img "API key configured"
-        - button "Edit minimax-cn": Edit
-        - button "Delete minimax-cn": Delete
-    - button "Add provider":
-      - img
-      - text: Add provider
-    - button "Add a custom provider":
-      - img
-      - text: Add a custom provider
-  - region "Account sign-in":
-    - heading "Account sign-in" [level=3]
-    - paragraph: Connect provider accounts independently of your API keys.
-    - list:
-      - listitem:
-        - text: ChatGPT
-        - img "Account connected"
-        - button "Edit ChatGPT (chatgpt)": Edit
-        - button "Delete ChatGPT (chatgpt)": Delete
-      - listitem:
-        - text: Google Antigravity
-        - img "Account connected"
-        - button "Edit Google Antigravity (antigravity)": Edit
-        - button "Delete Google Antigravity (antigravity)": Delete
-        - text: Google Antigravity antigravity
-        - paragraph: Sign in with Google to use Antigravity. No Cloud project ID is needed.
-        - button "Add account"
-        - text: Accounts 1 account
-        - paragraph: Requests rotate between accounts. Another account is tried when a request fails or reaches its quota.
-        - list "Accounts":
-          - listitem:
-            - text: google@example.test Google AI Pro
-            - button "Hide usage for google@example.test" [expanded]: Usage
-            - button "Refresh usage for google@example.test": ↻
-            - button "Sign out google@example.test": Sign out
-            - region "Gemini models":
-              - heading "Gemini models" [level=4]
-              - progressbar "Weekly usage limit":
-                - strong: 82% left
-                - text: Weekly
-              - progressbar "5 hour usage limit":
-                - strong: 68% left
-                - text: 5h
-            - region "Claude and GPT models":
-              - heading "Claude and GPT models" [level=4]
-              - progressbar "Weekly usage limit":
-                - strong: 60% left
-                - text: Weekly
-              - progressbar "5 hour usage limit":
-                - strong: 88% left
-                - text: 5h
-            - region "Model credits":
-              - heading "Model credits" [level=4]
-              - text: "GOOGLE_ONE_AI: 1,200 credits"
-        - text: 1–1 of 1
-        - status
-        - group: Customized settings
-        - button "Cancel"
-        - button "Apply"
-    - button "Add sign-in provider":
-      - img
-      - text: Add sign-in provider
+  - heading "Accounts" [level=2]
+  - paragraph: Connect provider accounts and view their reported usage. Accounts are saved immediately. Configure providers and models separately in Models.
+  - button "Manage models"
+  - text: Provider
+  - combobox "Provider":
+    - option "ChatGPT"
+    - option "Google" [selected]
+  - paragraph: Antigravity and Gemini API share Google accounts. Choose a sign-in method below. Gemini API requires a Cloud project with the Generative Language API enabled and uses its quota and billing; shared account usage is Antigravity usage.
+  - button "Add account"
+  - text: Accounts 1 account
+  - paragraph: Requests rotate between accounts. Another account is tried when a request fails or reaches its quota.
+  - list "Accounts":
+    - listitem:
+      - text: google@example.test Google AI Pro
+      - button "Hide usage for google@example.test" [expanded]: Usage
+      - button "Refresh usage for google@example.test": ↻
+      - button "Sign out google@example.test": Sign out
+      - region "Gemini models":
+        - heading "Gemini models" [level=4]
+        - progressbar "Weekly usage limit":
+          - strong: 82% left
+          - text: Weekly
+        - progressbar "5 hour usage limit":
+          - strong: 68% left
+          - text: 5h
+      - region "Claude and GPT models":
+        - heading "Claude and GPT models" [level=4]
+        - progressbar "Weekly usage limit":
+          - strong: 60% left
+          - text: Weekly
+        - progressbar "5 hour usage limit":
+          - strong: 88% left
+          - text: 5h
+      - region "Model credits":
+        - heading "Model credits" [level=4]
+        - text: "GOOGLE_ONE_AI: 1,200 credits"
+  - text: 1–1 of 1
+  - status

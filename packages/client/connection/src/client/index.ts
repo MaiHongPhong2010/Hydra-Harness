@@ -28,7 +28,7 @@ export type {
   ClientRequest, ServerResponse, ServerRequest, ClientResponse, RpcMessage, RpcReceipt,
   HostDescription, IApiClient, SessionId, SessionEvent, ContentBlock, StreamChunk,
   GoalsApi, GoalRef,
-  SettingsApi, SettingsNamespaceView, SettingsPathOpView, SettingsSecretView,
+  SettingsApi, SettingsNamespaceView, SettingsPathOpView, SettingsSecretView, WorkspaceSettingsStatus,
   CredentialsApi, CredentialView, ConfigurableProviderView, DiscoveredModelView, LlmApi,
   AuthorizationAccountView, AuthorizationApi, AuthorizationAttemptView, AuthorizationEntryView,
   AuthorizationNoticeView, AuthorizationPromptView,

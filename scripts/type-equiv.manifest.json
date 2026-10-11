@@ -2,6 +2,11 @@
   "comment": "Maps each ` ```ts type-equiv ` or ` ```ts public-api ` block (by doc + declared symbol + projection) to the source declaration and original JSDoc it must match. Omit projection for the complete declaration; use public-api with a ` ```ts public-api ` block for a body-stripped public class declaration. verify-type-equiv.ts enforces a 1:1 correspondence between blocks and entries. Add an entry when you add a source-equivalence block; remove it when you remove the block.",
   "entries": [
     {
+      "doc": "docs/subsystems/settings.md",
+      "symbol": "SettingsSectionOwnerProps",
+      "source": "packages/client/ui-settings/src/client/contract/slots.ts"
+    },
+    {
       "doc": "docs/subsystems/core.md",
       "symbol": "Branded",
       "source": "packages/util/brand/src/index.ts"
@@ -2044,6 +2049,21 @@
       "doc": "docs/subsystems/feedback.md",
       "symbol": "MessageFeedbackDeleteResult",
       "source": "packages/feedback/message-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/workspace.md",
+      "symbol": "WorkspaceConfigLayer",
+      "source": "packages/workspace/workspace-config/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/workspace.md",
+      "symbol": "SettingsTarget",
+      "source": "packages/workspace/workspace-config/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/workspace.md",
+      "symbol": "WorkspaceEnvironment",
+      "source": "packages/workspace/workspace-config/src/environment.ts"
     }
   ]
 }

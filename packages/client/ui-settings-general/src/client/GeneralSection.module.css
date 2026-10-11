@@ -1,12 +1,46 @@
-/* Feature-contributed rows own their chrome and separators; the section
- * strips the trailing separator wherever the column ends. */
-
 .section {
   display: flex;
   flex-direction: column;
+  gap: 28px;
+  max-width: 680px;
+  margin: 0 auto;
   width: 100%;
 }
 
-.section > :global([data-slot='settings.general.item']) > :last-child {
+.title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 32px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.heading {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.group { min-width: 0; }
+
+.card {
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-panel);
+  background: var(--dsw-alias-bg-layer-3);
+  padding: 0 16px;
+}
+
+.item + .item {
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.item > :global([data-slot]) > :last-child {
   border-bottom: none;
+}
+
+@media (max-width: 720px) {
+  .card { padding: 0 12px; }
+  .item > :global([data-slot]) > :first-child { flex-wrap: wrap; gap: 12px; }
 }

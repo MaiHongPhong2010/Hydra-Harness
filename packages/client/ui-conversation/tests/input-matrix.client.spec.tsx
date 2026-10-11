@@ -62,6 +62,7 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
     resolveSubmitMode: () => 'queue',
     toggleCommandMenu: vi.fn(),
     useNotices: bindSnapshotSelector(shell.notices),
+    useComposerPreferences: select => select({ busyEnter: 'queue', plainText: false, showContextUsage: true, sendShortcut: 'enter' }),
     useLexicon: bindSnapshotSelector(shell.lexicon),
     useMenuLauncher: bindSnapshotSelector(createSnapshotStore<string | null>(null)),
     renderSlot: (() => null) as InputBarProps['renderSlot'],

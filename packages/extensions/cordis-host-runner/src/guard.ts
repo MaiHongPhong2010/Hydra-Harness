@@ -697,6 +697,36 @@ function guardedService(service: object, name: string, reportFailure: (error: Er
 }
 /* jscpd:ignore-end */
 
+/** Expose namespace APIs without the Host's trust decision or provider internals. */
+function sandboxSettings(service: object, reportFailure: (error: Error) => void): unknown {
+  const methods = new Set(['register', 'get', 'describe', 'update', 'replace', 'mutate', 'observe'])
+  return new Proxy(Object.create(null) as object, {
+    get(_target, prop) {
+      if (typeof prop !== 'string') return undefined
+      if (!methods.has(prop)) {
+        return rejectGuard(reportFailure, `dynamic settings does not expose "${prop}"; use its public namespace APIs`)
+      }
+      return (...args: unknown[]): unknown => {
+        if (prop !== 'describe' && prop !== 'observe') {
+          if (typeof args[0] !== 'string') {
+            return rejectGuard(reportFailure, 'dynamic settings namespace must be a primitive string')
+          }
+          if (args[0] === 'workspace-config') {
+            return rejectGuard(reportFailure, 'workspace trust belongs to the user in Settings; dynamic packages cannot access settings namespace "workspace-config"')
+          }
+        }
+        const method: unknown = Reflect.get(service, prop, service)
+        const result: unknown = Reflect.apply(method as (...values: unknown[]) => unknown, service, args)
+        if (result instanceof Promise) return result.then(value => denyContext(value, 'settings', reportFailure))
+        return denyContext(result, 'settings', reportFailure)
+      }
+    },
+    set(_target, prop) {
+      return rejectGuard(reportFailure, `dynamic settings is read-only; cannot assign "${String(prop)}"`)
+    },
+  })
+}
+
 /**
  * The service names a plugin declared in `inject`, as a lookup set. Whatever
  * declaration style the plugin used — an `inject: ['bash', 'tools']` array or
@@ -738,8 +768,12 @@ function sandboxContext(ctx: Context, reportFailure: (error: Error) => void): Co
   const readService = (name: string, requireDeclaration: boolean): unknown => {
     if (name === 'tools') return tools
     if (requireDeclaration && !declared.has(name)) return denyRead(name)
+    if (name === 'workspaceConfig' || name === 'apiProxy' || name === 'connection' || name === 'remote' || name === 'settingsScope') {
+      return rejectGuard(reportFailure, `service "${name}" is reserved for Host controls; workspace trust belongs to the user in Settings`)
+    }
     const service = denyContext(ctx.get(name), name, reportFailure)
     if (service === null || (typeof service !== 'object' && typeof service !== 'function')) return service
+    if (name === 'settings') return sandboxSettings(service, reportFailure)
     return guardedService(service, name, reportFailure)
   }
   const get = (name: string): unknown => readService(name, false)

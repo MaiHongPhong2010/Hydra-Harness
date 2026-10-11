@@ -7,7 +7,7 @@
  */
 
 import type {
-  IApiClient, SettingsNamespaceView,
+  IApiClient, SettingsNamespaceView, SessionId,
 } from '@hydraharness/harness-api-remotes/client'
 import {
   createSnapshotStore, type SnapshotStore,
@@ -36,6 +36,12 @@ export interface PermissionSettingsState {
   currentValue: string
   options: readonly PermissionDefaultOption[]
   revision: number
+  /** Whether the addressed document overrides its inherited default. */
+  overridden?: boolean
+  /** Preset applied by clearing the explicit override. */
+  inheritedValue?: string | undefined
+  /** Sessions the last broadcast could not update; a repeated selection retries them. */
+  failedSessions?: { sessionId: SessionId; error: string }[]
 }
 
 interface ConstChoice {
@@ -130,6 +136,16 @@ export class PermissionPresetSettingsController {
    * @returns nothing; {@link store} carries success or failure.
    */
   async select(preset: string): Promise<void> {
+    return this.write(preset)
+  }
+
+  /**
+   * Clear the addressed default override and inherit the previous layer.
+   * @returns after the Host acknowledges the clear.
+   */
+  async reset(): Promise<void> { return this.write(undefined) }
+
+  private async write(preset: string | undefined): Promise<void> {
     const state = this.store.getSnapshot()
     const view = this.describeFace.getSnapshot().view?.namespaces
       .find(entry => entry.ns === PERMISSION_SETTINGS_NS)
@@ -141,9 +157,12 @@ export class PermissionPresetSettingsController {
     })
     try {
       const response = await this.api.settings.mutate({
+        ...this.describeFace.target,
         ns: PERMISSION_SETTINGS_NS,
-        ops: [{ op: 'set', path: ['defaultPreset'], value: preset }],
+        ops: preset === undefined ? [{ op: 'unset', path: ['defaultPreset'] }]
+          : [{ op: 'set', path: ['defaultPreset'], value: preset }],
         expectedRevision: view.revision,
+        applyPermissionToOpenSessions: true,
       })
       if (!response.result.ok) throw new Error(response.result.error.message)
       this.saving = false
@@ -151,6 +170,15 @@ export class PermissionPresetSettingsController {
       // The mirror publish reaches this row's own subscription, so the fold
       // is also what republishes the accepted value here.
       this.describeFace.acceptView(response.result.value)
+      const failed = response.result.value.permissionResults?.filter(result => !result.ok)
+        .map(result => ({ sessionId: result.sessionId, error: result.error ?? 'Permission change failed' })) ?? []
+      this.store.update((draft) => {
+        draft.failedSessions = failed
+        if (failed.length > 0) {
+          draft.status = 'error'
+          draft.error = `Saved the default; ${failed.length} open session(s) still need updating.`
+        }
+      })
     } catch (error) {
       this.saving = false
       if (this.disposed) return
@@ -205,6 +233,9 @@ export class PermissionPresetSettingsController {
         state.currentValue = resolved.currentValue
         state.options = resolved.options
         state.revision = view.revision
+        state.overridden = this.schema.hasPath(view.user, ['defaultPreset'])
+        const inherited = (view.base as { defaultPreset?: unknown } | null)?.defaultPreset
+        state.inheritedValue = typeof inherited === 'string' ? inherited : undefined
       })
     } catch (error) {
       this.fail(error)

@@ -2488,6 +2488,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         groups: fixtureModelGroups(),
         failures: [],
       }),
+      suggestions: request => ok(request, { items: [] }),
       selectModel: (request) => {
         const selected: ModelSelection = {
           provider: request.payload.provider,
@@ -3026,16 +3027,17 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       // represented here. Fixture-backed journeys do not open its Models
       // editor; real schema-driven forms ride the HTTP transport.
       describe: request => ok(request, {
+        ...request.payload.workspaceId === undefined ? {} : { workspaceId: request.payload.workspaceId, layer: request.payload.layer ?? 'local', trusted: false },
         writable: true,
         hasDocument: true,
-        namespaces: [{
+        namespaces: request.payload.workspaceId === undefined ? [{
           ns: 'llm-deepseek',
           schema: {},
           value: { apiKeyEnv: 'DEEPSEEK_API_KEY' },
           applies: 'live',
           secrets: [{ path: ['apiKey'], set: false }],
           revision: 0,
-        }],
+        }] : [],
       }),
       // Native opens are deterministic no-op successes in this fixture, as is host.openPath.
       openDocument: request => ok(request, { opened: true as const }),
@@ -3067,6 +3069,12 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       }),
       listMemories: request => ok(request, { entries: [] }),
       removeMemory: request => ok(request, { removed: false }),
+      workspaceStatus: request => ok(request, {
+        workspaceId: request.payload.workspaceId, trusted: false, hasProjectConfig: false, trustDecided: false,
+      }),
+      setWorkspaceTrust: request => ok(request, {
+        workspaceId: request.payload.workspaceId, trusted: request.payload.trusted, hasProjectConfig: false, trustDecided: true,
+      }),
     },
     credentials: {
       describe: request => ok(request, {
@@ -3242,6 +3250,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.delete': return this.api.sessions.delete(request)
       case 'session.history': return this.api.sessions.history(request)
       case 'session.models': return this.api.sessions.models(request)
+      case 'session.suggestions': return this.api.sessions.suggestions(request)
       case 'session.selectModel': return this.api.sessions.selectModel(request)
       case 'session.rename': return this.api.sessions.rename(request)
       case 'session.fork': return this.api.sessions.fork(request)
@@ -3292,6 +3301,8 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'settings.mutate': return this.api.settings.mutate(request)
       case 'settings.readInstructions': return this.api.settings.readInstructions(request)
       case 'settings.writeInstructions': return this.api.settings.writeInstructions(request)
+      case 'settings.workspaceStatus': return this.api.settings.workspaceStatus(request)
+      case 'settings.setWorkspaceTrust': return this.api.settings.setWorkspaceTrust(request)
       case 'settings.listMemories': return this.api.settings.listMemories(request)
       case 'settings.removeMemory': return this.api.settings.removeMemory(request)
       case 'credentials.describe': return this.api.credentials.describe(request)

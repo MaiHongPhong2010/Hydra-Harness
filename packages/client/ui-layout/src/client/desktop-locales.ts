@@ -1,0 +1,37 @@
+/** Desktop settings copy. */
+export const en = {
+  saving: 'Saving…', applied: 'Applied immediately',
+  'environment.title': 'Agent environment', 'environment.description': 'Run the entire Host in Native or a ready WSL distro. Each environment has separate data. No runtime is installed automatically.',
+  'environment.applies': 'Applies after a clean shutdown and restart', 'environment.active': 'Active', 'environment.refresh': 'Check runtimes',
+  'notification.completion.title': 'Turn completion notifications', 'notification.completion.description': 'Notify when a live turn ends.',
+  'notification.permissionPrompts.title': 'Enable permission notifications', 'notification.permissionPrompts.description': 'Show the action to enable display notifications when permission is needed.',
+  'notification.questions.title': 'Enable question notifications', 'notification.questions.description': 'Notify when an answer is needed. Click the notification to open its chat.',
+  'notification.sound.title': 'Notification sound', 'notification.sound.description': 'Use the same sound policy for completion and question notifications.',
+  'notification.never': 'Never', 'notification.background': 'Background', 'notification.always': 'Always',
+  'notification.default': 'Default', 'notification.off': 'Off', 'notification.permission': 'Display permission',
+  'notification.grant': 'Enable notifications', 'notification.preview': 'Listen',
+  'shell.title': 'Integrated terminal shell', 'shell.description': 'Choose a detected shell. Existing terminals keep their shell.',
+  'shell.applies': 'Applies to new terminals', 'shell.automatic': 'Automatic',
+  'close.title': 'Confirm before closing a window', 'close.description': 'Confirm before shutdown or window teardown begins.',
+  'close.never': 'Never', 'close.shortcut': 'Shortcut only', 'close.always': 'Always',
+  'hotkey.title': 'Popout Window hotkey', 'hotkey.description': 'Global shortcut while Hydra is running. Leave empty to turn it off.',
+  'standalone.title': 'Default to standalone chat', 'standalone.description': 'Create popout chats outside projects. Otherwise use the selected project.',
+  'destination.title': 'Default file open destination', 'destination.description': 'Terminal opens in the file’s directory. Applies to the next file opened.',
+  'destination.editor': 'Editor', 'destination.terminal': 'Terminal', 'destination.system': 'System',
+  'full.title': 'Full view by default', 'full.description': 'Open new chats in the workspace tab strip with their content.',
+  'full.applies': 'Applies when opening a new chat',
+  'bottom.title': 'Bottom panel', 'bottom.description': 'Show the bottom panel control in the app header.',
+  'location.title': 'Default terminal location', 'location.description': 'Choose where new terminals open. Existing PTYs stay in place.',
+  'location.bottom': 'Bottom', 'location.right': 'Right',
+  'startup.title': 'Launch at login', 'startup.description': 'Managed by your operating system. Status refreshes when this window regains focus.',
+  'startup.open': 'Open Startup Apps', 'startup.on': 'On', 'startup.off': 'Off',
+  unavailable: 'This saved value is unavailable on this device. Select an available value to apply it.',
+  'history.title': 'Compress local chat history',
+  'history.description': 'Use Zstandard for new sessions after restart. Existing sessions keep their format.',
+  'history.applies': 'Applies to new sessions after restart',
+  'toys.title': 'Confetti cannon', 'toys.description': 'Type /confetti to fire an effect. Reduced motion is respected. History replay never fires it.',
+  'licenses.title': 'Open source licenses', 'licenses.description': 'Generated dependency notices bundled with this artifact.', 'licenses.view': 'View',
+} satisfies Record<string, string>
+
+/** Desktop settings locale key. */
+export type DesktopSettingsKey = keyof typeof en

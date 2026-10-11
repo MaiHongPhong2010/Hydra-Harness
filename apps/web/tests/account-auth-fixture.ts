@@ -166,12 +166,13 @@ function flowFor(ctx: Context, provider: (typeof ACCOUNT_AUTH_PROVIDERS)[number]
       })
       await ctx.credentials.modifyRecord(key, async (current) => {
         const accounts = entriesFromRecord(current)
-        const id = provider.provider === 'antigravity' ? 'antigravity-1' : `${provider.provider}-${String(accounts.length + 1)}`
+        const index = Math.max(completedLogins, accounts.length)
+        const id = provider.provider === 'antigravity' ? 'antigravity-1' : `${provider.provider}-${String(index + 1)}`
         const labels = provider.provider === 'chatgpt'
-          ? ['alice@example.test', 'bob@example.test']
+          ? ['alice@example.test', 'bob@example.test', 'carol@example.test']
           : ['google@example.test']
-        const label = labels[provider.provider === 'antigravity' ? 0 : accounts.length]
-          ?? `${provider.provider}-${String(accounts.length + 1)}@example.test`
+        const label = labels[provider.provider === 'antigravity' ? 0 : index]
+          ?? `${provider.provider}-${String(index + 1)}@example.test`
         const next = accounts.some(account => account.id === id)
           ? accounts.map(account => account.id === id ? { id, label } : account)
           : [...accounts, { id, label }]

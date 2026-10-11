@@ -30,6 +30,16 @@ pnpm run desktop
 
 The desktop process starts the Web profile internally on a local loopback port and loads it in one Electron window. Run `pnpm run build` again after source changes before launching the desktop app.
 
+To verify workspace Settings in the native renderer after building, run the focused smoke with a private `HYDRA_HOME` from the repository root:
+
+```powershell
+$env:HYDRA_HOME = Join-Path $env:TEMP ('hydra-workspace-settings-' + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $env:HYDRA_HOME | Out-Null
+pnpm --filter @hydraharness/harness-desktop exec electron . --smoke-workspace-settings
+```
+
+The smoke checks global Settings without a workspace selector, global instruction saves that preserve project files, and global provider credential controls. It reports `desktop-workspace-settings-smoke` with `ok: true` on success and saves `desktop-workspace-settings.png` under `HYDRA_HOME`.
+
 In **Settings → Models**, **Open sign-in page** opens your default browser. Google connects Antigravity through OAuth. For Gemini API, choose **API keys → Add a custom provider → Provider template → Gemini API** and enter an API key.
 
 ## Start a task
@@ -59,3 +69,13 @@ Desktop-specific Electron data is stored below `$HYDRA_HOME/desktop-electron`. W
 - [Configure models](./providers.md)
 - [Reuse page workflows](./page-memory.md)
 - [Use the Python SDK](./python-sdk.md)
+
+## General Settings
+
+Open Settings → General to search preference names and sections. Individual controls save automatically and report errors and when they apply. Models and Plugins editors retain Save/Discard. Full access asks for acknowledgement and reports chats that could not accept the change.
+
+Agent environment lists Native and checked WSL distributions. A distro needs Node 22.19 or 24+ and a Hydra installation supporting Desktop bridge version 1; Hydra does not install these automatically. The entire Host runs in the selected distro with separate data after a clean shutdown and restart. New terminals can still use a detected Windows shell. Changing the task folder affects new chats outside projects, each with its own directory.
+
+Full view puts a new chat and its content in one workspace tab strip. Shell and terminal placement changes apply to new terminals; hiding a panel keeps processes alive. Popout windows share the Host and settings; closing the final window shuts it down. Launch at login opens the operating system settings and refreshes its status when Hydra regains focus.
+
+Completion notifications default to Background. Display permission is separate from agent approval. Questions open their addressed chat when clicked. Suggested prompts are Off by default and only fill a draft when chosen. Speed shows requested and reported tiers where the adapter supports them; Priority may have a different cost. Compression changes affect new sessions after restart; existing logs keep their encoding. Enable Confetti cannon and type /confetti for a live effect; reduced motion suppresses it.

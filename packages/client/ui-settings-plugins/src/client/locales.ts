@@ -27,6 +27,7 @@ export type PluginsSettingsLocaleKey =
   | 'userMcpMutationError' | 'userMcpSaveError' | 'userMcpEdit' | 'userMcpRemove' | 'userMcpSave'
   | 'userMcpCancel' | 'userMcpClose' | 'userMcpName' | 'userMcpTransport' | 'userMcpTransportStdio'
   | 'userMcpTransportHttp' | 'userMcpCommand' | 'userMcpArgs' | 'userMcpCwd' | 'userMcpEnv'
+  | 'userMcpCwdHint' | 'userMcpWorkspaceCwdHint'
   | 'userMcpEnvHint' | 'userMcpEnvInvalid' | 'userMcpEnvStored' | 'userMcpUrl' | 'userMcpUrlInvalid' | 'userMcpHeaders'
   | 'userMcpHeadersHint' | 'userMcpHeadersInvalid' | 'userMcpHeadersStored' | 'userMcpTools'
   | 'userMcpStarted' | 'userMcpStarting' | 'userMcpFailed' | 'userMcpInvalid'
@@ -42,6 +43,8 @@ export type PluginsSettingsLocaleKey =
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
+  userMcpCwdHint: 'Leave empty to use the Host working directory.',
+  userMcpWorkspaceCwdHint: 'Leave empty to use this workspace root.',
   userMcpNameTaken: 'A server with this name already exists. Edit it or choose another name.',
   userHooksNameTaken: 'A hook record with this name already exists. Edit it or choose another name.',
   mcpLoadError: 'MCP servers could not be loaded.',

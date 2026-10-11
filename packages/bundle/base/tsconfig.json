@@ -16,6 +16,15 @@
     },
     {
       "path": "../../web/web-search-http"
+    },
+    {
+      "path": "../../workspace/workspace-config"
+    },
+    {
+      "path": "../../preset/agent-presets"
+    },
+    {
+      "path": "../../interaction/toys"
     }
   ]
 }

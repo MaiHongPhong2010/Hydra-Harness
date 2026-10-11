@@ -28,12 +28,18 @@ function owner(value: unknown = {}) {
 
 it('filters each generation dropdown by endpoint classification and saves distinct providers', async () => {
   const props = owner()
-  const mutate = vi.fn(async () => ok({}))
+  const saved = { ...props.namespace, revision: 8, value: {
+    imageModel: { provider: 'second', model: 'same-model' }, videoModel: { provider: 'first', model: 'same-model' },
+  } }
+  const mutate = vi.fn(async () => ok(saved))
   const api = { llm: { models: async () => ok({ groups, failures: [] }) }, settings: { mutate } } as never
   const view = render(<GenerationModels {...props} api={api} />)
   await waitFor(() => { expect(screen.getByLabelText<HTMLSelectElement>(en.imageModel).disabled).toBe(false) })
   expect(view.container.querySelectorAll('select')).toHaveLength(2)
   for (const field of [en.imageModel, en.videoModel]) {
+    expect([...screen.getByLabelText<HTMLSelectElement>(field).options].map(option => option.textContent))
+      .toEqual([en.generationModelUnset, 'Shared name', field === en.imageModel ? 'Image' : 'Video',
+        'Shared name', field === en.imageModel ? 'Image' : 'Video'])
     expect([...screen.getByLabelText<HTMLSelectElement>(field).options].map(option => option.value))
       .toEqual(['', '["first","same-model"]', JSON.stringify(['first', field === en.imageModel ? 'image-only' : 'video-only']),
         '["second","same-model"]', JSON.stringify(['second', field === en.imageModel ? 'image-only' : 'video-only'])])
@@ -42,6 +48,7 @@ it('filters each generation dropdown by endpoint classification and saves distin
   fireEvent.change(screen.getByLabelText(en.videoModel), { target: { value: '["first","same-model"]' } })
   fireEvent.click(screen.getByRole('button', { name: en.apply }))
   await waitFor(() => { expect(props.onSaved).toHaveBeenCalledOnce() })
+  expect(props.onSaved).toHaveBeenCalledWith(saved)
   expect(mutate).toHaveBeenCalledWith({ ns: 'llm-pi-ai', expectedRevision: 7, ops: [
     { op: 'set', path: ['imageModel'], value: { provider: 'second', model: 'same-model' } },
     { op: 'set', path: ['videoModel'], value: { provider: 'first', model: 'same-model' } },
@@ -51,13 +58,17 @@ it('filters each generation dropdown by endpoint classification and saves distin
 it('refreshes account catalogs without changing the preference revision or discarding pending choices', async () => {
   const props = owner()
   const models = vi.fn().mockResolvedValueOnce(ok({ groups, failures: [] }))
-    .mockResolvedValueOnce(ok({ groups: [...groups, { id: 'chatgpt', name: 'ChatGPT', models: [{ id: 'gpt-image-2', name: 'Codex image', endpoints: ['images/generations'] }] }], failures: [] }))
+    .mockResolvedValueOnce(ok({ groups: [...groups, { id: 'chatgpt', name: 'ChatGPT', models: [
+      { id: 'gpt-image-2', name: 'Codex image', endpoints: ['images/generations'] },
+      { id: 'unnamed-media', name: '', endpoints: ['images/generations', 'videos'] },
+    ] }], failures: [] }))
   const api = { llm: { models }, settings: { mutate: vi.fn() } } as never
   const view = render(<GenerationModels {...props} api={api} catalogRevision="accounts:1" />)
   await waitFor(() => { expect(screen.getByLabelText<HTMLSelectElement>(en.imageModel).disabled).toBe(false) })
   fireEvent.change(screen.getByLabelText(en.imageModel), { target: { value: '["first","image-only"]' } })
   view.rerender(<GenerationModels {...props} api={api} catalogRevision="accounts:2" />)
-  await waitFor(() => { expect(screen.getAllByRole('option', { name: 'ChatGPT / Codex image (gpt-image-2)' })).toHaveLength(1) })
+  await waitFor(() => { expect(screen.getAllByRole('option', { name: 'Codex image' })).toHaveLength(1) })
+  expect(screen.getAllByRole('option', { name: 'unnamed-media' })).toHaveLength(2)
   expect(models).toHaveBeenCalledTimes(2)
   expect(screen.getByLabelText<HTMLSelectElement>(en.imageModel).value).toBe('["first","image-only"]')
   expect(screen.getByRole('button', { name: en.discard })).toBeDefined()
@@ -120,7 +131,7 @@ it.each(['rejected', 'throw'])('retries a failed catalog request: %s', async (ki
   expect((await screen.findByRole('alert')).textContent).toBe('Catalog offline')
   await waitFor(() =>{  expect(screen.getByRole<HTMLButtonElement>('button', { name: en.refreshModels }).disabled).toBe(false) })
   fireEvent.click(screen.getByRole('button', { name: en.refreshModels }))
-  await screen.findByRole('option', { name: 'Provider / image' })
+  await screen.findByRole('option', { name: 'image' })
   expect(screen.queryByRole('alert')).toBeNull()
 })
 it('keeps a rejected settings write for correction and retry', async () => {

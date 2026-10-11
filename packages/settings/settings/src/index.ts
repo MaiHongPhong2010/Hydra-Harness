@@ -76,7 +76,7 @@ export interface SettingsDescriptor {
    * Send it back as `expectedRevision` on a write to refuse a stale one.
    */
   revision: number
-  /** Registrant's composition `base` layer (detached), when one was declared. */
+  /** Lower resolved parent value or registrant's composition `base` (detached), when declared. */
   base?: unknown
   /**
    * Raw user section from the stored document (detached), when one exists and
@@ -329,7 +329,7 @@ interface SettingsRegistration {
   base: unknown
   applies: SettingsApplies
   /** Owner-supplied check for constraints the schema cannot express. */
-  validate?: (value: unknown) => void
+  validate?: ((value: unknown) => void) | undefined
   resolved: unknown
   /**
    * Monotonic counter over this namespace's RAW user section — bumped by any
@@ -351,6 +351,16 @@ interface SettingsRegistration {
  */
 export abstract class SettingsProvider extends Service {
   private readonly registrations = new Map<SettingsNamespace, SettingsRegistration>()
+  /** Same-process inheritance subscribers; isolated providers do not share event streams. */
+  private readonly descendants = new Set<(ns: SettingsNamespace) => void>()
+  private readonly observers = new Set<() => void>()
+  private inheritance: {
+    parent: SettingsProvider
+    namespaces: Set<SettingsNamespace>
+    mirrors: Map<SettingsNamespace, SettingsRegistration>
+    claimed: Set<SettingsNamespace>
+  } | undefined
+  private layerEnabled = true
   /** Latest published raw document; empty until the provider's first publish. */
   private document: Record<string, unknown> = {}
   /** Per-namespace write chains; settled tails, so a failure never poisons the queue. */
@@ -437,20 +447,162 @@ export abstract class SettingsProvider extends Service {
   }
 
   /**
-   * Register a namespace schema and receive its owner scope. The registration
-   * is an effect on the calling plugin's fiber: disposing that fiber removes
-   * the namespace and its observers. An invalid stored section fails the
-   * registration itself — the earliest point where the schema can judge it.
+   * Mirror selected parent namespaces, using their resolved values beneath
+   * this provider's raw sections. Schemas, validators, timing, registrations,
+   * and parent commits stay synchronized without exposing owner callbacks in
+   * descriptors. One consumer may claim each inherited namespace with register().
+   * @param parent - provider of the lower settings layer; cycles are refused.
+   * @param namespaces - namespaces allowed to inherit into this provider.
+   * @returns awaitable disposer removing the inherited registrations and subscription.
+   */
+  inherit(parent: SettingsProvider, namespaces: readonly SettingsNamespace[]): () => void | Promise<void> {
+    if (this.inheritance !== undefined) throw new Error('settings provider already inherits a parent')
+    for (let ancestor: SettingsProvider | undefined = parent; ancestor !== undefined; ancestor = ancestor.inheritance?.parent) {
+      if (ancestor.registrations === this.registrations) throw new Error('settings inheritance must not contain a cycle')
+    }
+    const inheritance = {
+      parent, namespaces: new Set(namespaces),
+      mirrors: new Map<SettingsNamespace, SettingsRegistration>(), claimed: new Set<SettingsNamespace>(),
+    }
+    for (const ns of namespaces) {
+      if (this.registrations.has(ns)) throw new Error(`settings namespace "${ns}" is already registered`)
+    }
+    const synchronize = (ns: SettingsNamespace): void => {
+      if (!inheritance.namespaces.has(ns) || this.isStopped()) return
+      const source = parent.registrations.get(ns)
+      const mirror = inheritance.mirrors.get(ns)
+      if (source === undefined) {
+        if (mirror !== undefined && this.registrations.delete(ns)) {
+          this.ctx.emit(this, 'settings/registry-updated', ns)
+          this.notifyDescendants(ns)
+        }
+        return
+      }
+      const metadataChanged = mirror !== undefined && (mirror.schema !== source.schema
+        || mirror.applies !== source.applies || !deepEqualJson(mirror.base, source.resolved))
+      if (mirror !== undefined) {
+        mirror.schema = source.schema
+        mirror.base = source.resolved
+        mirror.applies = source.applies
+        mirror.validate = source.validate
+      }
+      const next = deepFreeze(this.resolve(source.schema, source.resolved, this.effectiveSection(ns), source.validate))
+      const registration: SettingsRegistration = mirror ?? {
+        ns, schema: source.schema, base: source.resolved, applies: source.applies,
+        resolved: next, revision: 0, watchers: new Set(),
+      }
+      registration.schema = source.schema
+      registration.base = source.resolved
+      registration.applies = source.applies
+      registration.validate = source.validate
+      inheritance.mirrors.set(ns, registration)
+      const added = !this.registrations.has(ns)
+      this.registrations.set(ns, registration)
+      if (added) {
+        this.ctx.emit(this, 'settings/registry-updated', ns)
+        this.notifyDescendants(ns)
+      }
+      const unchanged = deepEqualJson(registration.resolved, next)
+      this.commit(registration, next, 'provider')
+      if (!added && unchanged && metadataChanged) this.notifyObservers()
+    }
+    return this.ctx.effect(() => {
+      this.inheritance = inheritance
+      const dispose = (): void => {
+        parent.descendants.delete(synchronize)
+        this.inheritance = undefined
+        for (const [ns, mirror] of inheritance.mirrors) {
+          if (this.registrations.get(ns) !== mirror) continue
+          this.registrations.delete(ns)
+          for (const watcher of mirror.watchers) watcher.active = false
+          this.ctx.emit(this, 'settings/registry-updated', ns)
+          this.notifyDescendants(ns)
+        }
+      }
+      try {
+        for (const ns of namespaces) synchronize(ns)
+      } catch (error) {
+        dispose()
+        throw error
+      }
+      parent.descendants.add(synchronize)
+      return dispose
+    }, 'settings.inherit')
+  }
+
+  /**
+   * Enable or suppress this provider's raw layer without changing stored data.
+   * Descriptors and writes retain the raw section while resolved reads inherit.
+   * @param enabled - whether raw sections participate in effective resolution.
+   */
+  setLayerEnabled(enabled: boolean): void {
+    if (enabled === this.layerEnabled) return
+    this.layerEnabled = enabled
+    this.publish(this.document)
+  }
+
+  /**
+   * Observe this provider's committed raw, resolved, registry, or inherited
+   * descriptor changes. Callbacks run synchronously after the relevant state
+   * changes; failures are contained. The calling fiber owns the subscription.
+   * @param callback - re-read descriptors after a provider change.
+   * @returns awaitable disposer preventing further callback invocations.
+   */
+  observe(callback: () => void): () => void | Promise<void> {
+    return this.ctx.effect(() => {
+      this.observers.add(callback)
+      return () => { this.observers.delete(callback) }
+    }, 'settings.observe')
+  }
+
+  /** Contain provider observer failures without starving later subscribers. */
+  private notifyObservers(): void {
+    for (const callback of this.observers) {
+      try {
+        callback()
+      } catch (error) {
+        this.ctx.logger.warn('settings: provider observer failed')
+        this.ctx.logger.warn(error)
+      }
+    }
+  }
+
+  /** Read only the effective section; suppressed documents remain editable. */
+  private effectiveSection(ns: SettingsNamespace): Record<string, unknown> | undefined {
+    return this.layerEnabled ? this.section(ns) : undefined
+  }
+
+  /** Propagate a committed registration or resolved-value change to descendants. */
+  private notifyDescendants(ns: SettingsNamespace): void {
+    for (const synchronize of this.descendants) {
+      try {
+        synchronize(ns)
+      } catch (error) {
+        if ((error as { code?: unknown } | null)?.code === 'INVARIANT') throw error
+        this.ctx.logger.warn('settings: keeping last good inherited "%s" after invalid section', ns)
+        this.ctx.logger.warn(error)
+      }
+    }
+    this.notifyObservers()
+  }
+
+  /**
+   * Register a namespace schema and receive its owner scope. Disposing the
+   * calling plugin removes its observers and its non-inherited registration.
+   * An inherited namespace accepts one owner while keeping its parent's
+   * schema, validation, timing, and lower value. An invalid effective section
+   * fails initial registration; suppressed raw sections are validated on writes.
    * @param ns - unique namespace; duplicate registration fails loud.
    * @param schema - schemastery schema resolving this namespace's value.
    * @param options - composition `base` layer and effect timing.
    * @returns the owner scope for reads, observation, and updates.
    */
   register<T>(ns: SettingsNamespace, schema: z<T>, options?: SettingsRegisterOptions<T>): SettingsScope<T> {
-    if (this.registrations.has(ns)) {
+    const inherited = this.inheritance?.mirrors.get(ns)
+    if (this.registrations.has(ns) && (inherited === undefined || this.inheritance?.claimed.has(ns) === true)) {
       throw new Error(`settings namespace "${ns}" is already registered`)
     }
-    const registration: SettingsRegistration = {
+    const registration: SettingsRegistration = inherited ?? {
       ns,
       schema: schema as z<unknown>,
       base: options?.base,
@@ -458,18 +610,31 @@ export abstract class SettingsProvider extends Service {
       ...options?.validate === undefined
         ? {}
         : { validate: options.validate as (value: unknown) => void },
-      resolved: deepFreeze(this.resolve(schema, options?.base, this.section(ns), options?.validate)),
+      resolved: deepFreeze(this.resolve(schema, options?.base, this.effectiveSection(ns), options?.validate)),
       revision: 0,
       watchers: new Set(),
     }
+    const ownedWatchers = new Set<SettingsWatcher>()
     this.ctx.effect(() => {
-      this.registrations.set(ns, registration)
-      this.ctx.emit('settings/registry-updated', ns)
-      // TODO(settings-registration-quiescence): Deactivate every watcher and await
-      // its tail on disposal so callbacks cannot outlive the registrant fiber.
+      if (inherited === undefined) {
+        this.registrations.set(ns, registration)
+        this.ctx.emit(this, 'settings/registry-updated', ns)
+        this.notifyDescendants(ns)
+      } else {
+        this.inheritance?.claimed.add(ns)
+      }
       return () => {
+        for (const watcher of ownedWatchers) {
+          watcher.active = false
+          registration.watchers.delete(watcher)
+        }
+        if (inherited !== undefined) {
+          this.inheritance?.claimed.delete(ns)
+          return
+        }
         this.registrations.delete(ns)
-        this.ctx.emit('settings/registry-updated', ns)
+        this.ctx.emit(this, 'settings/registry-updated', ns)
+        this.notifyDescendants(ns)
       }
     }, `settings.register(${JSON.stringify(String(ns))})`)
     return {
@@ -478,9 +643,11 @@ export abstract class SettingsProvider extends Service {
       watch: (callback) => {
         const watcher: SettingsWatcher = { callback: callback, tail: Promise.resolve(), active: true }
         registration.watchers.add(watcher)
+        ownedWatchers.add(watcher)
         return () => {
           watcher.active = false
           registration.watchers.delete(watcher)
+          ownedWatchers.delete(watcher)
         }
       },
       update: patch => this.update(ns, patch),
@@ -649,7 +816,8 @@ export abstract class SettingsProvider extends Service {
         : mode === 'replace'
           ? snapshot
           : (snapshot['ops'] as SettingsPathOp[]).reduce(applyPathOp, current)
-      const next = deepFreeze(this.resolve(registration.schema, registration.base, section, registration.validate))
+      const base = registration.base
+      const candidate = deepFreeze(this.resolve(registration.schema, base, section, registration.validate))
       await this.persist(ns, section)
       // The write reached storage either way; the cache must say so. Commit
       // only when this registration is still the namespace owner — a fiber
@@ -659,6 +827,11 @@ export abstract class SettingsProvider extends Service {
       // from this persisted section so an old in-flight write cannot leave it stale.
       if (this.registrations.get(ns) === registration && !this.isStopped()) {
         this.bumpRevision(registration, current, section)
+        const next = this.layerEnabled && registration.base === base
+          ? candidate
+          : deepFreeze(this.resolve(
+            registration.schema, registration.base, this.effectiveSection(ns), registration.validate,
+          ))
         this.commit(registration, next, 'update')
       }
     }))
@@ -691,13 +864,15 @@ export abstract class SettingsProvider extends Service {
     for (const registration of this.registrations.values()) {
       let next: unknown
       try {
-        next = deepFreeze(this.resolve(registration.schema, registration.base, this.section(registration.ns), registration.validate))
+        next = deepFreeze(this.resolve(
+          registration.schema, registration.base, this.effectiveSection(registration.ns), registration.validate,
+        ))
       } catch (error) {
         this.ctx.logger.warn('settings: keeping last good "%s" after invalid stored section', registration.ns)
         this.ctx.logger.warn(error)
         continue
       }
-      this.bumpRevision(registration, before.get(registration.ns), this.section(registration.ns))
+      this.bumpRevision(registration, before.get(registration.ns), this.document[registration.ns])
       this.commit(registration, next, source)
     }
   }
@@ -721,7 +896,8 @@ export abstract class SettingsProvider extends Service {
   ): T {
     // The merged candidate is untyped by construction; the schema call is the
     // runtime validation that admits it into T.
-    const value = schema(mergeLayers(base, section) as never)
+    // Schemastery normalizes collection entries in place; inherited values are frozen snapshots.
+    const value = schema(structuredClone(mergeLayers(base, section)) as never)
     // The owner's own check runs on the admitted value, so it sees defaults
     // and the composition base exactly as the owner will.
     validate?.(value)
@@ -744,7 +920,7 @@ export abstract class SettingsProvider extends Service {
   /** Contained fan-out of `settings/document-updated`, mirroring {@link commit}'s. */
   private emitDocumentUpdated(ns: SettingsNamespace, revision: number): void {
     let invariantFailure: unknown
-    const args = ['settings/document-updated', ns, revision]
+    const args = [this, 'settings/document-updated', ns, revision]
     for (const listener of this.ctx.events.dispatch('emit', args) as Array<(...listenerArgs: unknown[]) => unknown>) {
       try {
         const returned = listener(ns, revision)
@@ -761,6 +937,7 @@ export abstract class SettingsProvider extends Service {
         this.warnListenerFailure(ns, error)
       }
     }
+    this.notifyObservers()
     if (invariantFailure !== undefined) throw invariantFailure as Error
   }
 
@@ -769,6 +946,7 @@ export abstract class SettingsProvider extends Service {
     const prev = registration.resolved
     if (deepEqualJson(next, prev)) return
     registration.resolved = next
+    this.notifyDescendants(registration.ns)
     for (const watcher of [...registration.watchers]) {
       // Serialize per watcher: invocations of one callback run one at a time
       // in commit order, so a slow stale invocation can never apply after a
@@ -794,7 +972,7 @@ export abstract class SettingsProvider extends Service {
     // failure is contained so one broken observer cannot wedge the commit
     // path (and, through it, a provider's reload loop).
     let invariantFailure: unknown
-    const args = ['settings/updated', registration.ns, next, prev, source]
+    const args = [this, 'settings/updated', registration.ns, next, prev, source]
     for (const listener of this.ctx.events.dispatch('emit', args) as Array<(...listenerArgs: unknown[]) => unknown>) {
       try {
         const returned = listener(registration.ns, next, prev, source)

@@ -16,12 +16,13 @@ import UserQuestionService from '@hydraharness/harness-user-questions'
 import { RpcId, type RpcRequest } from '../src/api/rpc.ts'
 import type { HostFrame } from '../src/api/events.ts'
 import {
-  InvalidPresetIdError, PresetExistsError, resolveSessionPreset, UnknownPresetError,
+  InvalidPresetIdError, PresetExistsError, PresetNotWritableError, resolveSessionPreset, UnknownPresetError,
 } from '@hydraharness/harness-agent-presets'
 import type {} from '@hydraharness/harness-agent-presets/types'
 import { GoalId } from '@hydraharness/harness-goal'
+import { WorkspaceId } from '@hydraharness/harness-workspace'
 import { createApiProxy } from '../src/api-proxy.ts'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 let nextRpc = 0
 function request<P>(payload: P): RpcRequest<P> {
@@ -545,6 +546,38 @@ describe('authoring over the wire', () => {
 })
 
 describe('opening a preset directory', () => {
+  it('requires workspace trust for authoring and refuses editing inherited global presets', async () => {
+    const { api, ctx, cwd } = await harness(['global-user'], undefined, { userIds: ['global-user'] })
+    const workspaceId = WorkspaceId('workspace')
+    ctx.provide('workspaceRegistry', { get: (id: string) => id === workspaceId ? { path: cwd } : undefined } as never)
+    let trusted = false
+    const presets = ctx.get('agentPresets')!
+    const authoringDirectory = vi.fn(() => Promise.reject(new PresetNotWritableError('global-user', 'it does not live under this workspace preset root')))
+    presets.authoringDirectory = authoringDirectory
+    ctx.provide('workspaceConfig', {
+      environment: () => Promise.resolve({ root: cwd, trusted, presets }),
+    } as never)
+    const untrustedRoster = await api.agentPresets.list(request({ workspaceId }))
+    expect(untrustedRoster.result).toMatchObject({ ok: true, value: { authorable: false } })
+    for (const response of [
+      await api.agentPresets.copy(request({ workspaceId, from: 'global-user', agentPreset: 'local-copy' })),
+      await api.agentPresets.remove(request({ workspaceId, agentPreset: 'global-user' })),
+      await api.agentPresets.openDocument(request({ workspaceId, agentPreset: 'global-user' }), new AbortController().signal),
+    ]) expect(response.result).toMatchObject({ ok: false, error: { code: 'agent-preset-read-only' } })
+    trusted = true
+    const inheritedOpen = await api.agentPresets.openDocument(request({ workspaceId, agentPreset: 'global-user' }), new AbortController().signal)
+    expect(authoringDirectory).toHaveBeenCalledWith('global-user')
+    expect(inheritedOpen.result.ok).toBe(false)
+    if (inheritedOpen.result.ok || inheritedOpen.result.error.code !== 'agent-preset-read-only') {
+      throw new Error('inherited preset authoring should fail with a read-only preset rejection')
+    }
+    expect(inheritedOpen.result.error.code).toBe('agent-preset-read-only')
+    expect(inheritedOpen.result.error.details.reason).toContain('it does not live under this workspace preset root')
+    expect((await api.agentPresets.list(request({ workspaceId: WorkspaceId('unknown') }))).result)
+      .toMatchObject({ ok: false, error: { code: 'workspace-not-found' } })
+    await ctx.fiber.dispose()
+  })
+
   it('hands the resolved directory to the native opener', async () => {
     const opened: string[] = []
     const { api } = await harness(['standard', 'my-preset'], undefined, {

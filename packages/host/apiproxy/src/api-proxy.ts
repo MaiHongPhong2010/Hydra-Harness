@@ -4,7 +4,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, readFile, stat } from 'node:fs/promises'
+import { mkdir, readFile, rmdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { z as zod } from 'zod'
@@ -14,6 +14,9 @@ import type { AuthorizationPrompt } from '@hydraharness/harness-authorization'
 import { USER_GLOBAL_FILE } from '@hydraharness/harness-agent-instructions'
 import { withFileLock, writeFileAtomic } from '@hydraharness/harness-atomic-write'
 import { resolveHydraHome } from '@hydraharness/harness-home-paths'
+import type {} from '@hydraharness/harness-suggested-prompts'
+import type {} from '@hydraharness/harness-toys/types'
+import type { NotificationId } from '@hydraharness/harness-notifications/types'
 import type {} from '@hydraharness/harness-fs-review'
 import { installModelSelection } from '@hydraharness/harness-agent'
 import type { Agent, AgentHandle, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@hydraharness/harness-agent'
@@ -44,14 +47,14 @@ import {
   InvalidPresetIdError, PresetExistsError, PresetMountError,
   PresetNotWritableError, resolveSessionPreset, UnknownPresetError,
 } from '@hydraharness/harness-agent-presets'
-import type { PresetBearingSession } from '@hydraharness/harness-agent-presets'
+import type { AgentPresets, PresetBearingSession } from '@hydraharness/harness-agent-presets'
 import type {} from '@hydraharness/harness-tools'
 import type {
   ApiProxy, ConfigurableProviderView, CredentialView, GoalRef, HistoryEntry, HostFrame,
   InstructionsDocumentView, MemoryEntryView, ModelCatalogFailure, ModelProviderGroup,
   ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
   ConversationRevision, SessionVersionState, QueuedInboxItem, SessionSummary,
-  SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
+  SettingsNamespaceView, SettingsTarget, SubagentAddress, JobView, ToolEventView,
   WorkspaceId, WorkspaceView,
   AuthorizationAttemptView, AuthorizationPromptView,
 } from './api/index.ts'
@@ -92,7 +95,7 @@ import type {} from '@hydraharness/harness-skill/types'
 // service reads stay optional (`ctx.get`) so a composition without either
 // provider still serves every other domain.
 import { SettingsConflictError, settingsNamespace } from '@hydraharness/harness-settings'
-import type { SettingsDescriptor, SettingsNamespace, SettingsPathOp } from '@hydraharness/harness-settings'
+import type { SettingsDescriptor, SettingsNamespace, SettingsPathOp, SettingsProvider } from '@hydraharness/harness-settings'
 import { SearchProviderError } from '@hydraharness/harness-web'
 import { credentialRef, parseCredentialKey } from '@hydraharness/harness-credentials'
 // Value edge: the rename impl narrows the title service's validation failure; the import also resolves `ctx.get('sessionTitle')`.
@@ -100,6 +103,8 @@ import { SessionTitleInvalidError } from '@hydraharness/harness-session-title'
 import type { CallId } from '@hydraharness/harness-llm/brand'
 import type { Branded } from '@hydraharness/harness-brand'
 import type { ScopeKey } from '@hydraharness/harness-scope'
+import { bindScopeParent } from '@hydraharness/harness-scope'
+import type { WorkspaceEnvironment } from '@hydraharness/harness-workspace-config'
 import type { ApprovalOutcome, ApprovalRequestId } from '@hydraharness/harness-user-approval'
 // Side-effect type import: resolves the `approval/request` waterfall and
 // `ctx.get('approval')` without a value dependency on the seam (optional composition).
@@ -333,6 +338,7 @@ async function buildModelCatalog(ctx: Context, conversationOnly = false): Promis
           ...model.endpoints === undefined ? {} : { endpoints: [...model.endpoints] },
           ...model.description === undefined ? {} : { description: model.description },
           ...reasoning === undefined ? {} : { reasoning },
+          ...resolved.serviceTiers === undefined ? {} : { serviceTiers: [...resolved.serviceTiers] },
         }
       }))
       const group: ModelProviderGroup = {
@@ -1184,6 +1190,7 @@ function workspaceNotFound<T>(request: RpcRequest<unknown>, workspaceId: string)
 /** Wire projection of one workspace entity (the workspace.* value row). */
 function workspaceView(workspace: Workspace): WorkspaceView {
   return {
+    ...(workspace.kind === undefined ? {} : { kind: workspace.kind }),
     workspaceId: workspace.id,
     path: workspace.path,
     title: workspace.title,
@@ -1196,6 +1203,7 @@ function workspaceView(workspace: Workspace): WorkspaceView {
 function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceView {
   const record: WorkspaceRecord = workspaceRecord.parse(value)
   return {
+    ...(record.kind === undefined ? {} : { kind: record.kind }),
     workspaceId: workspaceId as WorkspaceId,
     path: record.path,
     title: record.title,
@@ -1222,6 +1230,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const { provider, model } = defaults.defaultModelSelection()
     return { provider, model }
   }
+  const agentEnvironments = new WeakMap<Agent, WorkspaceEnvironment>()
+  const environmentForAgent = (agent: Agent): WorkspaceEnvironment | undefined =>
+    agentEnvironments.get(agent) ?? (agent.session.header.cwd === undefined
+      ? undefined : ctx.get('workspaceConfig')?.currentEnvironment(agent.session.header.cwd))
+  const workspaceEnvironment = (cwd: string): Promise<WorkspaceEnvironment | undefined> =>
+    ctx.get('workspaceConfig')?.environment(cwd) ?? Promise.resolve(undefined)
+
   type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection; readonly explicit: boolean }
   const selections = new WeakMap<Agent, WebModelSelectionRef>()
   /**
@@ -1235,6 +1250,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
   const sessionCreations = new Map<SessionId, Promise<Agent>>()
   const ownedSessions = new Map<SessionId, AgentHandle>()
+  const retiredDefaults = new Map<SessionId, { options: AgentOptions; selection?: ModelSelection }>()
   const deletingSessions = new Set<SessionId>()
   /** Serializes path ownership and explicit title checks with Workspace mutations. */
   let workspaceCreationChain = Promise.resolve()
@@ -1302,7 +1318,70 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   function installSelection(agentCtx: Context): void {
     const agent = agentCtx.agent
     if (agent === undefined) throw new Error('api-proxy: agent setup has no scoped agent')
-    selectionFor(agent)
+    const selection = selectionFor(agent)
+    const retired = retiredDefaults.get(agent.id)
+    if (retired?.selection !== undefined) selection.current = retired.selection
+  }
+
+  /** Flush and retire only API-owned, quiescent Agents whose project generation was revoked. */
+  async function prepareLiveAgent(agent: Agent): Promise<import('@hydraharness/harness-api-remotes').ApiRemoteLookupError | undefined> {
+    const environment = environmentForAgent(agent)
+    if (environment === undefined || !environment.trusted
+      || !environment.presets?.isRetiredProjectContext(agent.ctx, environment.root)) return undefined
+    const busy = (reason: string) => ({ code: 'agent-busy', message: `session "${agent.id}" cannot resume yet: ${reason}`, details: { reason } } as const)
+    const handle = ownedSessions.get(agent.id)
+    if (handle === undefined) return busy('its lifecycle is owned outside this API')
+    if (agent.status !== 'idle') return busy('an active turn is still running')
+    if (agent.inbox.nextTurn.length > 0 || agent.inbox.nextStep.length > 0) return busy('pending input must settle first')
+    if (ctx.get('sessionPersistence') === undefined) return busy('session persistence is unavailable')
+    const hasBusyDescendants = (): boolean => {
+      const descendants = new Set([agent])
+      const live = ctx.agents.list()
+      for (const owner of descendants) {
+        for (const child of live) {
+          if (descendants.has(child) || (!ctx.agents.isOwnedBy(child.id, owner)
+            && (child.session.header.origin !== 'subagent' || child.session.header.parentSession !== owner.id))) continue
+          if (child.status !== 'idle' || child.inbox.nextTurn.length > 0 || child.inbox.nextStep.length > 0) return true
+          descendants.add(child)
+        }
+      }
+      return false
+    }
+    if (hasBusyDescendants()) return busy('an owned subagent is still active')
+    let preparation: Promise<{ done: Promise<void> } | { error: ReturnType<typeof busy> }>
+    try {
+      preparation = agent.runMaintenance(async (signal) => {
+        if (!await ctx.sessions.flush(agent.session)) return { error: busy('session has no durability listener') }
+        try {
+          await inspectApiRemoteSession(ctx, agent.id)
+        } catch (error: unknown) {
+          if (error instanceof SessionNotFound) return { error: busy('session has no durable record') }
+          throw error
+        }
+        signal.throwIfAborted()
+        if (!environment.trusted) return { error: busy('workspace trust was revoked during the flush') }
+        if (agent.inbox.nextTurn.length > 0 || agent.inbox.nextStep.length > 0) return { error: busy('input arrived during the flush') }
+        if (hasBusyDescendants()) return { error: busy('an owned subagent became active during the flush') }
+        const selection = selectionFor(agent)
+        retiredDefaults.set(agent.id, {
+          options: { ...agent.options },
+          ...selection.explicit ? { selection: { ...selection.current } } : {},
+        })
+        // Disposal waits for maintenance to finish, so its promise remains outside the maintenance result.
+        return { done: handle.dispose() }
+      })
+    } catch {
+      return busy('another maintenance task owns this Agent')
+    }
+    try {
+      const prepared = await preparation
+      if ('error' in prepared) return prepared.error
+      await prepared.done
+      ownedSessions.delete(agent.id)
+      return undefined
+    } catch (error: unknown) {
+      return { code: 'internal', message: `failed to prepare session "${agent.id}" for resume: ${String(error)}`, details: {} }
+    }
   }
 
   /**
@@ -1336,20 +1415,29 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
    * setup, where a failure rolls the whole creation back rather than leaving a
    * published session whose capabilities are half-installed.
    *
-   * A deployment with no preset roster composes nothing and every session
-   * shares the host composition, which is the behavior before presets existed.
+   * Without a preset roster, the Agent inherits workspace registrations directly.
+   * @param cwd - Project directory whose workspace owns the composition.
    * @param presetId - the requested preset, or `undefined` for the default.
    * @returns the id to record on the header (absent without a roster) and the setup callback.
    * @throws when the roster supplies no such preset.
    */
-  async function composeAgent(presetId: string | undefined): Promise<{
+  async function composeAgent(cwd: string, presetId: string | undefined): Promise<{
     agentPreset?: string
+    environment?: WorkspaceEnvironment
     setup: (agentCtx: Context) => Promise<void>
   }> {
-    const presets = ctx.get('agentPresets')
+    const environment = await workspaceEnvironment(cwd)
+    const presets = environment?.presets ?? ctx.get('agentPresets')
     if (presets === undefined) {
       return {
+        ...environment === undefined ? {} : { environment },
         setup: (agentCtx: Context) => {
+          const agent = agentCtx.agent
+          if (agent === undefined) throw new Error('api-proxy: agent setup has no scoped agent')
+          if (environment !== undefined) {
+            agentEnvironments.set(agent, environment)
+            bindScopeParent(agent, environment.scopeKey)
+          }
           installSelection(agentCtx)
           return Promise.resolve()
         },
@@ -1358,7 +1446,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const resolvedId = (await presets.resolve(presetId)).id
     return {
       agentPreset: resolvedId,
+      ...environment === undefined ? {} : { environment },
       setup: async (agentCtx: Context) => {
+        const agent = agentCtx.agent
+        if (agent === undefined) throw new Error('api-proxy: agent setup has no scoped agent')
+        if (environment !== undefined) agentEnvironments.set(agent, environment)
         installSelection(agentCtx)
         await presets.mount(agentCtx, resolvedId)
       },
@@ -1383,13 +1475,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   // header here would silently undo the switch on the next restart and
   // restore that history under the old tool set.
   const agentFor = createApiRemoteAgentResolver(ctx, {
-    agentOptions,
-    onResume: (handle) => { ownedSessions.set(handle.agent.id, handle) },
+    prepareLive: prepareLiveAgent,
+    agentOptions: ({ meta }) => retiredDefaults.get(meta.id)?.options ?? agentOptions(),
+    onResume: (handle) => { ownedSessions.set(handle.agent.id, handle); retiredDefaults.delete(handle.agent.id) },
     unavailable: sessionId => deletingSessions.has(sessionId)
       ? { code: 'agent-busy', message: 'This session is being deleted.', details: { reason: 'deleting' } }
       : undefined,
     setup: async ({ meta, events }) =>
-      (await composeAgent(resolveSessionPreset({ header: meta, events }))).setup,
+      (await composeAgent(meta.cwd ?? defaults.cwd, resolveSessionPreset({ header: meta, events }))).setup,
   })
 
   /** Send one transient frame to every connected mux consumer. */
@@ -1470,6 +1563,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   }
 
   ctx.on('session/event', (session, event) => {
+    if (event.type === 'turn/end') ctx.emit('notifications/requested', {
+      id: `turn:${session.id}:${event.seq}` as NotificationId, sessionId: session.id, kind: 'completion',
+      title: 'Hydra', body: 'Your turn has finished.',
+    })
     if (event.type !== 'agent/inbox/spliced') return
     const agent = ctx.agents.get(session.id)
     if (agent?.session !== session) return
@@ -1514,6 +1611,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           payload: { type: 'question/requested', sessionId, questions: request.questions },
         }
         for (const queue of muxQueues) queue.push(envelope)
+        ctx.emit('notifications/requested', {
+          id: `question:${rpcId}` as NotificationId, sessionId, kind: 'question', title: 'Hydra needs your answer',
+          body: request.questions.map(question => question.question).join('\n').slice(0, 2048),
+        })
       })
     },
   })
@@ -1746,8 +1847,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   ): Promise<ScopeKey | undefined> {
     const live = ctx.get('agents')?.get(sessionId)
     if (live !== undefined) return live
-    const presets = ctx.get('agentPresets')
-    if (presets === undefined) return undefined
+    const environment = await workspaceEnvironment(session.header.cwd ?? defaults.cwd)
+    const presets = environment?.presets ?? ctx.get('agentPresets')
+    if (presets === undefined) return environment?.scopeKey
     try {
       // An unrecorded preset (a log from before the roster existed) renders
       // through the DEFAULT preset's standing layer: that is the composition
@@ -1757,7 +1859,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     } catch {
       // Swallows only the unknown/unusable-preset rejection from the roster:
       // a deleted or broken preset must degrade this read, never fail it.
-      return undefined
+      return environment?.scopeKey
     }
   }
 
@@ -1767,8 +1869,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     cwd: string,
     checkPersistedIdentity: boolean,
     presetId?: string,
-  ): Promise<Agent> {
+  ): Promise<Agent | { error: RpcError }> {
     if (deletingSessions.has(sessionId)) throw new Error('This session is being deleted.')
+    const existing = ctx.agents.get(sessionId)
+    if (existing !== undefined && existing.session.header.cwd === cwd && !hasSubagentOwner(existing.session, existing)) {
+      assertPresetUnchanged(sessionId, presetId, resolveSessionPreset(existing.session))
+      const refreshed = await agentFor(sessionId)
+      if ('error' in refreshed) return refreshed
+    }
     let creation = sessionCreations.get(sessionId)
     if (creation === undefined) {
       creation = (async () => {
@@ -1802,12 +1910,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // session's history was produced under that composition, and
           // rebuilding it differently would replay tool calls the model can no
           // longer make.
+          const composition = await composeAgent(cwd, storedPreset)
           const handle = await ctx.agents.resume({
             resumeSessionId: sessionId,
-            agentOptions: agentOptions(),
-            setup: (await composeAgent(storedPreset)).setup,
+            agentOptions: retiredDefaults.get(sessionId)?.options ?? agentOptions(),
+            setup: composition.setup,
           })
           ownedSessions.set(sessionId, handle)
+          retiredDefaults.delete(sessionId)
           return handle.agent
         }
 
@@ -1816,7 +1926,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         } catch (error: unknown) {
           throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
         }
-        const composition = await composeAgent(presetId)
+        const composition = await composeAgent(cwd, presetId)
         const handle = await ctx.agents.create({
           sessionId,
           agentOptions: agentOptions(),
@@ -1946,7 +2056,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
    * genuinely absent.
    */
   function goalServiceFor(agent: Agent): NonNullable<ReturnType<typeof ctx.get<'goals'>>> | { error: RpcError } {
-    const presets = ctx.get('agentPresets')
+    const presets = environmentForAgent(agent)?.presets ?? ctx.get('agentPresets')
     const goals = presets?.serviceFor(agent, 'goals') ?? ctx.get('goals')
     if (goals === undefined) {
       return { error: { code: 'internal', message: 'goal service is absent: neither this session\'s agent preset nor the host composition mounts @hydraharness/harness-goal', details: {} } }
@@ -2240,8 +2350,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   }
 
   /** Map one redacted settings descriptor to its wire view. */
-  function namespaceView(descriptor: SettingsDescriptor): SettingsNamespaceView {
+  function namespaceView(descriptor: SettingsDescriptor, target: SettingsTarget = {}): SettingsNamespaceView {
     return {
+      ...target,
       ns: String(descriptor.ns),
       schema: descriptor.schema,
       value: descriptor.value,
@@ -2260,13 +2371,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
    * `settings-rejected` carrying the seam's own message.
    */
   async function settingsWrite(
-    request: RpcRequest<unknown>,
+    request: RpcRequest<SettingsTarget>,
     ns: string,
     mode: 'update' | 'replace' | 'mutate',
     section: object,
     expectedRevision?: number,
   ): Promise<RpcResponse<SettingsNamespaceView>> {
-    const settings = ctx.get('settings')
+    const addressed = await settingsForTarget(request)
+    if ('error' in addressed) return err(request, addressed.error)
+    const { settings, target } = addressed
     if (settings === undefined) return err(request, settingsAbsent())
     const rejected = (error: unknown): RpcResponse<SettingsNamespaceView> => {
       // A stale writer is its own outcome, not a malformed request: the client
@@ -2305,27 +2418,71 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       // a concurrent registrant disposal can produce it.
       return err(request, { code: 'internal', message: `settings namespace "${ns}" was disposed after the ${mode}`, details: {} })
     }
-    return ok(request, namespaceView(descriptor))
+    return ok(request, namespaceView(descriptor, target))
+  }
+
+  /** Resolve only Host-registered workspace identities to settings providers. */
+  async function settingsForTarget(request: RpcRequest<SettingsTarget>): Promise<{
+    settings: SettingsProvider | undefined
+    target: SettingsTarget
+  } | { error: RpcError }> {
+    const { workspaceId, layer } = request.payload
+    if (workspaceId === undefined) {
+      if (layer !== undefined) return { error: { code: 'internal', message: 'a settings layer requires a workspaceId', details: {} } }
+      return { settings: ctx.get('settings'), target: {} }
+    }
+    if (ctx.workspaceRegistry.get(brandWorkspaceId(workspaceId)) === undefined) {
+      return { error: { code: 'workspace-not-found', message: `workspace "${workspaceId}" not found`, details: { workspaceId } } }
+    }
+    const workspaceConfig = ctx.get('workspaceConfig')
+    if (workspaceConfig === undefined) return { error: settingsAbsent() }
+    try {
+      const target = { workspaceId, layer: layer ?? 'local' } as const
+      return { settings: await workspaceConfig.settingsFor(workspaceId, target.layer), target }
+    } catch (error: unknown) {
+      return { error: { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} } }
+    }
+  }
+
+  async function presetsForTarget(workspaceId?: WorkspaceId): Promise<{
+    presets: AgentPresets | undefined
+    trusted: boolean
+  } | { error: RpcError }> {
+    if (workspaceId === undefined) return { presets: ctx.get('agentPresets'), trusted: true }
+    const workspace = ctx.workspaceRegistry.get(brandWorkspaceId(workspaceId))
+    if (workspace === undefined) {
+      return { error: { code: 'workspace-not-found', message: `workspace "${workspaceId}" not found`, details: { workspaceId } } }
+    }
+    const workspaceConfig = ctx.get('workspaceConfig')
+    if (workspaceConfig === undefined) return { error: settingsAbsent() }
+    const environment = await workspaceConfig.environment(workspace.path)
+    return { presets: environment.presets, trusted: environment.trusted }
   }
 
   /** Byte cap on the personalization custom-instructions document (raw UTF-8 bytes). */
   const INSTRUCTIONS_MAX_BYTES = 65_536
 
   /** Absolute path of the personalization custom-instructions document. */
-  function instructionsPath(): string {
-    return join(resolveHydraHome(), USER_GLOBAL_FILE)
+  async function instructionsPath(target: SettingsTarget): Promise<string> {
+    if (target.workspaceId === undefined) return join(resolveHydraHome(), USER_GLOBAL_FILE)
+    const workspace = ctx.workspaceRegistry.get(brandWorkspaceId(target.workspaceId))
+    if (workspace === undefined) throw new Error(`workspace "${target.workspaceId}" not found`)
+    const workspaceConfig = ctx.get('workspaceConfig')
+    if (workspaceConfig === undefined) throw new Error('workspace configuration is unavailable')
+    await workspaceConfig.initialize(workspace.path)
+    return join(workspace.path, '.hydra', target.layer === 'shared' ? 'AGENTS.md' : 'AGENTS.local.md')
   }
 
   /** Read the custom-instructions document and its SHA-256 content-hash revision. */
-  async function readInstructionsDocument(): Promise<InstructionsDocumentView> {
+  async function readInstructionsDocument(target: SettingsTarget = {}, path?: string): Promise<InstructionsDocumentView> {
     let raw: Buffer
     try {
-      raw = await readFile(instructionsPath())
+      raw = await readFile(path ?? await instructionsPath(target))
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       raw = Buffer.alloc(0)
     }
-    return { content: raw.toString('utf8'), revision: createHash('sha256').update(raw).digest('hex') }
+    return { ...target, content: raw.toString('utf8'), revision: createHash('sha256').update(raw).digest('hex') }
   }
 
   /**
@@ -2336,7 +2493,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
    * and refuses oversized content as `instructions-rejected`.
    */
   async function writeInstructionsDocument(
-    request: RpcRequest<unknown>,
+    request: RpcRequest<SettingsTarget>,
     content: string,
     expectedRevision: string | undefined,
   ): Promise<RpcResponse<InstructionsDocumentView>> {
@@ -2348,13 +2505,17 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         details: {},
       })
     }
-    const path = instructionsPath()
+    const addressed = await settingsForTarget(request)
+    if ('error' in addressed) return err(request, addressed.error)
+    const { target } = addressed
     try {
+      const path = await instructionsPath(target)
       // withFileLock creates its `.lock` sibling with exclusive create, which
       // needs the parent directory to already exist.
       await mkdir(dirname(path), { recursive: true, mode: 0o700 })
       return await withFileLock(path, async () => {
-        const current = await readInstructionsDocument()
+        await instructionsPath(target)
+        const current = await readInstructionsDocument(target, path)
         if (expectedRevision !== undefined && expectedRevision !== current.revision) {
           return err(request, {
             code: 'instructions-conflict',
@@ -2363,7 +2524,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         }
         await writeFileAtomic(path, content, { mode: 0o600, dirMode: 0o700 })
-        return ok(request, { content, revision: createHash('sha256').update(bytes).digest('hex') })
+        return ok(request, { ...target, content, revision: createHash('sha256').update(bytes).digest('hex') })
       })
     } catch (error: unknown) {
       return err(request, {
@@ -2560,6 +2721,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       async create(request) {
         const sessionId = request.payload.sessionId ?? `session-${randomUUID()}` as SessionId
         let workspace: Workspace | undefined
+        if (request.payload.projectless === true) {
+          try { workspace = await ctx.workspaceRegistry.createTask() }
+          catch (error: unknown) { return err(request, { code: 'internal', message: `Task directory creation failed: ${String(error)}`, details: {} }) }
+        }
         if (request.payload.workspaceId !== undefined) {
           workspace = ctx.workspaceRegistry.get(brandWorkspaceId(request.payload.workspaceId))
           if (workspace === undefined) {
@@ -2570,73 +2735,84 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             })
           }
         }
-        const cwd = workspace?.path ?? request.payload.cwd ?? defaults.cwd
-        const requestedPreset = request.payload.agentPreset
-        const refreshDefaultAfterReuse = request.payload.reuseWorkspaceBlank === true
+        try {
+          const cwd = workspace?.path ?? request.payload.cwd ?? defaults.cwd
+          const requestedPreset = request.payload.agentPreset
+          const refreshDefaultAfterReuse = request.payload.reuseWorkspaceBlank === true
           && workspace !== undefined
           && workspace.sessionIds.includes(sessionId)
           && !ctx.workspaceRegistry.archivedSessionIds.includes(sessionId)
-        let adopted: Agent
-        try {
-          adopted = await ensureSession(sessionId, cwd, request.payload.sessionId !== undefined, requestedPreset)
-        } catch (error: unknown) {
-          if (error instanceof AgentPresetConflict) {
-            return err(request, {
-              code: 'agent-preset-conflict',
-              message: error.message,
-              details: {
-                sessionId: error.sessionId,
-                requestedPreset: error.requestedPreset,
-                ...error.existingPreset === undefined ? {} : { existingPreset: error.existingPreset },
-              },
-            })
-          }
-          const refused = presetFailure(request, error)
-          if (refused !== undefined) return refused
-          if (error instanceof SessionCwdConflict) {
-            return err(request, {
-              code: 'session-conflict',
-              message: error.message,
-              details: {
-                sessionId: error.sessionId,
-                requestedCwd: error.requestedCwd,
-                ...error.existingCwd === undefined ? {} : { existingCwd: error.existingCwd },
-              },
-            })
-          }
-          if (error instanceof SubagentSessionOwnership) {
-            return err(request, subagentOwnershipError(error.sessionId))
-          }
-          return err(request, {
-            code: 'internal',
-            message: `failed to create session "${sessionId}": ${String(error)}`,
-            details: {},
-          })
-        }
-        if (workspace !== undefined) {
+          let adopted: Agent
           try {
-            await workspace.attachSession(sessionId)
+            const resolved = await ensureSession(sessionId, cwd, request.payload.sessionId !== undefined, requestedPreset)
+            if ('error' in resolved) return err(request, resolved.error)
+            adopted = resolved
           } catch (error: unknown) {
+            if (error instanceof AgentPresetConflict) {
+              return err(request, {
+                code: 'agent-preset-conflict',
+                message: error.message,
+                details: {
+                  sessionId: error.sessionId,
+                  requestedPreset: error.requestedPreset,
+                  ...error.existingPreset === undefined ? {} : { existingPreset: error.existingPreset },
+                },
+              })
+            }
+            const refused = presetFailure(request, error)
+            if (refused !== undefined) return refused
+            if (error instanceof SessionCwdConflict) {
+              return err(request, {
+                code: 'session-conflict',
+                message: error.message,
+                details: {
+                  sessionId: error.sessionId,
+                  requestedCwd: error.requestedCwd,
+                  ...error.existingCwd === undefined ? {} : { existingCwd: error.existingCwd },
+                },
+              })
+            }
+            if (error instanceof SubagentSessionOwnership) {
+              return err(request, subagentOwnershipError(error.sessionId))
+            }
             return err(request, {
-              code: 'workspace-attach-failed',
-              message: `session "${sessionId}" was created but could not attach to workspace "${workspace.id}": ${String(error)}`,
-              details: { sessionId, workspaceId: workspace.id },
+              code: 'internal',
+              message: `failed to create session "${sessionId}": ${String(error)}`,
+              details: {},
             })
           }
+          if (workspace !== undefined) {
+            try {
+              await workspace.attachSession(sessionId)
+            } catch (error: unknown) {
+              return err(request, {
+                code: 'workspace-attach-failed',
+                message: `session "${sessionId}" was created but could not attach to workspace "${workspace.id}": ${String(error)}`,
+                details: { sessionId, workspaceId: workspace.id },
+              })
+            }
+          }
+          if (refreshDefaultAfterReuse && sessionBlank(adopted.session)) {
+            const presets = environmentForAgent(adopted)?.presets ?? ctx.get('agentPresets')
+            const permissions = presets?.serviceFor(adopted, 'permissionPresets') ?? adopted.ctx.get('permissionPresets')
+            permissions?.refreshDefaultForReuse(adopted.session)
+          }
+          // Echo the composition the session RUNS so a client can label it
+          // without waiting for the next list refresh — the create is the commit
+          // point that knows it (a caller that named none gets the default).
+          // Resolved from the log for the same reason `sessionListFields()` is:
+          // this handler also adopts an already-live session, and one that
+          // switched while blank runs a preset its header no longer names, so
+          // echoing the header would contradict both the adoption this call just
+          // allowed and the row `session.list` serves for the same session.
+          const createdPreset = resolveSessionPreset(adopted.session)
+          return ok(request, { sessionId, ...createdPreset === undefined ? {} : { agentPreset: createdPreset } })
+        } finally {
+          if (request.payload.projectless === true && workspace !== undefined && ctx.sessions.get(sessionId) === undefined) {
+            await ctx.workspaceRegistry.delete(workspace.id)
+            await rmdir(workspace.path)
+          }
         }
-        if (refreshDefaultAfterReuse && sessionBlank(adopted.session)) {
-          ctx.get('permissionPresets')?.refreshDefaultForReuse(adopted.session)
-        }
-        // Echo the composition the session RUNS so a client can label it
-        // without waiting for the next list refresh — the create is the commit
-        // point that knows it (a caller that named none gets the default).
-        // Resolved from the log for the same reason `sessionListFields()` is:
-        // this handler also adopts an already-live session, and one that
-        // switched while blank runs a preset its header no longer names, so
-        // echoing the header would contradict both the adoption this call just
-        // allowed and the row `session.list` serves for the same session.
-        const createdPreset = resolveSessionPreset(adopted.session)
-        return ok(request, { sessionId, ...createdPreset === undefined ? {} : { agentPreset: createdPreset } })
       },
 
       async delete(request) {
@@ -2700,6 +2876,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           const sessionIds = [...ids].filter(id => id !== sessionId).concat(sessionId)
           for (const id of sessionIds) {
             await persistence.delete(id)
+            retiredDefaults.delete(id)
             await ctx.workspaceRegistry.removeSession(id)
           }
           return ok(request, { deleted: true as const, sessionIds })
@@ -2757,6 +2934,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const { groups, failures } = await buildModelCatalog(ctx, true)
         const routable = await selectionRoutable(found.agent, groups)
         return ok(request, { current: { ...current }, routable, groups, failures })
+      },
+
+      async suggestions(request) {
+        const found = await agentFor(request.payload.sessionId)
+        if ('error' in found) return err(request, found.error)
+        const owner = ctx.get('suggestedPrompts')
+        if (owner === undefined) return ok(request, { items: [] })
+        try { return ok(request, await owner.batch(found.agent, request.payload.refresh === true)) }
+        catch (error: unknown) { return ok(request, { items: [], error: error instanceof Error ? error.message : String(error) }) }
       },
 
       async selectModel(request) {
@@ -2931,7 +3117,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // those tools, and composing anything else would strand the tool calls
         // it already carries. Now that no model-facing row sits in the host
         // plane, composing nothing would leave the child with no tools at all.
-        const forkComposition = await composeAgent(resolveSessionPreset(source))
+        const forkComposition = await composeAgent(source.header.cwd ?? defaults.cwd, resolveSessionPreset(source))
         try {
           const handle = await ctx.agents.create({
             sessionId: childId,
@@ -3687,7 +3873,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       // error: composing no presets is a valid deployment, and the browser
       // simply offers no choice.
       async list(request) {
-        const presets = ctx.get('agentPresets')
+        const addressed = await presetsForTarget(request.payload.workspaceId)
+        if ('error' in addressed) return err(request, addressed.error)
+        const { presets } = addressed
         if (presets === undefined) return ok(request, { presets: [], authorable: false, hasDocument: false })
         const defaultId = presets.defaultId
         return ok(request, {
@@ -3699,7 +3887,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             ...preset.description === undefined ? {} : { description: preset.description },
             ...preset.broken === undefined ? {} : { broken: preset.broken },
           })),
-          authorable: presets.authorable,
+          authorable: presets.authorable && addressed.trusted,
           hasDocument: canOpenPaths(),
         })
       },
@@ -3709,7 +3897,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       // agent and the session survive, only the composition is swapped.
       async select(request) {
         const { sessionId, agentPreset } = request.payload
-        const presets = ctx.get('agentPresets')
+        const found = await agentFor(sessionId)
+        if ('error' in found) return err(request, found.error)
+        const { agent } = found
+        const presets = environmentForAgent(agent)?.presets ?? ctx.get('agentPresets')
         if (presets === undefined) {
           return err(request, {
             code: 'agent-preset-not-found',
@@ -3717,9 +3908,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: { agentPreset, available: [] },
           })
         }
-        const found = await agentFor(sessionId)
-        if ('error' in found) return err(request, found.error)
-        const { agent } = found
         const swap = async (): Promise<RpcResponse<{ agentPreset: string }>> => {
           // Re-read inside the queue: an earlier switch may have run, and a
           // conversation may have started, since this request arrived.
@@ -3762,7 +3950,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       // drive the host desktop.
       async read(request) {
         const { agentPreset } = request.payload
-        const presets = ctx.get('agentPresets')
+        const addressed = await presetsForTarget(request.payload.workspaceId)
+        if ('error' in addressed) return err(request, addressed.error)
+        const { presets } = addressed
         if (presets === undefined) return err(request, noRoster(agentPreset))
         try {
           const preset = await presets.resolve(agentPreset)
@@ -3780,7 +3970,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async copy(request) {
         const { from, agentPreset, name } = request.payload
-        const presets = ctx.get('agentPresets')
+        const addressed = await presetsForTarget(request.payload.workspaceId)
+        if ('error' in addressed) return err(request, addressed.error)
+        const { presets } = addressed
+        if (!addressed.trusted) {
+          return err(request, { code: 'agent-preset-read-only', message: 'trust this workspace before authoring its presets', details: { agentPreset, reason: 'workspace is not trusted' } })
+        }
         if (presets === undefined) return err(request, noRoster(agentPreset))
         try {
           await presets.copy(from, agentPreset, name)
@@ -3792,7 +3987,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async openDocument(request, signal) {
         const { agentPreset } = request.payload
-        const presets = ctx.get('agentPresets')
+        const addressed = await presetsForTarget(request.payload.workspaceId)
+        if ('error' in addressed) return err(request, addressed.error)
+        const { presets } = addressed
+        if (!addressed.trusted) {
+          return err(request, { code: 'agent-preset-read-only', message: 'trust this workspace before authoring its presets', details: { agentPreset, reason: 'workspace is not trusted' } })
+        }
         if (presets === undefined) return err(request, noRoster(agentPreset))
         try {
           const preset = await presets.resolve(agentPreset)
@@ -3805,7 +4005,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // The id resolved against the Host's own roots is what selects the
           // directory — no browser payload carries a path in either direction
           // unless the deployment has no opener to hand it to.
-          const directory = dirname(preset.path)
+          const directory = request.payload.workspaceId === undefined
+            ? dirname(preset.path) : await presets.authoringDirectory(preset.id)
           if (!canOpenPaths()) return ok(request, { opened: false as const, path: directory })
           return await openPath(request, directory, signal)
         } catch (error: unknown) {
@@ -3815,7 +4016,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async remove(request) {
         const { agentPreset } = request.payload
-        const presets = ctx.get('agentPresets')
+        const addressed = await presetsForTarget(request.payload.workspaceId)
+        if ('error' in addressed) return err(request, addressed.error)
+        const { presets } = addressed
+        if (!addressed.trusted) {
+          return err(request, { code: 'agent-preset-read-only', message: 'trust this workspace before authoring its presets', details: { agentPreset, reason: 'workspace is not trusted' } })
+        }
         if (presets === undefined) return err(request, noRoster(agentPreset))
         try {
           await presets.remove(agentPreset)
@@ -3845,13 +4051,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // cwd-less header is a pre-project legacy log (not served).
           return err(request, { code: 'internal', message: `session "${sessionId}" has no project cwd`, details: {} })
         }
-        const cwd = session.header.cwd
+        const environment = await workspaceEnvironment(session.header.cwd)
+        const cwd = environment?.root || session.header.cwd
         // The host registry is layered per scope and serves every session. A
         // composition may still realm-mount its own registry instead; that
         // instance is invisible to host contexts, so address it through the
         // live agent (`agents.get` keeps the no-side-effect stance above).
         const live = ctx.agents.get(sessionId)
-        const presets = ctx.get('agentPresets')
+        const presets = environment?.presets ?? ctx.get('agentPresets')
         const scoped = live === undefined ? undefined : presets?.serviceFor(live, 'skills')
         // Same stance as the commands domain: a missing service means no
         // composition mounts @hydraharness/harness-skill, not an empty catalog. `ctx.get` also
@@ -3882,17 +4089,24 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     },
 
     settings: {
-      describe(request) {
-        const settings = ctx.get('settings')
-        if (settings === undefined) return Promise.resolve(err(request, settingsAbsent()))
-        return Promise.resolve(ok(request, {
+      async describe(request) {
+        const addressed = await settingsForTarget(request)
+        if ('error' in addressed) return err(request, addressed.error)
+        const { settings, target } = addressed
+        if (settings === undefined) return err(request, settingsAbsent())
+        const trusted = target.workspaceId === undefined ? undefined : ctx.get('workspaceConfig')?.isTrusted(target.workspaceId)
+        return ok(request, {
+          ...target,
+          ...trusted === undefined ? {} : { trusted },
           writable: settings.writable,
           hasDocument: settings.documentPath !== undefined,
-          namespaces: settings.describe({ redactSecrets: true }).map(namespaceView),
-        }))
+          namespaces: settings.describe({ redactSecrets: true }).map(descriptor => namespaceView(descriptor, target)),
+        })
       },
       async openDocument(request, signal) {
-        const settings = ctx.get('settings')
+        const addressed = await settingsForTarget(request)
+        if ('error' in addressed) return err(request, addressed.error)
+        const { settings, target } = addressed
         if (settings === undefined) return err(request, settingsAbsent())
         if (isAborted(signal)) {
           return err(request, {
@@ -3932,13 +4146,86 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
-        return openTextFile(request, path, signal)
+        const opened = await openTextFile(request, path, signal)
+        return opened.result.ok ? ok(request, { ...target, opened: true as const }) : opened
       },
       update: request => settingsWrite(request, request.payload.ns, 'update', request.payload.patch, request.payload.expectedRevision),
       replace: request => settingsWrite(request, request.payload.ns, 'replace', request.payload.section, request.payload.expectedRevision),
-      mutate: request => settingsWrite(request, request.payload.ns, 'mutate', request.payload.ops, request.payload.expectedRevision),
-      readInstructions: request => readInstructionsDocument().then(view => ok(request, view)),
+      async mutate(request) {
+        const { ns, ops, expectedRevision, applyPermissionToOpenSessions } = request.payload
+        if (!applyPermissionToOpenSessions) return settingsWrite(request, ns, 'mutate', ops, expectedRevision)
+        const selected = ops.length === 1 ? ops[0] : undefined
+        if (ns !== 'permission' || request.payload.workspaceId !== undefined || selected === undefined
+          || selected.path.length !== 1 || selected.path[0] !== 'defaultPreset'
+          || (selected.op === 'set' && typeof selected.value !== 'string')) {
+          return err(request, { code: 'settings-rejected', message: 'Permission broadcast requires a global defaultPreset selection.', details: { ns } })
+        }
+        const inherited = zod.object({ defaultPreset: zod.string() }).safeParse(ctx.get('settings')?.describe().find(item => item.ns === ns)?.base)
+        const preset = selected.op === 'set' ? selected.value as string : inherited.success ? inherited.data.defaultPreset : undefined
+        if (preset === undefined) return err(request, { code: 'settings-rejected', message: 'The inherited permission preset is unavailable.', details: { ns } })
+        const archived = new Set(ctx.workspaceRegistry.archivedSessionIds)
+        const targets = ctx.agents.list().filter(agent => !archived.has(agent.session.id)).map((agent) => {
+          const service = ctx.get('agentPresets')?.serviceFor(agent, 'permissionPresets') ?? agent.ctx.get('permissionPresets')
+          let error: string | undefined
+          try {
+            if (service === undefined) throw new Error('Permission presets are unavailable for this session.')
+            service.resolve(preset)
+          } catch (failure: unknown) { error = failure instanceof Error ? failure.message : String(failure) }
+          return { agent, service, error }
+        })
+        const written = await settingsWrite(request, ns, 'mutate', ops, expectedRevision)
+        if (!written.result.ok) return written
+        const permissionResults = targets.map(({ agent, service, error }) => {
+          if (error !== undefined) return { sessionId: agent.session.id, ok: false, error }
+          try {
+            if (ctx.agents.get(agent.session.id) !== agent) throw new Error('Session closed before the permission change.')
+            if (service === undefined) throw new Error('Permission presets are unavailable for this session.')
+            service.setLive(agent, preset)
+            return { sessionId: agent.session.id, ok: true }
+          } catch (failure: unknown) {
+            return { sessionId: agent.session.id, ok: false, error: failure instanceof Error ? failure.message : String(failure) }
+          }
+        })
+        return ok(request, { ...written.result.value, permissionResults })
+      },
+      async readInstructions(request) {
+        const addressed = await settingsForTarget(request)
+        if ('error' in addressed) return err(request, addressed.error)
+        try {
+          return ok(request, await readInstructionsDocument(addressed.target))
+        } catch (error: unknown) {
+          return err(request, { code: 'instructions-rejected', message: error instanceof Error ? error.message : String(error), details: {} })
+        }
+      },
       writeInstructions: request => writeInstructionsDocument(request, request.payload.content, request.payload.expectedRevision),
+      async workspaceStatus(request) {
+        const addressed = await settingsForTarget(request)
+        if ('error' in addressed) return err(request, addressed.error)
+        const { workspaceId } = request.payload
+        const workspaceConfig = ctx.get('workspaceConfig')
+        if (workspaceConfig === undefined) return err(request, settingsAbsent())
+        return ok(request, {
+          workspaceId,
+          trusted: workspaceConfig.isTrusted(workspaceId),
+          trustDecided: workspaceConfig.hasTrustDecision(workspaceId),
+          hasProjectConfig: await workspaceConfig.hasProjectConfig(workspaceId),
+        })
+      },
+      async setWorkspaceTrust(request) {
+        const addressed = await settingsForTarget(request)
+        if ('error' in addressed) return err(request, addressed.error)
+        const { workspaceId, trusted } = request.payload
+        try {
+          const workspaceConfig = ctx.get('workspaceConfig')
+          if (workspaceConfig === undefined) return err(request, settingsAbsent())
+          await workspaceConfig.setTrusted(workspaceId, trusted)
+          return ok(request, {
+            workspaceId, trusted, trustDecided: true, hasProjectConfig: await workspaceConfig.hasProjectConfig(workspaceId),
+          })
+        } catch (error: unknown) {
+          return err(request, { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} })
+        }
+      },
       listMemories: request => listLocalMemories(request),
       removeMemory: request => removeLocalMemory(request),
     },

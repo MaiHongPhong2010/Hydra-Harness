@@ -39,14 +39,14 @@ async function nextHostFrame(
   return next.value
 }
 
-function stubAgent(session: Session, status: Agent['status'] = 'idle'): Agent {
+function stubAgent(session: Session, ctx: Context, status: Agent['status'] = 'idle'): Agent {
   return {
     id: session.id,
     options: {},
     session,
     inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status,
-    ctx: new Context(),
+    ctx,
     send: () => {},
     followup: () => {},
     steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),
@@ -93,7 +93,7 @@ async function harness(
         options.sessionId,
         options.meta === undefined ? {} : { meta: options.meta },
       )
-      const agent = stubAgent(session, extras.agentStatus?.(options.sessionId))
+      const agent = stubAgent(session, _ownerCtx, extras.agentStatus?.(options.sessionId))
       const unregister = ctx.agents.register(agent)
       return {
         agent,
@@ -561,7 +561,7 @@ describe('session.delete', () => {
 
     const externalId = SessionId('session-delete-external')
     const external = ctx.sessions.create(externalId, { meta: { cwd: workspace.path, createdAt: 5 } })
-    ctx.agents.register(stubAgent(external))
+    ctx.agents.register(stubAgent(external, ctx))
     const foreign = await api.sessions.delete(request({ sessionId: externalId }))
     expect(foreign.result).toMatchObject({
       ok: false,

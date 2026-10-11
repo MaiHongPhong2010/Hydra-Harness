@@ -2,6 +2,8 @@
 
 Locale plugin: LocaleRuntime — the `en` preference stored as `locale.preference` in `$HYDRA_HOME/settings.yaml`; when that explicit Host value is absent, a fresh browser starts provisionally in the language `navigator` asks for (primary-subtag matching, falling back to `en` when it asks for no language this app ships — `en` is the only shipped language). The Host read runs after plugin activation so an unavailable settings service cannot block the page; its result replaces the provisional browser value live. Remote browsers retain only a process-local selection because the settings API is loopback-only. `locale/change` fires on switches, and the plugin points `<html lang>` at the active locale (`en`) on activation and on every switch. The service also owns the ns×locale dictionary registry (typed `register(ns, {en})` checked against `LocaleNamespaceMap`, `bind(ns)`→`TranslateNS<ns>`; lookup chain ns → common → en → key), implements the slot system's `LocaleFace`, and installs itself through `ctx.slots.installLocale`, backing the framework-injected `t` standard seat (`Translate`/`TranslateNS` are ui-slots types; import them from there — this package only re-exports for dictionary owners' convenience). The [Host-backed preferences decision](../../../.agents/notes/implemented/bug-fix/2026-08-06-host-backed-web-preferences.md) owns the persistence boundary.
 
+General Settings offers Auto and English. Auto removes the explicit preference and resolves from the current browser. The Language row shows save progress, errors, and immediate application after the Host accepts the write. `setLocale()` returns the durable write acknowledgement.
+
 ## Model Experience
 
 None, as the locale registry serves browser UI copy; nothing here reaches a model request.

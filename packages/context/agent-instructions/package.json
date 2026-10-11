@@ -44,6 +44,7 @@
     "@hydraharness/harness-home-paths": "workspace:^",
     "@hydraharness/harness-session": "workspace:^",
     "@hydraharness/harness-tools": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/cordis": "workspace:^"
   },
   "dependencies": {
@@ -62,6 +63,7 @@
     "@hydraharness/harness-system-prompt": "workspace:^",
     "@hydraharness/harness-tool-fs": "workspace:^",
     "@hydraharness/harness-tools": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/cordis": "workspace:^"
   }
 }

@@ -38,7 +38,7 @@ async function bench() {
   await runtime.root.declare({
     'conversation': { kind: 'single', scope: 'session-maybe' },
     'details': { kind: 'single', scope: 'session' },
-    'settings.general.item': { kind: 'list', scope: 'root' },
+    'settings.general.composer.item': { kind: 'list', scope: 'root' },
     'settings.section': { kind: 'list', scope: 'root' },
   }, (_p: { renderSlot?: unknown }) => null)
 
@@ -97,7 +97,7 @@ describe('apply wiring', () => {
     expect(b.slots.spec('conversation.hero.agentPreset')).toEqual({ kind: 'single', scope: 'root' })
     expect(b.slots.spec('conversation.session.header.lineage'))
       .toEqual({ kind: 'single', scope: 'session' })
-    expect(b.slots.entries('settings.general.item').map(entry => entry.options.id)).toEqual(['composer-enter'])
+    expect(b.slots.entries('settings.general.composer.item').map(entry => entry.options.id)).toEqual(['composer-plain', 'composer-context', 'composer-shortcut', 'composer-enter'])
     const usage = b.slots.entries('settings.section')
     expect(usage.map(entry => entry.options.id)).toEqual(['usage'])
     expect(resolveSlotLabel(usage[0]?.options.label)).toBe('Usage')
@@ -128,7 +128,7 @@ describe('apply wiring', () => {
     expect(b.slots.entries('conversation.chat.node')).toHaveLength(0)
     expect(b.slots.spec('conversation.chat.node')).toBeUndefined()
     expect(b.slots.entries('details')).toHaveLength(0)
-    expect(b.slots.entries('settings.general.item')).toHaveLength(0)
+    expect(b.slots.entries('settings.general.composer.item')).toHaveLength(0)
     expect(b.slots.entries('settings.section')).toHaveLength(0)
     expect(b.runtime.ctx.get('conversation')).toBeUndefined()
     await b.runtime.dispose()

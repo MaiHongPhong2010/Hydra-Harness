@@ -18,6 +18,7 @@ import chokidar from 'chokidar'
 import z from '@hydraharness/schemastery'
 import type Schema from '@hydraharness/schemastery'
 import type { FileSystem, FsDirEntry, FsTarget } from '@hydraharness/harness-fs'
+import type {} from '@hydraharness/harness-workspace-config'
 import { canonicalizeWatchPath, resolveHydraHome } from '@hydraharness/harness-home-paths'
 import {
   BUNDLED_SKILL_RANK,
@@ -231,7 +232,10 @@ export class FileSystemSkillProvider implements SkillProvider {
   private async roots(cwd: string | undefined): Promise<SkillRoot[]> {
     const roots: SkillRoot[] = []
     if (this.includeDefaultRoots && cwd !== undefined) {
-      const projectRoot = await findProjectRoot(resolve(cwd), optionalFileSystem(this.ctx))
+      const workspaceConfig = this.ctx.get('workspaceConfig')
+      const projectRoot = workspaceConfig === undefined
+        ? await findProjectRoot(resolve(cwd), optionalFileSystem(this.ctx))
+        : await workspaceConfig.resolveRoot(resolve(cwd))
       roots.push(
         { path: join(projectRoot, '.hydra/skills'), source: 'project-hydra', rank: PROJECT_HYDRA_RANK, projectRoot },
         { path: join(projectRoot, '.agents/skills'), source: 'project-agents', rank: PROJECT_AGENTS_RANK, projectRoot },

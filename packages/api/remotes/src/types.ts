@@ -10,6 +10,8 @@
  */
 
 import type { API_REMOTE_FORWARDED_EVENTS } from './remote-events.ts'
+import type {} from '@hydraharness/harness-notifications/types'
+import type {} from '@hydraharness/harness-toys/types'
 
 /** Type projection of the allowlist; the consumer and the Host read this one. */
 export type ApiRemoteForwardedEvent = typeof API_REMOTE_FORWARDED_EVENTS[number]

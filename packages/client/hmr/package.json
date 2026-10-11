@@ -31,7 +31,7 @@
   },
   "hydra": {
     "plugin": {
-      "application": "Refresh rebuilt interface plugins during development without restarting the entire app."
+      "application": "Apply live interface plugin changes and refresh rebuilt plugins during development."
     },
     "client": {
       "inject": [],

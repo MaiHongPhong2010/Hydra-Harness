@@ -540,10 +540,12 @@ export class SessionManager {
       cwd?: string
       sessionId?: SessionId
       reuseWorkspaceBlank?: true
+      projectless?: true
     } = {},
   ): Promise<RpcResult<{ sessionId: SessionId }>> {
     try {
       const shared = {
+        ...(opts.projectless === undefined ? {} : { projectless: opts.projectless }),
         ...(opts.sessionId === undefined ? {} : { sessionId: opts.sessionId }),
         ...(opts.reuseWorkspaceBlank === undefined ? {} : { reuseWorkspaceBlank: opts.reuseWorkspaceBlank }),
       }

@@ -11,7 +11,7 @@
 import { Service } from '@hydraharness/cordis'
 import type { Context } from '@hydraharness/cordis'
 import type {
-  ConnectionHandle, IApiClient, SettingsNamespaceView, SettingsPathOpView,
+  ConnectionHandle, IApiClient, SettingsNamespaceView, SettingsPathOpView, SettingsTarget,
 } from '@hydraharness/harness-api-remotes/client'
 import {
   createSnapshotStore, type SettingsScope, type SettingsScopeSnapshot,
@@ -128,6 +128,7 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
       let response: Awaited<ReturnType<SettingsFace['settings']['mutate']>>
       try {
         response = await this.api.settings.mutate({
+          ...this.mirror.target,
           ns: this.spec.namespace,
           ops: [op],
           ...(revision === undefined ? {} : { expectedRevision: revision }),
@@ -239,6 +240,11 @@ declare module '@hydraharness/cordis' {
 export class SettingsScopeBinder extends Service {
   private readonly mirror: SettingsDescribeMirror
   private readonly schema: SettingsSchemaService
+  private readonly mirrors = new Map<string, SettingsDescribeMirror>()
+  private readonly selected: SnapshotStore<SettingsSelectionSnapshot> = createSnapshotStore({ target: {}, loading: false, error: null })
+  private selectedMirror: SettingsDescribeMirror
+  private readonly selectedView = createSnapshotStore(this.emptySnapshot())
+  private stopSelectedMirror: () => void
 
   /**
    * @param ctx - the providing plugin's context.
@@ -249,6 +255,10 @@ export class SettingsScopeBinder extends Service {
     super(ctx, 'settingsScope')
     this.mirror = config.mirror
     this.schema = config.schema
+    this.selectedMirror = this.mirror
+    this.mirrors.set('', this.mirror)
+    this.stopSelectedMirror = this.followSelectedMirror()
+    ctx.effect(() => () => { this.stopSelectedMirror() }, 'ui-settings: selected document subscription')
   }
 
   /**
@@ -256,10 +266,105 @@ export class SettingsScopeBinder extends Service {
    * introspection, the served-namespace directory). Per-namespace consumers
    * use {@link bind}; both derive from the same snapshot, so they can never
    * disagree about the document.
+   * @param target - fixed document or the shell's current selection.
    * @returns the describe face over the shared mirror.
    */
-  describe(): SettingsDescribeFace {
-    return this.mirror
+  describe(target: SettingsTarget | 'selected' = {}): SettingsDescribeFace {
+    if (target !== 'selected') return this.mirrorFor(target)
+    const selectedTarget = () => this.selectedMirror.target
+    return {
+      get target() { return selectedTarget() },
+      getSnapshot: () => this.selectedView.getSnapshot(),
+      subscribe: listener => this.selectedView.subscribe(listener),
+      ensure: () => this.selectedMirror.ensure(),
+      acceptView: (view) => {
+        this.mirrorFor(view.workspaceId === undefined ? {} : { workspaceId: view.workspaceId, layer: view.layer ?? 'local' }).acceptView(view)
+      },
+    }
+  }
+
+  /**
+   * Observe the Settings selector's addressed document and trust state.
+   * @returns the selection snapshot source.
+   */
+  selection(): SnapshotStore<SettingsSelectionSnapshot> { return this.selected }
+
+  /**
+   * Select a Settings document without changing Host-wide runtime configuration.
+   * @param target - global document or a registered workspace and layer.
+   * @returns after the scoped describe settles.
+   */
+  async selectTarget(target: SettingsTarget): Promise<void> {
+    const normalized = target.workspaceId === undefined ? {} : { workspaceId: target.workspaceId, layer: target.layer ?? 'local' }
+    const next = this.mirrorFor(normalized)
+    if (next !== this.selectedMirror) {
+      this.stopSelectedMirror()
+      this.selectedMirror = next
+      this.selected.set({ target: normalized, loading: true, error: null })
+      this.stopSelectedMirror = this.followSelectedMirror()
+    }
+    await next.ensure()
+  }
+
+  /**
+   * Persist explicit trust for the selected workspace on the Host.
+   * @param trusted - allow project commands, or revoke their permission.
+   * @returns after the Host acknowledges and the scoped view refreshes.
+   */
+  async setWorkspaceTrust(trusted: boolean): Promise<void> {
+    const mirror = this.selectedMirror
+    const { workspaceId } = mirror.target
+    if (workspaceId === undefined) return
+    const connection = this.ctx.get('connection') as ConnectionHandle
+    this.selected.update((draft) => { draft.loading = true; draft.error = null })
+    try {
+      const response = await connection.api.settings.setWorkspaceTrust({ workspaceId, trusted })
+      if (!response.result.ok) throw new Error(response.result.error.message)
+      await mirror.load()
+    } catch (error) {
+      if (mirror === this.selectedMirror) this.selected.update((draft) => {
+        draft.loading = false
+        draft.error = error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+
+  /**
+   * Refresh cached documents after a Host invalidation.
+   * @param workspaceId - changed workspace, or omitted for the global document.
+   */
+  refresh(workspaceId?: SettingsTarget['workspaceId']): void {
+    for (const mirror of this.mirrors.values()) {
+      if (workspaceId === undefined || mirror.target.workspaceId === workspaceId) void mirror.load()
+    }
+  }
+
+  private emptySnapshot(): ReturnType<SettingsDescribeMirror['getSnapshot']> {
+    return { status: 'idle', view: undefined, error: null }
+  }
+
+  private mirrorFor(target: SettingsTarget): SettingsDescribeMirror {
+    const key = target.workspaceId === undefined ? '' : `${target.workspaceId}:${target.layer ?? 'local'}`
+    let mirror = this.mirrors.get(key)
+    if (mirror === undefined) {
+      const connection = this.ctx.get('connection') as ConnectionHandle
+      mirror = new SettingsDescribeMirror(connection.api, connection.isLoopback ? 'host' : 'memory',
+        target.workspaceId === undefined ? {} : { workspaceId: target.workspaceId, layer: target.layer ?? 'local' })
+      this.mirrors.set(key, mirror)
+    }
+    return mirror
+  }
+
+  private followSelectedMirror(): () => void {
+    const mirror = this.selectedMirror
+    const update = (): void => {
+      const snapshot = mirror.getSnapshot()
+      this.selectedView.set(snapshot)
+      this.selected.set({ target: mirror.target, loading: snapshot.status === 'idle' || snapshot.status === 'loading',
+        error: snapshot.error, ...snapshot.view?.trusted === undefined ? {} : { trusted: snapshot.view.trusted } })
+    }
+    update()
+    return mirror.subscribe(update)
   }
 
   /**
@@ -270,24 +375,65 @@ export class SettingsScopeBinder extends Service {
    * binding adds no wire read of its own and activation never blocks on the
    * settings transport.
    * @param spec - domain-owned namespace contract.
+   * @param target - fixed document or the shell's current selection.
    * @returns the bound scope consumed by the domain's services and rows.
    */
-  bind<T>(spec: SettingsScopeSpec<T>): SettingsScope<T> {
+  bind<T>(spec: SettingsScopeSpec<T>, target: SettingsTarget | 'selected' = {}): SettingsScope<T> {
+    if (target === 'selected') return this.bindSelected(spec)
     const ctx = this.ctx
     const connection = ctx.get('connection') as ConnectionHandle
     const controller = new SettingsScopeController<T>(
       connection.api,
       spec,
-      this.mirror,
+      this.mirrorFor(target),
       connection.isLoopback ? 'host' : 'memory',
       this.schema,
     )
     ctx.effect(() => {
-      void this.mirror.ensure()
+      void this.mirrorFor(target).ensure()
       return async () => {
         await controller.dispose()
       }
     }, `ui-settings: ${spec.namespace} settings scope`)
     return controller
   }
+
+  private bindSelected<T>(spec: SettingsScopeSpec<T>): SettingsScope<T> {
+    const ctx = this.ctx
+    const controllers = new Map<SettingsDescribeMirror, SettingsScope<T>>()
+    const current = (): SettingsScope<T> => {
+      let scope = controllers.get(this.selectedMirror)
+      if (scope === undefined) {
+        scope = this.bind(spec, this.selectedMirror.target)
+        controllers.set(this.selectedMirror, scope)
+      }
+      return scope
+    }
+    let scope = current()
+    const store = createSnapshotStore(scope.getSnapshot())
+    let stop = scope.subscribe(() => { store.set(scope.getSnapshot()) })
+    const stopSelection = this.selected.subscribe(() => {
+      const next = current()
+      if (next === scope) return
+      stop()
+      scope = next
+      store.set(scope.getSnapshot())
+      stop = scope.subscribe(() => { store.set(scope.getSnapshot()) })
+    })
+    ctx.effect(() => () => { stop(); stopSelection() }, `ui-settings: selected ${spec.namespace} scope`)
+    return { getSnapshot: () => store.getSnapshot(), subscribe: listener => store.subscribe(listener),
+      set: (field, value) => current().set(field, value), unset: field => current().unset(field) }
+  }
+}
+
+/** Viewing state of the Settings document selector. */
+export interface SettingsSelectionSnapshot {
+  /** Address of the current settings form. */
+  target: SettingsTarget
+  /** Workspace executable settings are applied only after explicit trust. */
+  trusted?: boolean
+  /** Whether a scoped read or trust write awaits acknowledgement. */
+  loading: boolean
+  /** Diagnostic from the latest scoped read or trust write. */
+  error: string | null
 }

@@ -2,6 +2,9 @@
 
 /** English dictionary (the key-set source of truth). */
 export const en = {
+  'optional.title': 'Plugins', 'optional.description': 'Allow optional native and imported plugins, MCP, skills, and hooks. Individual choices are preserved. Required functionality stays available.',
+  'optional.saving': 'Saving…', 'optional.applies': 'New calls are blocked immediately; running work finishes before contributions are removed.',
+  resetInherited: 'Reset to inherited enablement',
   tab: 'Plugins',
   loading: 'Reading plugins…',
   pluginUnavailable: 'Plugin management is available from the local desktop app only.',
@@ -72,7 +75,7 @@ export const en = {
   restartFooter: 'Restart the app to apply core plugin changes.',
   newSessionsOnly: 'This change will apply to new sessions.',
   preset: 'Preset',
-  requiredPlugin: 'Managed by its owning plugin; no independent saved setting.',
+  requiredPlugin: 'Required by Hydra or another enabled plugin.',
   marketplaceTab: 'Marketplace',
   marketplaceLoading: 'Reading marketplaces…',
   marketplaceLoadError: 'Marketplaces are temporarily unavailable.',

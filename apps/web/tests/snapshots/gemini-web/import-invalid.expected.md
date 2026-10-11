@@ -1,6 +1,7 @@
 - dialog "Settings":
   - navigation:
     - text: Settings
+    - searchbox "Search settings"
     - button "General":
       - img
       - text: General
@@ -10,6 +11,9 @@
     - button "Models":
       - img
       - text: Models
+    - button "Accounts":
+      - img
+      - text: Accounts
     - button "Web Search":
       - img
       - text: Web Search
@@ -27,55 +31,31 @@
   - button "Close":
     - img
     - text: Close
-  - heading "Models" [level=2]
-  - paragraph: Sign in with your accounts or enter API keys to use models from these providers.
-  - region "Image and video generation":
-    - heading "Image and video generation" [level=3]
-    - button "Refresh models"
-    - paragraph: Choose models marked Image or Video, grouped by provider. Fetch and save a provider's models to add them here. Generation requires a connected provider that supports the selected task.
-    - text: Image model
-    - combobox "Image model":
-      - option "Automatic fallback" [selected]
-    - text: Video model
-    - combobox "Video model":
-      - option "Automatic fallback" [selected]
-  - region "API keys":
-    - heading "API keys" [level=3]
-    - paragraph: Configure provider API keys and optional fallback keys.
-    - list
-    - button "Add provider":
-      - img
-      - text: Add provider
-    - button "Add a custom provider":
-      - img
-      - text: Add a custom provider
-  - region "Account sign-in":
-    - heading "Account sign-in" [level=3]
-    - paragraph: Connect provider accounts independently of your API keys.
-    - list:
-      - listitem:
-        - text: Gemini Web
-        - img "Sign-in required"
-        - button "Edit Gemini Web (gemini-web)": Edit
-        - text: Gemini Web gemini-web
-        - paragraph:
-          - link "Read the full cookie-copy guide":
-            - /url: https://maihongphong1902.github.io/Hydra-Harness/guide/providers#import-gemini-web-cookies
-        - text: Sign-in method
-        - combobox "Sign-in method":
-          - option "Connect Gemini Web"
-          - option "Import Cookies" [selected]
-        - button "Import Cookies"
-        - text: Accounts 0 accounts
-        - paragraph: Connect one Gemini account in the separate Hydra browser or import its cookies. The browser closes after sign-in. Images and videos use your Gemini Web account access; model listing does not confirm remaining quota.
-        - list "Accounts"
-        - paragraph: No accounts connected.
-        - status:
-          - paragraph: Import a Google cookie JSON array or Playwright storage state, up to 64 KiB.
-        - alert: authorization failed
-        - group: Customized settings
-        - button "Cancel"
-        - button "Apply"
-    - button "Add sign-in provider":
-      - img
-      - text: Add sign-in provider
+  - heading "Accounts" [level=2]
+  - paragraph: Connect provider accounts and view their reported usage. Accounts are saved immediately. Configure providers and models separately in Models.
+  - button "Manage models"
+  - text: Provider
+  - combobox "Provider":
+    - option "ChatGPT"
+    - option "Google"
+    - option "Claude"
+    - option "xAI"
+    - option "Kimi Code"
+    - option "Cursor"
+    - option "Kiro"
+    - option "Gemini Web" [selected]
+  - paragraph:
+    - link "Read the full cookie-copy guide":
+      - /url: https://maihongphong1902.github.io/Hydra-Harness/guide/providers#import-gemini-web-cookies
+  - text: Sign-in method
+  - combobox "Sign-in method":
+    - option "Connect Gemini Web"
+    - option "Import Cookies" [selected]
+  - button "Import Cookies"
+  - text: Accounts 0 accounts
+  - paragraph: Connect one Gemini account in the separate Hydra browser or import its cookies. The browser closes after sign-in. Images and videos use your Gemini Web account access; model listing does not confirm remaining quota.
+  - list "Accounts"
+  - paragraph: No accounts connected.
+  - status:
+    - paragraph: Import a Google cookie JSON array or Playwright storage state, up to 64 KiB.
+  - alert: authorization failed

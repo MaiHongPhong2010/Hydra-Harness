@@ -2,6 +2,6 @@
   - heading "Delete minimax-cn?" [level=2]
   - button "Close":
     - img
-  - paragraph: Deleting minimax-cn removes its configuration and saved provider credentials in Hydra. API keys managed separately and browser sign-ins are kept.
+  - paragraph: Deleting minimax-cn removes its configuration. Connected accounts and credentials managed elsewhere are kept.
   - button "Cancel"
   - button "Delete minimax-cn"

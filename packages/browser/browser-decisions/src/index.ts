@@ -4,6 +4,17 @@ import type { Context } from '@hydraharness/cordis'
 import { defineTool } from '@hydraharness/harness-tools'
 import type { ToolExecution } from '@hydraharness/harness-tools'
 import { JevError } from '@hydraharness/harness-jev'
+import z from '@hydraharness/schemastery'
+import { installSettingsSection, settingsNamespace } from '@hydraharness/harness-settings'
+
+/** Global preference for new advisory browser decision calls. */
+export interface Config {
+  /** Whether browser_decide may call Jev; pending requests keep running. */
+  enabled?: boolean
+}
+
+/** Validated live preference; enabled plugin groups preserve their existing behavior. */
+export const Config: z<Config> = z.object({ enabled: z.boolean().default(true) })
 
 export const name = 'browser-decisions'
 export const inject = ['tools']
@@ -40,8 +51,17 @@ interface DecisionArgs {
   readonly choices: string[]
 }
 
-/** Register a tool that can abstain without changing browser execution. */
-export function apply(ctx: Context): void {
+/**
+ * Register advisory browser decisions with a live global enabled preference.
+ * @param ctx - owning plugin context with the tool registry.
+ * @param config - composition default layered by the global Settings service.
+ */
+export function apply(ctx: Context, config: Config = {}): void {
+  let current = (): Config => config
+  installSettingsSection(ctx, settingsNamespace('browser-decisions'), Config, config, {
+    setSource: (source) => { current = source },
+    onChange: () => {},
+  })
   ctx.tools.register(defineTool({
     name: 'browser_decide',
     description: 'Ask the optional Jev decision provider to choose one candidate action from the current browser state. This tool only returns advice; it never navigates, clicks, or changes permissions.',
@@ -52,6 +72,7 @@ export function apply(ctx: Context): void {
     },
     output: OUTPUT,
     async execute(args: DecisionArgs, exec: ToolExecution): Promise<DecisionOutput> {
+      if (current().enabled === false) return { available: false, reason: 'Decision model is Off.' }
       if (args.state.trim() === '' || args.question.trim() === '' || args.choices.some(choice => choice.trim() === '')
         || args.choices.length < 2 || new Set(args.choices).size !== args.choices.length) {
         return { available: false, reason: 'Provide at least two distinct candidate choices.' }

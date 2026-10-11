@@ -39,6 +39,112 @@ function stubAgent(ctx: Context, session: Session): Agent {
 }
 
 describe('API Remote Agent resolver races', () => {
+  it('prepares an ordinary hot Agent once before deduplicated cold resume', async () => {
+    const ctx = await createContext()
+    const sessionId = sid('retired-project')
+    const meta = header(sessionId)
+    const session = ctx.sessions.create(sessionId, { meta: { cwd: '/proj' } })
+    const live = stubAgent(ctx, session)
+    const detach = ctx.agents.register(live)
+    provideSession(ctx, meta, () => Promise.resolve({ meta, events: [] }))
+    const ready = Promise.withResolvers<undefined>()
+    const prepareLive = vi.fn(async () => { detach(); await ready.promise; return undefined })
+    const resumed = stubAgent(ctx.extend(), session)
+    const resume = vi.spyOn(ctx.agents, 'resume').mockImplementation(async () => ({ agent: resumed, dispose: async () => {} }))
+    const resolver = createApiRemoteAgentResolver(ctx, { prepareLive })
+    const first = resolver(sessionId)
+    await vi.waitFor(() => { expect(prepareLive).toHaveBeenCalledOnce() })
+    expect(ctx.agents.get(sessionId)).toBeUndefined()
+    const pending = [first, resolver(sessionId)]
+    await Promise.resolve()
+    expect(resume).not.toHaveBeenCalled()
+    ready.resolve(undefined)
+    expect(await Promise.all(pending)).toEqual([{ agent: resumed }, { agent: resumed }])
+    expect(resume).toHaveBeenCalledOnce()
+    await ctx.fiber.dispose()
+  })
+
+  it('leaves an active retired Agent attached when preparation rejects routing', async () => {
+    const ctx = await createContext()
+    const sessionId = sid('retired-busy')
+    const session = ctx.sessions.create(sessionId, { meta: { cwd: '/proj' } })
+    const live = stubAgent(ctx, session)
+    ctx.agents.register(live)
+    const error = { code: 'agent-busy', message: 'Active turn', details: { reason: 'running' } } as const
+    const resume = vi.spyOn(ctx.agents, 'resume')
+    const resolver = createApiRemoteAgentResolver(ctx, { prepareLive: async () => error })
+    expect(await resolver(sessionId)).toEqual({ error })
+    expect(ctx.agents.get(sessionId)).toBe(live)
+    expect(resume).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
+
+  it('fences owned subagents before live preparation and maps preparation failures', async () => {
+    const ctx = await createContext()
+    const childId = sid('owned-no-prepare')
+    const child = ctx.sessions.create(childId, { meta: { cwd: '/proj', origin: 'subagent' } })
+    ctx.agents.register(stubAgent(ctx, child))
+    const prepareLive = vi.fn(async () => { throw new Error('flush failed') })
+    const resolver = createApiRemoteAgentResolver(ctx, { prepareLive })
+    expect(await resolver(childId)).toMatchObject({ error: { code: 'agent-busy' } })
+    expect(prepareLive).not.toHaveBeenCalled()
+    const ordinaryId = sid('prepare-failure')
+    ctx.agents.register(stubAgent(ctx, ctx.sessions.create(ordinaryId, { meta: { cwd: '/proj' } })))
+    const failed = await resolver(ordinaryId)
+    expect(failed).toMatchObject({ error: { code: 'internal' } })
+    if (!('error' in failed)) throw new Error('expected a preparation failure')
+    expect(failed.error.message).toContain('flush failed')
+    await ctx.fiber.dispose()
+  })
+
+  it('drains preparation and rechecks Host deletion before cold resume', async () => {
+    const ctx = await createContext()
+    const sessionId = sid('preparing-delete')
+    const session = ctx.sessions.create(sessionId, { meta: { cwd: '/proj' } })
+    const detach = ctx.agents.register(stubAgent(ctx, session))
+    const ready = Promise.withResolvers<undefined>()
+    let deleting = false
+    const error = { code: 'agent-busy', message: 'Deleting', details: { reason: 'deleting' } } as const
+    const resolver = createApiRemoteAgentResolver(ctx, {
+      prepareLive: async () => { await ready.promise; detach(); return undefined },
+      unavailable: () => deleting ? error : undefined,
+    })
+    const resume = vi.spyOn(ctx.agents, 'resume')
+    const resolving = resolver(sessionId)
+    const drained = vi.fn()
+    const settling = resolver.settle(sessionId).then(drained)
+    deleting = true
+    await Promise.resolve()
+    expect(drained).not.toHaveBeenCalled()
+    ready.resolve(undefined)
+    expect(await resolving).toEqual({ error })
+    await settling
+    expect(drained).toHaveBeenCalledOnce()
+    expect(resume).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
+
+  it('awaits session-specific defaults before resuming a cold Agent', async () => {
+    const ctx = await createContext()
+    const sessionId = sid('workspace-defaults')
+    const meta = header(sessionId)
+    const inspected = { meta, events: [] as SessionEvent[] }
+    provideSession(ctx, meta, () => Promise.resolve(inspected))
+    const ready = Promise.withResolvers<{ provider: string; model: string }>()
+    const defaults = vi.fn(() => ready.promise)
+    const resume = vi.spyOn(ctx.agents, 'resume').mockImplementation(async () => {
+      const session = ctx.sessions.create(sessionId, { meta: { cwd: '/proj' } })
+      return { agent: stubAgent(ctx, session), dispose: () => Promise.resolve() }
+    })
+    const resolving = createApiRemoteAgentResolver(ctx, { agentOptions: defaults })(sessionId)
+    await vi.waitFor(() => { expect(defaults).toHaveBeenCalledWith(inspected) })
+    expect(resume).not.toHaveBeenCalled()
+    ready.resolve({ provider: 'workspace', model: 'local' })
+    expect(await resolving).toMatchObject({ agent: { id: sessionId } })
+    expect(resume).toHaveBeenCalledWith({ resumeSessionId: sessionId, agentOptions: { provider: 'workspace', model: 'local' } })
+    await ctx.fiber.dispose()
+  })
+
   it('rejects routing during a Host mutation without resuming the session', async () => {
     const ctx = await createContext()
     const sessionId = sid('deleting')

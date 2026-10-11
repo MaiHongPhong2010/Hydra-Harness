@@ -10,6 +10,7 @@
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { desktopPort } from '@hydraharness/harness-native-command/desktop-bridge'
 import { loadLayeredEnv } from '@hydraharness/harness-app-boot'
 import { parseHydraArgs, type HydraInvocation } from './args.ts'
 
@@ -42,9 +43,7 @@ async function dispatch(invocation: RunnableInvocation): Promise<void> {
         patchFiles: invocation.patches,
         args: invocation.args,
       })
-      const parentPort = (process as NodeJS.Process & {
-        parentPort?: { on(event: 'message', listener: (event: unknown) => void): void }
-      }).parentPort
+      const parentPort = desktopPort()
       parentPort?.on('message', (event) => {
         const message = typeof event === 'object' && event !== null && 'data' in event ? event.data : event
         if (typeof message === 'object' && message !== null && 'type' in message && message.type === 'shutdown') {

@@ -150,9 +150,14 @@ export const sessionCreateRequestSchema = z.object({
   sessionId: sessionIdSchema.optional(),
   agentPreset: z.string().optional(),
   reuseWorkspaceBlank: z.literal(true).optional(),
+  projectless: z.literal(true).optional(),
 }).refine(
   payload => payload.workspaceId === undefined || payload.cwd === undefined,
   { message: 'session.create accepts workspaceId or cwd, not both' },
+).refine(
+  payload => payload.projectless !== true
+    || (payload.workspaceId === undefined && payload.sessionId === undefined && payload.cwd === undefined),
+  { message: 'projectless requires a new session outside a project' },
 ).refine(
   payload => payload.reuseWorkspaceBlank !== true
     || (payload.workspaceId !== undefined && payload.sessionId !== undefined),
@@ -232,6 +237,7 @@ export const modelReasoningSchema = z.object({
 
 /** One advisory model entry inside a provider group. */
 export const modelCatalogModelSchema = z.object({
+  serviceTiers: z.array(z.enum(['standard', 'priority'])).optional(),
   id: z.string().min(1),
   name: z.string().min(1),
   endpoints: z.array(z.string().min(1)).min(1).optional(),
@@ -315,6 +321,11 @@ export const sessionHistoryValueSchema: z.ZodType<Wire<ResponseValue<'session.hi
 export const sessionModelsRequestSchema = z.object({
   sessionId: sessionIdSchema,
 }) satisfies z.ZodType<Wire<RequestPayload<'session.models'>>>
+
+/** Empty-chat suggestion request. */
+export const sessionSuggestionsRequestSchema = z.object({ sessionId: sessionIdSchema, refresh: z.boolean().optional() }) satisfies z.ZodType<Wire<RequestPayload<'session.suggestions'>>>
+/** Bounded draft choices and non-fatal generation errors. */
+export const sessionSuggestionsValueSchema = z.object({ items: z.array(z.string().max(500)).max(10), error: z.string().optional() }) satisfies z.ZodType<Wire<ResponseValue<'session.suggestions'>>>
 
 /** session.models response value. */
 export const sessionModelsValueSchema = z.object({

@@ -3050,7 +3050,7 @@ app.whenReady().then(async () => {
     title: 'Hydra harness — controlled browser',
     icon: join(__dirname, 'hydra.png'),
   })
-  window.once('close', () => {
+  if (embedded === undefined) window.once('close', () => {
     windowClosing = true
     for (const tab of tabs.values()) detachTabDebugger(tab, true)
   })
@@ -3439,6 +3439,17 @@ app.whenReady().then(async () => {
         await Promise.all(pending.map(({ operation }) => operation))
       },
       setTheme(value) { setChromeTheme(value) },
+      setWindow(next) {
+        if (windowClosing || next === window) return
+        window.removeListener('resize', fit)
+        window.contentView.removeChildView(chrome)
+        for (const tab of tabs.values()) window.contentView.removeChildView(tab.view)
+        window = next
+        window.contentView.addChildView(chrome)
+        for (const tab of tabs.values()) window.contentView.addChildView(tab.view)
+        window.on('resize', fit)
+        fit()
+      },
       setBounds(bounds) {
         if (windowClosing) return
         embeddedBounds = bounds

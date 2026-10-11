@@ -2,6 +2,6 @@
   - heading "Delete minimax-cn?" [level=2]
   - button "Close":
     - img
-  - paragraph: Deleting minimax-cn removes its configuration, saved provider credentials, and stored API keys. Browser sign-ins are kept.
+  - paragraph: Deleting minimax-cn removes its configuration and API keys saved by Models. Connected accounts and browser sign-ins are kept.
   - button "Cancel"
   - button "Delete minimax-cn"

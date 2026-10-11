@@ -61,7 +61,7 @@ describe('web e2e: plugin settings regressions', () => {
 
   it('keeps Obsidian MCP visible for a module-name search', async () => {
     const settings = page.getByRole('dialog', { name: 'Settings', exact: true })
-    const search = settings.getByRole('searchbox')
+    const search = settings.getByRole('searchbox', { name: 'Search plugins, skills, hooks, marketplaces, and MCP servers', exact: true })
     await search.fill('kno')
     await settings.getByRole('tab', { name: 'MCP', exact: true }).click()
     await settings.getByText('Enabled', { exact: true }).waitFor()

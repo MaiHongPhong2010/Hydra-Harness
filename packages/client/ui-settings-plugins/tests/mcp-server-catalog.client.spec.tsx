@@ -43,6 +43,22 @@ function controls(overrides: Partial<UserMcpControls> = {}): UserMcpControls {
 }
 
 describe('McpServerCatalog', () => {
+  it('preserves a stored HTTP endpoint on unchanged edits and submits explicit replacements', async () => {
+    const { command: _command, args: _args, ...stored } = STORED.servers[0]!
+    const snapshot: McpServerSnapshot = { servers: [{ ...stored, transport: 'streamable-http', url: 'https://example.test/mcp' }] }
+    const face = controls({ list: vi.fn(async () => snapshot), define: vi.fn(async () => snapshot) })
+    render(<McpServerCatalog controls={face} query="" t={t} />)
+    await screen.findByText('https://example.test/mcp')
+    fireEvent.click(screen.getByRole('button', { name: en.userMcpEdit }))
+    fireEvent.click(screen.getByRole('button', { name: en.userMcpSave }))
+    await waitFor(() => { expect(face.define).toHaveBeenCalledWith({ mode: 'replace', name: 'notes', transport: 'streamable-http' }) })
+    await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
+    fireEvent.click(screen.getByRole('button', { name: en.userMcpEdit }))
+    fireEvent.change(screen.getByLabelText(en.userMcpUrl), { target: { value: 'https://replacement.test/mcp?token=new' } })
+    fireEvent.click(screen.getByRole('button', { name: en.userMcpSave }))
+    await waitFor(() => { expect(face.define).toHaveBeenLastCalledWith({ mode: 'replace', name: 'notes', transport: 'streamable-http',
+      url: 'https://replacement.test/mcp?token=new' }) })
+  })
   it.each([false, true])('loads only while active and ignores late responses (reject: %s)', async (reject) => {
     const pending = Promise.withResolvers<McpServerSnapshot>()
     const face = controls({ list: vi.fn(() => pending.promise) })

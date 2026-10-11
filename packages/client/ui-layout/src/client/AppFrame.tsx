@@ -13,7 +13,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import type { SessionId, WorkspaceId } from '@hydraharness/harness-client-runtime/client'
-import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@hydraharness/harness-client-ui-slots'
+import type { InjectFace, HostObservable, PropsRenderSlots, PropsRuntime, PropsStore } from '@hydraharness/harness-client-ui-slots'
+import type { SettingsScopeSnapshot } from '@hydraharness/harness-client-runtime/client'
+import type { DesktopPreferences } from '../preferences.ts'
 import {
   computeColumns, DETAILS_COLLAPSE_BELOW,
   SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSE_BELOW, SIDEBAR_DEFAULT,
@@ -37,6 +39,7 @@ export type AppFrameProps =
   & PropsRuntime<'root'>
   & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'review' | 'shell.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
+  & InjectFace<{ hooks: { desktopPreferences: HostObservable<SettingsScopeSnapshot<DesktopPreferences>> } }>
   & { createSideSession: () => Promise<SessionId>; startSession?: () => void; openFolder?: () => Promise<void> }
 
 /** Center column grid item (session-body building block). */
@@ -136,6 +139,7 @@ export function AppFrame({
   useStore,
   useSessions,
   useWorkspaces,
+  useDesktopPreferences,
   actions,
   renderSlot,
   SessionProvider,
@@ -144,6 +148,7 @@ export function AppFrame({
   openFolder,
 }: AppFrameProps) {
   const panels = useStore(s => s)
+  const preferences = useDesktopPreferences(s => s.value)
   const currentSessionId = useSessions(s => s.current)
   const currentSessionTitle = useSessions((s) => {
     const current = s.current
@@ -158,6 +163,7 @@ export function AppFrame({
   const workspaceId = useWorkspaces(state => currentSessionId === undefined
     ? state.recentWorkspaceId
     : state.items.find(workspace => workspace.sessionIds.includes(currentSessionId))?.workspaceId)
+  const selectedProjectId = useWorkspaces(state => state.items.find(workspace => workspace.workspaceId === workspaceId && workspace.kind !== 'task')?.workspaceId)
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const [desktopViewport, setDesktopViewport] = useState(() => ({
@@ -167,8 +173,18 @@ export function AppFrame({
   const terminalMax = Math.max(DESKTOP_TERMINAL_MIN, Math.floor(desktopViewport.height / 2))
   const [browserOpen, setBrowserOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
+  const [terminalRequest, setTerminalRequest] = useState<{ sequence: number; cwd?: string | undefined }>({ sequence: 0 })
+  const openBottomTerminal = useCallback((cwd?: string) => {
+    setTerminalRequest(current => ({ sequence: current.sequence + 1, cwd }))
+    setTerminalOpen(true)
+  }, [])
   const [terminalWorkspaces, setTerminalWorkspaces] = useState<Array<WorkspaceId | undefined>>([])
   const [browserExpanded, setBrowserExpanded] = useState(false)
+  const fullSessions = useRef(new Map<SessionId, boolean>())
+  if (currentSessionId !== undefined && preferences !== undefined && !fullSessions.current.has(currentSessionId)) {
+    fullSessions.current.set(currentSessionId, preferences.fullView)
+  }
+  const fullView = currentSessionId !== undefined && fullSessions.current.get(currentSessionId) === true
   const [browserWidth, setBrowserWidth] = useState(() => Math.round(window.innerWidth * 0.42))
   const [terminalHeight, setTerminalHeight] = useState(() =>
     clamp(Math.round(window.innerHeight * 0.36), DESKTOP_TERMINAL_MIN, terminalMax))
@@ -184,6 +200,9 @@ export function AppFrame({
     if (!terminalOpen) return
     setTerminalWorkspaces(current => current.includes(workspaceId) ? current : [...current, workspaceId])
   }, [terminalOpen, workspaceId])
+  useEffect(() => {
+    window.hydraDesktop?.preferences?.setContext(selectedProjectId)
+  }, [selectedProjectId])
 
   useEffect(() => {
     if (window.hydraDesktop === undefined) return
@@ -295,7 +314,7 @@ export function AppFrame({
             the shell's own pending rendering. The conversation
             is session-maybe; the strict details entry naturally renders
             empty while no session is current. */}
-        <CenterColumn>{renderSlot('conversation', {})}</CenterColumn>
+        <CenterColumn>{fullView ? null : renderSlot('conversation', {})}</CenterColumn>
         <DetailsColumn>{renderSlot('details', {})}</DetailsColumn>
       </>
       <div className={css.overlayLayer} data-shell-overlay>
@@ -337,7 +356,6 @@ export function AppFrame({
       )}
     </div>
   )
-  if (window.hydraDesktop === undefined) return frame
   const toggleBrowser = () => {
     if (browserOpen) setBrowserExpanded(false)
     setBrowserOpen(!browserOpen)
@@ -352,7 +370,10 @@ export function AppFrame({
       case 'open-folder': void openFolder?.(); return
       case 'toggle-sidebar': actions.toggleSidebar(); return
       case 'toggle-bottom-panel': setTerminalOpen(open => !open); return
-      case 'open-terminal': setTerminalOpen(true); return
+      case 'open-terminal':
+        if (preferences?.terminalLocation === 'right') { setBrowserOpen(true); void window.hydraDesktop?.panels?.open?.('terminal') }
+        else openBottomTerminal()
+        return
       case 'open-browser': setBrowserOpen(true); return
       case 'settings': document.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')?.click(); return
       case 'undo': case 'redo': case 'cut': case 'copy': case 'paste': case 'delete': case 'select-all':
@@ -361,7 +382,9 @@ export function AppFrame({
         return
       default: return
     }
-  }, [actions, openFolder, startSession])
+  }, [actions, openFolder, startSession, preferences?.terminalLocation, openBottomTerminal])
+
+  if (window.hydraDesktop === undefined) return frame
 
   return (
     <div
@@ -369,8 +392,10 @@ export function AppFrame({
       style={{
         '--desktop-browser-width': `${renderedBrowserWidth}px`,
         '--desktop-terminal-height': `${renderedTerminalHeight}px`,
+        '--desktop-sidebar-width': `${cols.sidebar}px`,
       } as CSSProperties}
-      data-browser-open={browserOpen || undefined}
+      data-browser-open={(browserOpen && !fullView) || undefined}
+      data-full-view={fullView || undefined}
       data-terminal-open={terminalOpen || undefined}
       data-browser-expanded={browserExpanded || undefined}
     >
@@ -379,6 +404,7 @@ export function AppFrame({
           browserOpen={browserOpen}
           terminalOpen={terminalOpen}
           browserExpanded={browserExpanded}
+          bottomControl={preferences?.bottomPanelControl ?? true}
           onToggleBrowser={toggleBrowser}
           onToggleTerminal={() => { setTerminalOpen(open => !open) }}
           onToggleExpanded={toggleExpanded}
@@ -386,7 +412,13 @@ export function AppFrame({
       </DesktopTitleBar>
       <div className={css.desktopApp} data-desktop-shell>{frame}</div>
       <DesktopBrowserPanel
-        open={browserOpen}
+        open={browserOpen || fullView}
+        fullView={fullView}
+        mainSessionId={fullView ? currentSessionId : undefined}
+        renderMainChat={() => renderSlot('conversation', {})}
+        terminalLocation={preferences?.terminalLocation ?? 'bottom'}
+        onBottomTerminal={openBottomTerminal}
+        fileDestination={preferences?.fileOpenDestination ?? 'editor'}
         workspaceId={workspaceId}
         sessionTitle={currentSessionTitle}
         createSideSession={createSideSession}
@@ -403,12 +435,13 @@ export function AppFrame({
           key={owner ?? 'no-workspace'}
           terminalGroup={index + 1}
           workspaceId={owner}
+          terminalRequest={owner === workspaceId ? terminalRequest : undefined}
           open={terminalOpen && !browserExpanded && owner === workspaceId}
           sessionTitle={currentSessionTitle}
           onOpen={() => { setTerminalOpen(true) }}
         />
       ))}
-      {browserOpen && !browserExpanded && (
+      {browserOpen && !browserExpanded && !fullView && (
         <DragHandle
           side="browser"
           label="Resize right panel"

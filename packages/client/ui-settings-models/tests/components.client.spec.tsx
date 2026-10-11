@@ -4,13 +4,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Schema from '@hydraharness/schemastery'
 import { bindSnapshotSelector } from '@hydraharness/harness-client-test-runtime'
+import { createSnapshotStore } from '@hydraharness/harness-client-runtime/client'
+import type { SettingsSelectionSnapshot } from '@hydraharness/harness-client-ui-settings/client'
 import type { RpcResponse, SettingsNamespaceView } from '@hydraharness/harness-api-remotes/client'
 import {
   ModelsSection, providerCopy, providerTargetLabel, removeProviderProfile,
   revealOfficialDeepSeek,
 } from '../src/client/ModelsSection.tsx'
 import type { ModelsSectionInjected, ModelsSectionProps } from '../src/client/ModelsSection.tsx'
-import type { ModelsProviderOptionOwnerProps } from '../src/client/index.ts'
+import type { ModelsDecisionOwnerProps } from '../src/client/index.ts'
 import { pathOps } from '../src/client/ProviderEditor.tsx'
 import {
   DeepSeekModelsEditor, formatCapacity, modelDrafts, parseCapacity, validateDeepSeekModels,
@@ -216,6 +218,7 @@ async function mountFace(scripted: ReturnType<typeof scriptedFace>, overrides: P
     api: face as never,
     schema: settingsSchema,
     t,
+    acceptSettings: (view) => { mirror.acceptView(view) },
     ...overrides,
   }
   const view = render(<ModelsSection {...injected} />)
@@ -251,30 +254,42 @@ async function mountDeepSeekCard(overrides: Parameters<typeof scriptedFace>[0] =
 }
 
 describe('ModelsSection', () => {
-  it('opens optional providers from their rows and the Add selector', async () => {
-    const renderSlot = ((_name: string, props: ModelsProviderOptionOwnerProps) => {
-      if (props.mode === 'row') return <button onClick={() => { props.onEdit('optional') }}>Edit optional</button>
-      if (props.mode === 'option') return <option value="plugin:optional" data-hydra-provider-option="optional">Optional provider</option>
-      return <>
-        <button onClick={() => { props.onClose(false) }}>Cancel optional</button>
-        <button onClick={() => { props.onClose(true) }}>Save optional</button>
-      </>
-    }) as NonNullable<ModelsSectionProps['renderSlot']>
+  it('renders the global default above generation selectors', async () => {
     const scripted = scriptedFace()
-    scripted.face.llm.providers.mockResolvedValue(ok({ providers: [] }))
-    const { controller } = await mountFace(scripted, { renderSlot, useProviderOptions: selector => selector(1) })
-    fireEvent.click(screen.getByRole('button', { name: en.add }))
-    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: en.provider }).value).toBe('')
-    fireEvent.change(screen.getByRole('combobox', { name: en.provider }), { target: { value: 'plugin:optional' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel optional' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Edit optional' }))
-    const refresh = vi.spyOn(controller, 'load')
-    fireEvent.click(screen.getByRole('button', { name: 'Save optional' }))
-    await waitFor(() => { expect(screen.getByRole('status').textContent).toContain('optional') })
-    expect(refresh).toHaveBeenCalledOnce()
+    scripted.face.settings.describe.mockResolvedValue(ok({ writable: true, hasDocument: true, namespaces: [...wireNamespaces(), {
+      ns: 'agent-default-model', schema: {}, value: { provider: 'test', model: 'a' }, revision: 1, secrets: [], applies: 'live',
+    }] }))
+    await mountFace(scripted)
+    expect(screen.getByRole('combobox', { name: en.defaultModel })).toBeTruthy()
+    expect(screen.getByRole('region', { name: en.generationModels })).toBeTruthy()
+    expect(scripted.mutate).not.toHaveBeenCalled()
   })
 
-  it.each([0, 1])('keeps account providers selectable with %s connected accounts', async (count) => {
+  it('hides global account and credential controls for a workspace target', async () => {
+    const selection = createSnapshotStore<SettingsSelectionSnapshot>({ target: { workspaceId: 'workspace-a' as never, layer: 'local' },
+      loading: false, error: null, trusted: true })
+    const scripted = scriptedFace()
+    await mountFace(scripted, { useSelection: bindSnapshotSelector(selection) })
+    expect(screen.getByText(en.workspaceModelHint)).toBeDefined()
+    expect(screen.queryByText(en.accountLogin)).toBeNull()
+    expect(screen.queryByText(en.apiKeys)).toBeNull()
+    expect(screen.queryByText(en.add)).toBeNull()
+    expect(scripted.mutate).not.toHaveBeenCalled()
+  })
+  it('renders the decision contribution separately from API-key providers', async () => {
+    const openSection = vi.fn()
+    const renderSlot = ((_name: string, props: ModelsDecisionOwnerProps) =>
+      <button onClick={() => { props.openSection('plugins') }}>Decision configuration</button>
+    ) as NonNullable<ModelsSectionProps['renderSlot']>
+    const scripted = scriptedFace()
+    await mountFace(scripted, { renderSlot, openSection, useDecisions: selector => selector(1) })
+    fireEvent.click(screen.getByRole('button', { name: 'Decision configuration' }))
+    expect(openSection).toHaveBeenCalledWith('plugins')
+    expect(screen.getByRole('region', { name: en.decisionModel })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'Jev' })).toBeNull()
+  })
+
+  it.each([0, 1])('keeps model editors separate with %s connected accounts', async (count) => {
     const scripted = scriptedFace()
     const accountNamespace = {
       ns: 'llm-account-auth', schema: Schema.object({ providers: Schema.dict(Schema.object({})) }).toJSON(),
@@ -291,15 +306,12 @@ describe('ModelsSection', () => {
     }] }), usage: async () => ok({}) } })
     await mountFace(scripted)
     expect(screen.getByRole('img', { name: count === 0 ? en.accountMissing : en.accountConfigured })).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: en.accountProviderAdd }))
-    await screen.findByRole('button', { name: en.accountAdd })
-    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: en.provider }).value).toBe('chatgpt')
+    expect(screen.getByRole('button', { name: en.manageAccounts })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit ChatGPT (chatgpt)' }))
+    expect(screen.queryByRole('button', { name: en.accountAdd })).toBeNull()
     expect(screen.queryByRole('list', { name: en.accounts })).toBeNull()
     expect(screen.queryByText('Alice')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: en.cancel }))
-    fireEvent.click(screen.getByRole('button', { name: 'Edit ChatGPT (chatgpt)' }))
-    if (count > 0) expect(await screen.findByText('Alice')).toBeTruthy()
-    else expect(await screen.findByText(en.accountsEmpty)).toBeTruthy()
+    expect(screen.getByRole('button', { name: en.apply })).toBeTruthy()
   })
 
   it('renders nothing before the slot injects its dependencies', () => {
@@ -308,7 +320,7 @@ describe('ModelsSection', () => {
     expect(document.body.textContent).toBe('')
   })
 
-  it.each([false, true])('keeps Gemini API out of new Google sign-in and retains saved OAuth configuration: %s', async (saved) => {
+  it.each([false, true])('keeps both Google catalogs in Models: %s', async (saved) => {
     const scripted = scriptedFace()
     const providers = saved ? { 'gemini-api': {} } : {}
     scripted.face.settings.describe.mockResolvedValue(ok({
@@ -329,21 +341,16 @@ describe('ModelsSection', () => {
     await mountFace(scripted)
     const apiKeys = screen.getByRole('region', { name: en.apiKeys })
     const accounts = screen.getByRole('region', { name: en.accountLogin })
-    const legacy = within(apiKeys).queryByRole('button', { name: 'Edit gemini-api' })
+    expect(within(apiKeys).queryByRole('button', { name: 'Edit gemini-api' })).toBeNull()
+    const legacy = within(accounts).queryByRole('button', { name: 'Edit gemini-api' })
     expect(legacy !== null).toBe(saved)
-    expect(within(accounts).queryByText('gemini-api')).toBeNull()
-    fireEvent.click(within(accounts).getByRole('button', { name: en.accountProviderAdd }))
-    fireEvent.change(within(accounts).getByLabelText(en.provider), { target: { value: 'google' } })
-    expect(within(accounts).getAllByRole('combobox')).toHaveLength(1)
-    expect(within(accounts).getByText(en.antigravityOAuthHint)).toBeTruthy()
-    fireEvent.click(within(accounts).getByRole('button', { name: en.cancel }))
-    fireEvent.click(within(apiKeys).getByRole('button', { name: en.add }))
-    expect([...within(apiKeys).getByRole<HTMLSelectElement>('combobox', { name: en.provider }).options]
-      .map(option => option.value)).not.toContain('gemini-api')
-    if (legacy !== null) {
-      fireEvent.click(legacy)
-      await within(apiKeys).findByRole('button', { name: en.accountAdd })
-    }
+    fireEvent.click(within(accounts).getByRole('button', { name: en.add }))
+    const select = within(accounts).getByLabelText<HTMLSelectElement>(en.provider)
+    expect([...select.options].map(option => option.value)).toContain('antigravity')
+    expect([...select.options].map(option => option.value).includes('gemini-api')).toBe(!saved)
+    fireEvent.change(select, { target: { value: 'antigravity' } })
+    expect(within(accounts).getByRole('button', { name: en.apply })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.accountAdd })).toBeNull()
   })
 
   it('leaves provider editors closed until the user chooses a provider', async () => {
@@ -1295,25 +1302,23 @@ describe('ModelsSection', () => {
   })
 
   it.each(['chatgpt', 'antigravity', 'gemini-api', 'claude', 'xai-account', 'kimi', 'cursor', 'kiro'])(
-    'deletes the complete local account record before removing the %s provider configuration', async (provider) => {
+    'keeps accounts when removing the %s provider configuration', async (provider) => {
       const { face, mutate, controller } = await mountSection()
       const logout = vi.fn(() => Promise.resolve(ok({})))
       Object.assign(face, { authorization: { logout } })
       expect(await removeProviderProfile(face as never, controller,
         { settingsNs: 'llm-account-auth', settingsPath: ['providers', provider] })).toBeUndefined()
-      expect(logout).toHaveBeenCalledWith({ key: `llm-account-auth/${provider === 'gemini-api' ? 'antigravity' : provider}` })
+      expect(logout).not.toHaveBeenCalled()
       expect(mutate).toHaveBeenCalledWith({ ns: 'llm-account-auth', ops: [{ op: 'unset', path: ['providers', provider] }] })
-      expect(logout.mock.invocationCallOrder[0]).toBeLessThan(mutate.mock.invocationCallOrder[0]!)
     })
 
-  it('keeps the account provider configuration when credential cleanup fails and permits a retry', async () => {
+  it('does not attempt sign-out when removing provider configuration', async () => {
     const { face, mutate, controller } = await mountSection()
-    const logout = vi.fn().mockResolvedValueOnce(fail('sign-out failed')).mockResolvedValueOnce(ok({}))
+    const logout = vi.fn(async () => fail('sign-out unavailable'))
     Object.assign(face, { authorization: { logout } })
-    const target = { settingsNs: 'llm-account-auth', settingsPath: ['providers', 'chatgpt'] }
-    expect(await removeProviderProfile(face as never, controller, target)).toBe('sign-out failed')
-    expect(mutate).not.toHaveBeenCalled()
-    expect(await removeProviderProfile(face as never, controller, target)).toBeUndefined()
+    expect(await removeProviderProfile(face as never, controller,
+      { settingsNs: 'llm-account-auth', settingsPath: ['providers', 'chatgpt'] })).toBeUndefined()
+    expect(logout).not.toHaveBeenCalled()
     expect(mutate).toHaveBeenCalledOnce()
   })
 
@@ -1333,15 +1338,14 @@ describe('ModelsSection', () => {
     expect(replace).not.toHaveBeenCalled()
   })
 
-  it('forgets pi-ai provider records and its managed API keys before removing the provider', async () => {
+  it('keeps pi-ai account records and removes its managed API keys', async () => {
     const { face, unset, mutate, controller } = await mountSection()
     expect(await removeProviderProfile(face as never, controller, {
       settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'],
       credentialRef: 'OPENAI_API_KEY', credentialRefs: ['OPENAI_API_KEY_FALLBACK_1'],
     })).toBeUndefined()
-    expect(face.authorization.logout).toHaveBeenCalledWith({ key: 'llm-pi-ai/openai' })
+    expect(face.authorization.logout).not.toHaveBeenCalled()
     expect(unset.mock.calls.map(args => args[0])).toEqual([{ ref: 'OPENAI_API_KEY' }, { ref: 'OPENAI_API_KEY_FALLBACK_1' }])
-    expect(face.authorization.logout.mock.invocationCallOrder[0]).toBeLessThan(unset.mock.invocationCallOrder[0]!)
     expect(unset.mock.invocationCallOrder[1]).toBeLessThan(mutate.mock.invocationCallOrder[0]!)
   })
 
@@ -1398,7 +1402,7 @@ describe('ModelsSection', () => {
     const target = { provider: 'zombie', displayName: 'zombie' }
     fireEvent.click(screen.getByRole('button', { name: providerCopy(en.removeProvider, target) }))
     const dialog = screen.getByRole('dialog', { name: providerCopy(en.deleteTitle, target) })
-    expect(dialog.textContent).toContain(providerCopy(en.deleteDescriptionWithRecord, target))
+    expect(dialog.textContent).toContain(providerCopy(en.deleteDescription, target))
     fireEvent.click(within(dialog).getByRole('button', { name: providerCopy(en.deleteConfirm, target) }))
     await waitFor(() => { expect(mutate).toHaveBeenCalledOnce() })
     expect(unset).not.toHaveBeenCalled()
@@ -1601,6 +1605,28 @@ describe('apiKeyFailure', () => {
   })
 })
 
+it('publishes acknowledged image and video preferences before a settings invalidation arrives', async () => {
+  const namespace = wireNamespaces()[2]!
+  const saved = { ...namespace, revision: 1, value: { ...namespace.value as object,
+    imageModel: { provider: 'openai', model: 'image' }, videoModel: { provider: 'openai', model: 'video' } } }
+  const scripted = scriptedFace({ mutate: vi.fn(async () => ok(saved)) })
+  scripted.face.llm.models.mockResolvedValue(ok({ groups: [{ id: 'openai', name: 'OpenAI', models: [
+    { id: 'image', name: 'Image', endpoints: ['images/generations'] },
+    { id: 'video', name: 'Video', endpoints: ['videos'] },
+  ] }], failures: [] }) as never)
+  const { mirror, controller } = await mountFace(scripted)
+  await waitFor(() => { expect(screen.getByLabelText<HTMLSelectElement>(en.imageModel).disabled).toBe(false) })
+  fireEvent.change(screen.getByLabelText(en.imageModel), { target: { value: '["openai","image"]' } })
+  fireEvent.change(screen.getByLabelText(en.videoModel), { target: { value: '["openai","video"]' } })
+  fireEvent.click(screen.getByRole('button', { name: en.apply }))
+  await waitFor(() => { expect(screen.queryByRole('button', { name: en.discard })).toBeNull() })
+  expect(mirror.namespace('llm-pi-ai')).toEqual(saved)
+  expect(controller.store.getSnapshot().namespaces.get('llm-pi-ai')).toEqual(saved)
+  expect(screen.getByLabelText<HTMLSelectElement>(en.imageModel).value).toBe('["openai","image"]')
+  expect(screen.getByLabelText<HTMLSelectElement>(en.videoModel).value).toBe('["openai","video"]')
+  expect(scripted.face.settings.describe).toHaveBeenCalledOnce()
+})
+
 it('reloads the Models page after acknowledging generation settings', async () => {
   const { controller } = await mountSection()
   await waitFor(() =>{  expect(screen.getByLabelText<HTMLSelectElement>(en.imageModel).disabled).toBe(false) })
@@ -1617,7 +1643,7 @@ it('closes the open provider editor when removing that same configuration', asyn
   expect(screen.queryByLabelText(en.baseUrl)).toBeNull()
   expect(screen.getByRole('dialog', { name: openaiCopy(en.deleteTitle) })).toBeTruthy()
 })
-it.each(['antigravity', 'gemini-api', 'chatgpt', 'gemini-web'])('describes account cleanup for a removed %s route', async (provider) => {
+it.each(['antigravity', 'gemini-api', 'chatgpt', 'gemini-web'])('describes account preservation for a removed %s route', async (provider) => {
   const scripted = scriptedFace()
   const route = { provider, displayName: provider, settingsNs: 'llm-account-auth', settingsPath: ['providers', provider], active: true }
   scripted.face.llm.providers.mockResolvedValue(ok({ providers: [route] }))
@@ -1631,16 +1657,15 @@ it.each(['antigravity', 'gemini-api', 'chatgpt', 'gemini-web'])('describes accou
   await mountFace(scripted)
   fireEvent.click(screen.getByRole('button', { name: providerCopy(en.removeProvider, route) }))
   const dialog = screen.getByRole('dialog')
-  const description = provider === 'gemini-web' ? en.deleteDescriptionWithGeminiWeb
-    : provider === 'chatgpt' ? en.deleteDescriptionWithAccounts : en.deleteDescriptionWithGoogleAccounts
-  expect(dialog.textContent).toContain(providerCopy(description, route))
+  expect(dialog.textContent).toContain(providerCopy(en.deleteDescription, route))
 })
-it('offers one Google add choice when both service routes are available', async () => {
+it('offers separate Google model routes when both are available', async () => {
   const scripted = scriptedFace()
   Object.assign(scripted.face.authorization, { list: async () => ok({ entries: [] }) })
   scripted.face.llm.providers.mockResolvedValue(ok({ providers: ['antigravity','gemini-api'].map(provider => ({ provider, displayName: provider, settingsNs: 'llm-account-auth', settingsPath: ['providers',provider], active: false })) }))
   scripted.face.settings.describe.mockResolvedValue(ok({ writable: true, hasDocument: true, namespaces: [...wireNamespaces(), { ns: 'llm-account-auth', schema: Schema.object({ providers: Schema.dict(Schema.object({ endpoint: Schema.string() })) }).toJSON(), value: { providers: {} }, revision: 0, applies: 'live', secrets: [] }] }) as never)
   await mountFace(scripted)
-  fireEvent.click(screen.getByText(en.accountProviderAdd))
-  expect(screen.getAllByRole('option', { name: 'Google' })).toHaveLength(1)
+  fireEvent.click(within(screen.getByRole('region', { name: en.accountLogin })).getByRole('button', { name: en.add }))
+  expect(screen.getByRole('option', { name: 'antigravity' })).toBeTruthy()
+  expect(screen.getByRole('option', { name: 'gemini-api' })).toBeTruthy()
 })

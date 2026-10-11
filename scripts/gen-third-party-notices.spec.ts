@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
+import ts from 'typescript'
 import {
   CLAUDE_AGENT_SDK_PACKAGE,
   claudeDistributionFromManifest,
@@ -13,6 +14,7 @@ import {
   parsePyprojectRequirements,
   parseVendoredRows,
   render,
+  renderArtifactNotices,
   tierExternalDeps,
   virtualManifest,
 } from './gen-third-party-notices.ts'
@@ -28,6 +30,11 @@ describe('THIRD_PARTY_NOTICES.md', () => {
     const generated = render()
     expect(generated).toContain('It depends on the third-party software listed below.')
     expect(readFileSync(resolve(root, 'THIRD_PARTY_NOTICES.md'), 'utf8'), 'stale notices — run `pnpm run gen-third-party-notices`').toBe(generated)
+    const path = resolve(root, 'packages/client/ui-layout/src/client/artifact-notices.ts')
+    const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest)
+    const statement = source.statements.find(ts.isVariableStatement)
+    const literal = statement?.declarationList.declarations[0]?.initializer
+    expect(literal !== undefined && ts.isStringLiteral(literal) ? literal.text : undefined).toBe(renderArtifactNotices())
   })
 })
 

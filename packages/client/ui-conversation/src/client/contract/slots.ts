@@ -205,6 +205,8 @@ declare module '@hydraharness/harness-client-ui-slots' {
      * the next one rather than applied to a current one.
      */
     'conversation.hero.agentPreset': { kind: 'single'; scope: 'root'; owner: HeroAgentPresetOwnerProps }
+    /** Optional bounded draft suggestions, visible only in the empty chat. */
+    'conversation.hero.suggestions': { kind: 'list'; scope: 'session' }
     // 'conversation.input.overlay' merges in ui-input-trigger (the dependency
     // direction is the hard constraint — ui-input-trigger cannot import
     // this package, while this package's input contract already imports
@@ -614,6 +616,8 @@ export interface ComposerBarInjected {
   hooks: {
     /** Latest surfaced notice (null after none; seq keys re-render of repeats). */
     notices: ObservableSnapshot<InputNotice | null>
+    /** Accepted composer display and keyboard preferences. */
+    composerPreferences: ObservableSnapshot<Required<import('../../submission-settings.ts').ConversationSettings>>
     /** Hot plain-text reference lexicon for the decoration scan (plain-text-reference decision;
      *  see .agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md). */
     lexicon: ObservableSnapshot<ReadonlyMap<'/' | '@', readonly string[]>>
@@ -676,6 +680,7 @@ export type ConversationSlotProps =
     | 'conversation.hero.brand.mark'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'
+    | 'conversation.hero.suggestions'
   >
   & InjectFace<ConversationInjected>
   & PropsLocale<'conversation'>

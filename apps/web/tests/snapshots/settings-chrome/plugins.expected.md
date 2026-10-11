@@ -4,4 +4,3 @@
     - code: "@hydraharness/harness-client-ui-settings"
     - text: Core Running
   - text: Enabled
-  - switch "Disable plugin ui-settings" [checked]

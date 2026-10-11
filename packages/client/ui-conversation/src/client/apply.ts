@@ -25,8 +25,8 @@ import type { ComposerBlock } from './input/blocks.ts'
 import { InputHub } from './input/hub.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { InputBar } from './skeleton/InputBar.tsx'
-import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
-import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
+import { ComposerPreferenceRow } from './settings/ComposerPreferenceRow.tsx'
+import type { ComposerPreferenceRowInjected } from './settings/ComposerPreferenceRow.tsx'
 import { UsageSection } from './settings/UsageSection.tsx'
 import type { UsageSectionInjected } from './settings/UsageSection.tsx'
 import { ChatView } from './chat/ChatView.tsx'
@@ -243,16 +243,23 @@ export function apply(ctx: Context): void {
     ctx.settingsScope.bind<ConversationSettings>({ namespace: CONVERSATION_SETTINGS_NAMESPACE }),
   )
 
-  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
-    name: 'settings.general.item',
-    id: 'composer-enter',
-    order: 20,
-    locale: NS,
-    inject: (): EnterBehaviorRowInjected => ({
-      hooks: { busyEnter: submissionPolicy.busyEnter },
-      setBusyEnter: (behavior) => { submissionPolicy.setBusyEnter(behavior) },
-    }),
-  }, EnterBehaviorRow))
+  const composerRows = [
+    { field: 'plainText', id: 'composer-plain', title: 'settings.plain.title', description: 'settings.plain.description' },
+    { field: 'showContextUsage', id: 'composer-context', title: 'settings.context.title', description: 'settings.context.description' },
+    { field: 'sendShortcut', id: 'composer-shortcut', title: 'settings.shortcut.title', description: 'settings.shortcut.description' },
+    { field: 'busyEnter', id: 'composer-enter', title: 'settings.enter.title', description: 'settings.enter.description' },
+  ] as const
+  for (const [order, row] of composerRows.entries()) {
+    ctx.slots.inject('settings.general.composer.item', () => ctx.slots.register({
+      name: 'settings.general.composer.item', id: row.id, order, locale: NS,
+      label: () => `${t(row.title)} ${t(row.description)}`,
+      inject: (): ComposerPreferenceRowInjected => ({
+        ...row,
+        hooks: { preferences: submissionPolicy.preferences, writable: submissionPolicy.writable },
+        save: value => submissionPolicy.save(row.field, value),
+      }),
+    }, ComposerPreferenceRow))
+  }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'usage',
@@ -352,6 +359,7 @@ export function apply(ctx: Context): void {
       'conversation.hero.brand.mark': { kind: 'single', scope: 'root' },
       'conversation.hero.workspace': { kind: 'single', scope: 'root' },
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
+      'conversation.hero.suggestions': { kind: 'list', scope: 'session' },
     },
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
       hooks: { composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId) },
@@ -458,7 +466,8 @@ export function apply(ctx: Context): void {
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
-          hooks: { notices: ABSENT_NOTICES, lexicon: ABSENT_LEXICON, menuLauncher: ABSENT_MENU_LAUNCHER },
+          hooks: { notices: ABSENT_NOTICES, lexicon: ABSENT_LEXICON, menuLauncher: ABSENT_MENU_LAUNCHER,
+            composerPreferences: submissionPolicy.preferences },
         }
       }
       const conversation = concreteConversation(ctx)
@@ -524,7 +533,7 @@ export function apply(ctx: Context): void {
           return result.ok && result.value.matched
         },
         hooks: {
-          notices: shell.notices,
+          notices: shell.notices, composerPreferences: submissionPolicy.preferences,
           lexicon: shell.lexicon,
           menuLauncher: inputTriggers?.launcher ?? ABSENT_MENU_LAUNCHER,
         },

@@ -11,6 +11,7 @@
 import { release as osRelease } from 'node:os'
 import { extname } from 'node:path'
 import { runNativeCommand, type NativeCommandRunner } from '@hydraharness/harness-native-command'
+import { desktopNativeRequest, desktopPort } from '@hydraharness/harness-native-command/desktop-bridge'
 
 /** Testable command boundary; native implementations never invoke a shell. */
 export type PathOpenerRunner = NativeCommandRunner
@@ -183,6 +184,7 @@ export function openNativePath(
   signal: AbortSignal,
   internals: PathOpenerInternals = {},
 ): Promise<void> {
+  if (Object.keys(internals).length === 0 && desktopPort() !== undefined) return desktopNativeRequest('open-path', path, signal).then(() => {})
   return openNativePathWithIntent(path, signal, 'default', internals)
 }
 
@@ -198,5 +200,6 @@ export function openNativeTextFile(
   signal: AbortSignal,
   internals: PathOpenerInternals = {},
 ): Promise<void> {
+  if (Object.keys(internals).length === 0 && desktopPort() !== undefined) return desktopNativeRequest('open-text', path, signal).then(() => {})
   return openNativePathWithIntent(path, signal, 'text-editor', internals)
 }

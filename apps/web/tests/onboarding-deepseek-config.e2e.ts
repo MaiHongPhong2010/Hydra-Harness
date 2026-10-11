@@ -70,14 +70,14 @@ describe.skipIf(MODE === 'record')('web e2e: first-run provider configuration', 
 
     const settings = page.getByRole('dialog', { name: 'Settings', exact: true })
     await settings.waitFor({ timeout: 15_000 })
-    await settings.getByRole('button', { name: 'Add provider', exact: true }).waitFor()
+    await settings.getByRole('region', { name: 'API keys', exact: true }).getByRole('button', { name: 'Add provider', exact: true }).waitFor()
     expect(await settings.getByRole('textbox', { name: 'API key', exact: true }).count()).toBe(0)
     expect(await page.getByRole('dialog', { name: 'Add an API key to get started' }).count()).toBe(0)
     const initial = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(MISSING_EXPECTED, initial, MODE)
     await page.screenshot({ path: '.hydra-build/provider-setup.png' })
 
-    await settings.getByRole('button', { name: 'Add provider', exact: true }).click()
+    await settings.getByRole('region', { name: 'API keys', exact: true }).getByRole('button', { name: 'Add provider', exact: true }).click()
     await settings.getByLabel('Provider', { exact: true }).selectOption('deepseek-official')
     const keyInput = settings.getByRole('textbox', { name: 'API key', exact: true })
     const secret = `hydra_onboarding_${randomBytes(12).toString('hex')}`

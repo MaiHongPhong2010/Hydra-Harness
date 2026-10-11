@@ -42,8 +42,10 @@
   ],
   "license": "MIT",
   "peerDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-mcp-client": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
     "@hydraharness/harness-tools": "workspace:^",
     "@hydraharness/cordis": "workspace:^"
@@ -52,8 +54,10 @@
     "@hydraharness/schemastery": "workspace:^"
   },
   "devDependencies": {
+    "@hydraharness/harness-optional-plugins": "workspace:^",
     "@hydraharness/harness-invariants": "workspace:^",
     "@hydraharness/harness-mcp-client": "workspace:^",
+    "@hydraharness/harness-scope": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
     "@hydraharness/harness-settings-file": "workspace:^",
     "@hydraharness/harness-tools": "workspace:^",

@@ -1,6 +1,12 @@
 # Configure models
 
-This guide assumes you started the Web UI through the [root README](../../../README.md#run). Model changes take effect on the next request without restarting the server.
+This guide assumes you started the Web UI through the [root README](../../../README.md#run).
+
+## Choose default models
+
+At the top of **Settings → Models**, choose **Default model** for new chats. It saves immediately after the Host acknowledges the change. Existing chats keep their selected model. A missing model stays marked unavailable until you replace it. Image-only and video-only models are excluded.
+
+**Image model** and **Video model** follow the chat default and keep their Apply/Discard controls. **Decision model** appears below them. Enable the Jev group in Plugins to use **Off / Jev**; **Configure Jev** opens its write-only API-key editor. Off stops new advisory `browser_decide` calls without deleting the key or interrupting an active request. Jev chooses among supplied actions; the ordinary browser tools still execute actions under Hydra permissions.
 
 ## Configure DeepSeek
 
@@ -18,6 +24,14 @@ Choose **Add provider**, select a provider such as Anthropic or OpenAI, enter it
 
 Providers with native authentication need their native credentials instead. Bedrock, Vertex, Azure, and Codex use AWS credentials and a region, an ADC project, an `api-version`, and OAuth respectively; filling only the API-key field does not configure them.
 
+## Connect provider accounts
+
+Open **Settings → Accounts**, choose a provider, and complete its sign-in flow. Accounts are saved immediately; adding an account does not enable or configure a provider. Google groups Antigravity and Gemini API with separate sign-in methods. The Gemini API OAuth method requires a Cloud quota project; its API quota and billing are separate from a Google AI subscription.
+
+Use **Manage models** to open Models and add or edit the provider under **Account-backed models**. Models retains provider catalogs, API keys, fallback keys, and default models. **Manage accounts** returns to Accounts. Deleting a provider in Models keeps its accounts; removing accounts leaves its model configuration intact.
+
+Accounts shows the plan, quota, reset times, and credits supplied by the provider. One account opens its details automatically; larger pools load only the expanded account. Missing data stays unavailable. Refresh requests a current report without changing your limits.
+
 ## Import Gemini Web cookies
 
 This flow requires Windows Desktop or Web localhost with the Gemini Web provider enabled, plus an Edge or Chrome profile already signed in to the Google account you want to use. **Connect** remains available for signing in through Hydra's separate browser.
@@ -25,9 +39,9 @@ This flow requires Windows Desktop or Web localhost with the Gemini Web provider
 1. In that Edge or Chrome profile, install **Cookie-Editor** using the store link on its [official website](https://cookie-editor.com/).
 2. Open [Gemini](https://gemini.google.com/), confirm the intended account, and keep that tab active. Open Cookie-Editor from the browser toolbar; allow access to the site if prompted.
 3. Choose **Export → JSON**. The extension copies the cookies for the active tab to your clipboard. If Export uses a previously selected format, choose JSON in Cookie-Editor's export-format settings. Keep the complete array, including domain, expiry, security and HttpOnly metadata. Do not copy individual cookie values.
-4. In Hydra, open **Settings → Models → Account sign-in**. Edit **Gemini Web**, or choose **Add sign-in provider → Gemini Web**. Select **Import Cookies** under **Sign-in method**, then click **Import Cookies**.
+4. In Hydra, open **Settings → Accounts** and select **Gemini Web**. Select **Import Cookies** under **Sign-in method**, then click **Import Cookies**.
 5. Paste the clipboard contents into **Gemini cookies JSON**. Alternatively, paste them into a local text editor, save as `cookies.json`, and select that file under **Cookies JSON file**. Exports must be no larger than 64 KiB.
-6. Choose **Continue** and wait for **Account connected. Apply to save provider settings.** Confirm the account shown in the editor, then choose **Apply**. Hydra checks the session over HTTP before saving; a failed import keeps the existing session.
+6. Choose **Continue** and wait for **Account connected. Configure or enable this provider in Models.** The account is saved immediately; use **Manage models** to configure its provider if needed. Hydra checks the session over HTTP before saving; a failed import keeps the existing session.
 
 Cookies can grant access to your Google account. Paste them only into Hydra, keep exported files private, and do not include them in chats, screenshots or issue reports. Console `document.cookie` omits HttpOnly cookies; copied Cookie headers and Netscape exports are not accepted. [Chrome's cookie documentation](https://developer.chrome.com/docs/devtools/application/cookies) describes these metadata fields.
 

@@ -94,9 +94,11 @@ describe('ModelsSettingsStore', () => {
     const store = new ModelsSettingsStore(face, settingsSchema, mirror)
     await store.load()
     expect(store.store.getSnapshot()).toMatchObject({
-      status: 'ready', rows: [{ accountCount: outcome === 'accounts' ? 2 : 0 }],
+      status: 'ready',
       credentialError: outcome === 'denied' ? 'authorization unavailable' : outcome === 'transport' ? 'connection closed' : null,
     })
+    expect(store.store.getSnapshot().rows[0]?.accountCount).toBe(
+      outcome === 'accounts' ? 2 : outcome === 'missing' ? 0 : undefined)
   })
 
   it('describes non-chat provider credentials without adding LLM directory rows', async () => {

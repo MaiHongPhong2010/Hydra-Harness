@@ -1,7 +1,5 @@
 /**
- * Permission preference row: the default preset for subsequently created
- * sessions. Current-session switches remain on the composer `/permission`
- * control.
+ * Global permission default and per-session results applying it to open chats.
  */
 
 import { useEffect, useState } from 'react'
@@ -9,6 +7,7 @@ import type { SnapshotStore } from '@hydraharness/harness-client-runtime/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@hydraharness/harness-client-ui-slots'
 import {
   IconChevronDownOutline14, Menu, RiskConfirmation,
+  Button, Switch,
 } from '@hydraharness/harness-client-ui-primitives'
 import type { PermissionSettingsState } from './settings-store.ts'
 import type { PermissionSettingsKey } from './locales.ts'
@@ -17,6 +16,8 @@ import css from './PermissionRow.module.css'
 
 /** Registration-side business face for the host-backed preference. */
 export interface PermissionRowInjected {
+  /** Full access shares the same preset as the default permission selector. */
+  fullAccess?: boolean
   hooks: {
     /** Permission settings snapshot bound by the renderer as usePermission. */
     permission: SnapshotStore<PermissionSettingsState>
@@ -25,24 +26,27 @@ export interface PermissionRowInjected {
   load: () => Promise<void>
   /** Persist one advertised preset. */
   select: (preset: string) => Promise<void>
+  /** Clear the addressed default override. */
+  reset?: () => Promise<void>
 }
 
 /** Full component props. */
 export type PermissionRowProps =
-  PropsRuntime<'settings.general.item'>
+  PropsRuntime<'settings.general.permissions.item'>
   & PropsLocale<'settings.permission'>
   & InjectFace<PermissionRowInjected>
 
 /**
- * Render the new-session Permission default selector.
+ * Render the permission selector and shared full-access toggle.
  * @param props - composed slot props.
  * @returns the row, or null when the host does not expose permission settings.
  */
-export function PermissionRow({ load, select, usePermission, t }: PermissionRowProps) {
+export function PermissionRow({ load, select, reset, usePermission, fullAccess = false, t }: PermissionRowProps) {
   const state = usePermission(snapshot => snapshot)
   const [open, setOpen] = useState(false)
   const [confirmingFullAccess, setConfirmingFullAccess] = useState(false)
   const [acknowledged, setAcknowledged] = useState(false)
+  const [confirmingReset, setConfirmingReset] = useState(false)
 
   useEffect(() => {
     void load()
@@ -53,6 +57,7 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
     setOpen(false)
     setAcknowledged(false)
     setConfirmingFullAccess(false)
+    setConfirmingReset(false)
   }, [state.status, state.writable])
 
   if (state.status === 'unavailable') return null
@@ -67,10 +72,17 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
     <>
       <div className={css.row}>
         <div className={css.rowText}>
-          <div className={css.title}>{t('title')}</div>
-          <div className={css.desc} role={state.error === null ? undefined : 'alert'}>{description}</div>
+          <div className={css.title}>{t(fullAccess ? 'full.title' : 'title')}</div>
+          <div className={css.desc} role={state.error === null ? undefined : 'alert'}>{fullAccess && state.error === null ? t('full.description') : description}</div>
+          {state.status === 'saving' && <div role="status">{t('saving')}</div>}
         </div>
-        <Menu
+        {fullAccess ? <Switch checked={state.currentValue === FULL_ACCESS_PRESET}
+          aria-label={t('full.title')} disabled={busy || !state.writable}
+          onClick={() => {
+            if (state.currentValue === FULL_ACCESS_PRESET) { void select('workspace-write'); return }
+            setAcknowledged(false)
+            setConfirmingFullAccess(true)
+          }} /> : <Menu
           open={open}
           onClose={() => { setOpen(false) }}
           items={state.options.map(option => ({ id: option.id, label: optionLabel(option) }))}
@@ -100,7 +112,18 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
               <IconChevronDownOutline14 className={css.chevron} />
             </button>
           )}
-        />
+        />}
+        {!fullAccess && state.failedSessions !== undefined && state.failedSessions.length > 0 && <>
+          <ul>{state.failedSessions.map(failed => <li key={failed.sessionId}>{failed.sessionId}: {failed.error}</li>)}</ul>
+          <Button variant="outline" size="sm" disabled={busy || !state.writable}
+            onClick={() => { void select(state.currentValue) }}>{t('retry')}</Button>
+        </>}
+        {!fullAccess && reset !== undefined && <Button variant="outline" size="sm" disabled={busy || !state.writable || !state.overridden}
+          onClick={() => {
+            if (state.inheritedValue === FULL_ACCESS_PRESET && state.currentValue !== FULL_ACCESS_PRESET) {
+              setConfirmingReset(true); setAcknowledged(false); setConfirmingFullAccess(true)
+            } else void reset()
+          }}>{t('reset')}</Button>}
       </div>
       <RiskConfirmation
         open={confirmingFullAccess}
@@ -113,13 +136,15 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
         disabled={!state.writable || state.status === 'saving'}
         onAcknowledgedChange={setAcknowledged}
         onCancel={() => {
+          setConfirmingReset(false)
           setAcknowledged(false)
           setConfirmingFullAccess(false)
         }}
         onConfirm={() => {
           setAcknowledged(false)
           setConfirmingFullAccess(false)
-          void select(FULL_ACCESS_PRESET)
+          if (confirmingReset) { setConfirmingReset(false); void reset?.() }
+          else void select(FULL_ACCESS_PRESET)
         }}
       />
     </>

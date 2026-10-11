@@ -6,6 +6,8 @@ The current-session surface remains a popupSelect DECORATION hung on the host `/
 
 The `/client` exports are the plugin body (`apply`/`inject`).
 
+The General row edits the global permission default. Project files can override `defaultPreset` for their workspace; cold and archived sessions retain their own permission state.
+
 ## Model Experience
 
 Indirectly, through the permission facts written by its two surfaces: the Settings row causes a future session to start with whole-value knob events (`permission/preset`, `sandbox/mode`, `approval/policy`), while the `/permission` picker appends the same facts when it switches the current session; those events select the sandbox mode and approval policy later tool calls resolve, and picker interaction adds no prompt content.
@@ -18,3 +20,5 @@ No direct invalidation; the knob consumers own any request-prefix changes.
 
 - **The Settings row is Web-only** — non-Web clients may still switch the current session through `/permission`, but do not receive this browser contribution.
 - **Preset descriptions come from the host** — localized built-in labels may therefore appear beside a description written in another language.
+
+Default permissions and Full access share one preset selection. Settings explicitly broadcasts accepted changes to currently served compatible sessions through the logged preset setter, reports each failed session, and supports retry. Cold or archived chats are excluded. Full access requires risk acknowledgement, including a reset whose inherited value enables Full access.

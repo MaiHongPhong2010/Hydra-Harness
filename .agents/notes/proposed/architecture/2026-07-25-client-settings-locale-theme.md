@@ -53,7 +53,7 @@ root
             └─ models (order 10)         registered by ui-settings-models
 ```
 
-Section and item contributions use `ctx.slots.inject()` and do not depend on the client manifest's apply order; localized labels ride the label thunk from the [full-rollout note](../../implemented/architecture/2026-07-30-client-locale-full-rollout.md). The SlotMap types split homes: trigger/header/close/section have their canonical home in the ui-settings contract (the consumers, general and models, both depend on the shell — no cycle); `settings.general.item`'s canonical home is the locale package — it is the lowest common dependency of all item registrants (a settings row always carries copy), while the declarer general's contract is unreachable from locale/ui-theme (it would form a cycle); ui-theme consumes it through a re-export outlet.
+Section and item contributions use `ctx.slots.inject()` and do not depend on client apply order. Localized labels use registration thunks. The `ui-settings` contract owns six typed General item slots, declared by General and consumed by feature rows; [General Settings feature ownership](../../implemented/architecture/2026-10-11-general-settings-feature-ownership.md) owns grouping and search.
 
 ### Slot declarations are first-class injectable waits
 
@@ -125,4 +125,4 @@ Locale ships with Chinese and English built in; `setLocale`/`setTheme` are the o
 
 ## Risks
 
-The apply order of slot declarations and contributions is not fixed, so every section/item registrant must use `ctx.slots.inject()` rather than a service or local-disposer presence signal. Service events may fire before a row's first render, so both a feature row store's init and the inject attach must align to the current snapshot from the getter. The duplicated merge copies of `settings.general.item` (locale, ui-theme) must stay verbatim-identical to the ui-settings canonical home — any drift means changing all three together. Layout must clean up the global attributes it set on unmount, and ThemeRuntime must remove its matchMedia listener on dispose, so nothing lingers after HMR.
+The apply order of slot declarations and contributions is not fixed, so every section/item registrant must use `ctx.slots.inject()` rather than a service or local-disposer presence signal. Service events may fire before a row's first render, so both a feature row store's init and the inject attach must align to the current snapshot from the getter. General item declarations have one canonical home in the ui-settings contract. Layout must clean up the global attributes it set on unmount, and ThemeRuntime must remove its matchMedia listener on dispose, so nothing lingers after HMR.

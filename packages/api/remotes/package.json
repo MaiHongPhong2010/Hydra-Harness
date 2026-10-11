@@ -61,6 +61,7 @@
     "@hydraharness/harness-typert-protocol": "workspace:^"
   },
   "peerDependencies": {
+    "@hydraharness/harness-notifications": "workspace:^",
     "@hydraharness/harness-authorization": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-agent-presets": "workspace:^",
@@ -80,12 +81,15 @@
     "@hydraharness/harness-session-persistence": "workspace:^",
     "@hydraharness/harness-session-reference": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/harness-skill": "workspace:^",
     "@hydraharness/harness-typert-registry": "workspace:^",
     "@hydraharness/cordis": "workspace:^",
-    "@hydraharness/harness-fs-review": "workspace:^"
+    "@hydraharness/harness-fs-review": "workspace:^",
+    "@hydraharness/harness-toys": "workspace:^"
   },
   "devDependencies": {
+    "@hydraharness/harness-notifications": "workspace:^",
     "@hydraharness/harness-authorization": "workspace:^",
     "@hydraharness/harness-agent": "workspace:^",
     "@hydraharness/harness-agent-presets": "workspace:^",
@@ -105,9 +109,11 @@
     "@hydraharness/harness-session-persistence": "workspace:^",
     "@hydraharness/harness-session-reference": "workspace:^",
     "@hydraharness/harness-settings": "workspace:^",
+    "@hydraharness/harness-workspace-config": "workspace:^",
     "@hydraharness/harness-skill": "workspace:^",
     "@hydraharness/harness-typert-registry": "workspace:^",
     "@hydraharness/cordis": "workspace:^",
-    "@hydraharness/harness-fs-review": "workspace:^"
+    "@hydraharness/harness-fs-review": "workspace:^",
+    "@hydraharness/harness-toys": "workspace:^"
   }
 }

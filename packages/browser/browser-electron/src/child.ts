@@ -11,6 +11,7 @@ import { createInterface } from 'node:readline'
 import { PassThrough, Writable } from 'node:stream'
 import type { Readable } from 'node:stream'
 import { randomUUID } from 'node:crypto'
+import { desktopPort } from '@hydraharness/harness-native-command/desktop-bridge'
 import { fileURLToPath } from 'node:url'
 import { BrowserError } from './types.ts'
 
@@ -127,7 +128,7 @@ interface DesktopParentPort {
 
 /** Electron utility-process port, present only in the desktop Host child. */
 function desktopParentPort(): DesktopParentPort | undefined {
-  return (process as NodeJS.Process & { parentPort?: DesktopParentPort }).parentPort
+  return desktopPort()
 }
 
 /** Adapt Electron utility messages to the established NDJSON child contract. */
@@ -238,8 +239,9 @@ export async function launchBrowser(options: LaunchOptions): Promise<BrowserChil
     ...options.navigationPolicy === undefined ? {} : { navigationPolicy: options.navigationPolicy },
     ...options.downloadPolicy === undefined ? {} : { downloadPolicy: options.downloadPolicy },
   }
-  const bridge = process.env.HYDRA_DESKTOP_BROWSER_BRIDGE === 'parent-port' ? desktopParentPort() : undefined
-  if (process.env.HYDRA_DESKTOP_BROWSER_BRIDGE === 'parent-port' && bridge === undefined) {
+  const bridgeMode = process.env.HYDRA_DESKTOP_BROWSER_BRIDGE
+  const bridge = bridgeMode === 'parent-port' || bridgeMode === 'stdio' ? desktopParentPort() : undefined
+  if ((bridgeMode === 'parent-port' || bridgeMode === 'stdio') && bridge === undefined) {
     throw new BrowserError('the desktop browser bridge is unavailable', 'BROWSER_LAUNCH_FAILED')
   }
   const child = bridge === undefined

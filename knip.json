@@ -26,6 +26,26 @@
     "scripts/release/verify-packed-install.ts": ["unlisted"]
   },
   "workspaces": {
+    "packages/client/ui-suggested-prompts": {
+      "entry": [],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/host/optional-plugins": {
+      "entry": [],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/interaction/notifications": {
+      "entry": [],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/interaction/suggested-prompts": {
+      "entry": [],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/interaction/toys": {
+      "entry": [],
+      "project": ["src/**/*.ts"]
+    },
     "apps/desktop": {
       "entry": [
         "preload.cjs"

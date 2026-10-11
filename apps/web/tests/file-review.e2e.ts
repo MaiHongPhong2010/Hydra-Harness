@@ -7,6 +7,7 @@ import { chromium } from 'playwright'
 import { expect, it } from 'vitest'
 import { captureStableAria, compareOrRefreshGolden, launchWebScaffold, watchConsole, webSnapshotMode } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage } from './support.ts'
+import { settingsNamespace } from '@hydraharness/harness-settings'
 
 const fixture = fileURLToPath(new URL('./snapshots/file-review/session.jsonl', import.meta.url))
 const golden = fileURLToPath(new URL('./snapshots/file-review/ui.expected.md', import.meta.url))
@@ -19,6 +20,7 @@ const artifacts = fileURLToPath(new URL('../../../.artifacts', import.meta.url))
 
 it('reviews real Write/Edit results, keeps, rejects an older Undo and restores in reverse order after reload', async () => {
   const scaffold = await launchWebScaffold({ replayFixture: fixture, toolsMode: 'native', paceMs: 5 })
+  await scaffold.ctx.settings.update(settingsNamespace('desktop-ui'), { terminalLocation: 'right' })
   const browser = await chromium.launch()
   const target = join(scaffold.workspaceCwd, 'workspace', 'review.txt')
   const page = await newEnglishPage(browser)
@@ -26,6 +28,8 @@ it('reviews real Write/Edit results, keeps, rejects an older Undo and restores i
   // Review lives in the desktop right panel, which AppFrame mounts only when
   // the preload surface exists; the bounds call is inert for this scenario.
   await page.addInitScript(() => {
+    // Pin the unavailable terminal's placeholder shell across test hosts.
+    Object.defineProperty(navigator, 'userAgent', { value: 'Hydra Web fixture (Linux)' })
     const target = window as unknown as { hydraDesktop?: unknown }
     target.hydraDesktop = { browser: { setBounds() {} } }
   })

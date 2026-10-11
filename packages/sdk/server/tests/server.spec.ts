@@ -15,6 +15,8 @@ import * as LlmDeepSeek from '@hydraharness/harness-llm-deepseek'
 import SubagentRuntime, { type SubagentResult, type SubagentRunEndInfo } from '@hydraharness/harness-subagent'
 import type { JsonRpcTransportPeer } from '@hydraharness/harness-sdk-protocol'
 import { HarnessSdkJsonRpcServer } from '../src/index.ts'
+import { createScope } from '@hydraharness/harness-scope'
+import AgentDefaultModelConfig from '@hydraharness/harness-agent-default-model'
 
 class FakeTransport implements JsonRpcTransportPeer {
   notifications: { method: string; params?: Record<string, unknown> }[] = []
@@ -109,6 +111,114 @@ async function settleSubagent(
 }
 
 describe('HarnessSdkJsonRpcServer', () => {
+  it('pins global model defaults per session and applies changed defaults only to new sessions', async () => {
+    const storageDir = await mkdtemp(join(tmpdir(), 'hydra-jsonrpc-default-model-'))
+    const llmServer = await mockCompletionServer()
+    vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
+    vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
+    const ctx = await makeHarness(storageDir)
+    let model = 'global-model-a'
+    try {
+      ctx.provide('workspaceConfig', {
+        environment: () => Promise.resolve({
+          scopeKey: {},
+        }),
+      } as never)
+      ctx.provide('agentDefaultModel', {
+        currentSelection: () => ({ provider: 'deepseek-official', model, reasoningEffort: 'high' }),
+      } as never)
+      const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
+      await server.initialize({ cwd: storageDir })
+      await server.prompt({ sessionId: 'first', contentBlocks: [{ type: 'text', text: 'first model' }] })
+      await ctx.agents.get(SessionId('first'))!.whenIdle()
+      model = 'global-model-b'
+      await server.prompt({ sessionId: 'second', contentBlocks: [{ type: 'text', text: 'second model' }] })
+      await ctx.agents.get(SessionId('second'))!.whenIdle()
+      await server.prompt({ sessionId: 'first', contentBlocks: [{ type: 'text', text: 'keep the first model' }] })
+      await ctx.agents.get(SessionId('first'))!.whenIdle()
+      expect(llmServer.requests.map(request => (request as { model: string }).model))
+        .toEqual(['global-model-a', 'global-model-b', 'global-model-a'])
+      await server.shutdown()
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(storageDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uses the composed default model when no workspace configuration is mounted', async () => {
+    const storageDir = await mkdtemp(join(tmpdir(), 'hydra-jsonrpc-global-default-'))
+    const llmServer = await mockCompletionServer()
+    vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
+    vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
+    const ctx = await makeHarness(storageDir)
+    try {
+      await ctx.plugin(AgentDefaultModelConfig, { provider: 'deepseek-official', model: 'composed-default' })
+      const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
+      await server.initialize({ cwd: storageDir })
+      await server.prompt({ sessionId: 'default', contentBlocks: [{ type: 'text', text: 'use the composed default' }] })
+      await ctx.agents.get(SessionId('default'))!.whenIdle()
+      expect(llmServer.requests[0]).toMatchObject({ model: 'composed-default' })
+      await server.shutdown()
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(storageDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects omitted routes without a composed default and incomplete explicit pairs', async () => {
+    const ctx = new Context()
+    const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
+    try {
+      await expect(server.initialize({ cwd: process.cwd() })).rejects.toThrow('configured default model')
+      await expect(server.initialize({ cwd: process.cwd(), provider: 'deepseek-official' }))
+        .rejects.toThrow('provider and model must be supplied together')
+      await expect(server.initialize({ cwd: process.cwd(), model: 'model-only' }))
+        .rejects.toThrow('provider and model must be supplied together')
+      await server.shutdown()
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('includes only its workspace tools in the first SDK model request', async () => {
+    const storageDir = await mkdtemp(join(tmpdir(), 'hydra-jsonrpc-workspace-'))
+    const llmServer = await mockCompletionServer()
+    vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
+    vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
+    const ctx = await makeHarness(storageDir)
+    try {
+      const workspaceKey = {}
+      await ctx.plugin(Object.assign((owner: Context) => {
+        const workspace = createScope(owner, workspaceKey)
+        workspace.ctx.tools.register({
+          name: 'workspace_tool',
+          description: 'Workspace tool',
+          parameters: { type: 'object', properties: {} },
+          output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value as string }] },
+          execute: () => Promise.resolve('workspace result'),
+        })
+      }, { inject: ['tools'] }))
+      ctx.provide('workspaceConfig', {
+        environment: (cwd: string) => {
+          expect(cwd).toBe(storageDir)
+          return Promise.resolve({ scopeKey: workspaceKey })
+        },
+      } as never)
+      const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
+      await server.initialize({ cwd: storageDir, provider: 'deepseek-official', model: 'sdk-chosen-model' })
+      await server.prompt({ sessionId: 'workspace', contentBlocks: [{ type: 'text', text: 'use this workspace' }] })
+      await vi.waitFor(() => { expect(llmServer.requests).toHaveLength(1) })
+      const request = llmServer.requests[0] as { model: string; tools: { function: { name: string } }[] }
+      expect(request.model).toBe('sdk-chosen-model')
+      expect(request.tools.some(tool => tool.function.name === 'workspace_tool')).toBe(true)
+      expect(ctx.tools.schemas().some(tool => tool.name === 'workspace_tool')).toBe(false)
+      await server.shutdown()
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(storageDir, { recursive: true, force: true })
+    }
+  })
+
   it('creates a harness agent and calls the configured OpenAI-compatible endpoint', { timeout: 15_000 }, async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'hydra-jsonrpc-'))
     const llmServer = await mockCompletionServer()
@@ -910,7 +1020,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     const ctx = {
       on: vi.fn(() => () => undefined),
       agents: { create, get: () => undefined },
-      get: () => ({ listProviders: () => [{ id: 'mock', name: 'Mock' }] }),
+      get: (name: string) => name === 'llm' ? { listProviders: () => [{ id: 'mock', name: 'Mock' }] } : undefined,
     } as unknown as Context
     const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport()) as unknown as {
       initialize(params: { cwd: string; provider: string; model: string; maxTokens?: number }): Promise<unknown>

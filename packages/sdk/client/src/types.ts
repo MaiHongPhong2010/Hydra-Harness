@@ -50,9 +50,9 @@ export interface HydraHarnessOptions {
   launch: HarnessClientOptions
   /** Workspace cwd recorded on every SDK-created session (default: the launch cwd, else `process.cwd()`). */
   cwd?: string
-  /** Provider route for SDK-created agents (default `deepseek-official`). */
+  /** Explicit provider route; omit with model to use the runtime's workspace or user default. */
   provider?: string
-  /** Model for SDK-created agents (default `deepseek-v4-flash`). */
+  /** Explicit model id, supplied together with provider. */
   model?: string
   /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number

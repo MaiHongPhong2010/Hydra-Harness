@@ -168,6 +168,37 @@ describe('hydra-skill-filesystem plugin exports', () => {
 })
 
 describe('FileSystemSkillProvider', () => {
+  it('loads skills from the selected workspace root and isolates same-name skills across workspaces', async () => {
+    const container = await tempDir('skill-selected-workspaces')
+    const first = join(container, 'first')
+    const second = join(container, 'second')
+    const ctx = await setupLocal(container)
+    try {
+      for (const root of [first, second]) {
+        await mkdir(join(root, 'nested/.git'), { recursive: true })
+        await writeSkill(join(root, '.hydra/skills'), 'shared-name', root === first ? 'First workspace' : 'Second workspace')
+        await writeSkill(join(root, 'nested/.hydra/skills'), 'nested-only', 'Nested Git skill')
+      }
+      ctx.provide('workspaceConfig', {
+        resolveRoot: async (cwd: string) => cwd.startsWith(first) ? first : second,
+      })
+      const firstCwd = join(first, 'nested')
+      const secondCwd = join(second, 'nested')
+      const [firstSkills, secondSkills] = await Promise.all([
+        ctx.skills.list({ cwd: firstCwd }), ctx.skills.list({ cwd: secondCwd }),
+      ])
+
+      expect(firstSkills.map(skill => skill.name)).toEqual(['shared-name'])
+      expect(secondSkills.map(skill => skill.name)).toEqual(['shared-name'])
+      expect((await ctx.skills.get('shared-name', { cwd: firstCwd }))?.description).toBe('First workspace')
+      expect((await ctx.skills.get('shared-name', { cwd: secondCwd }))?.description).toBe('Second workspace')
+      expect((await ctx.skills.get('shared-name', { cwd: firstCwd }))?.path).toBe(join(first, '.hydra/skills/shared-name/SKILL.md'))
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(container, { recursive: true, force: true })
+    }
+  })
+
   it('discovers project, custom, user, and agents skill roots in priority order', async () => {
     const home = await tempDir('skill-home')
     const project = await tempDir('skill-project')

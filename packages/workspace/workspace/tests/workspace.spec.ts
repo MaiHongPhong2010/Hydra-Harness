@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { Context } from '@hydraharness/cordis'
@@ -179,11 +179,43 @@ async function makeDir(name: string): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs()
   for (const dir of tempDirs.splice(0)) await rm(dir, { recursive: true, force: true })
   base = undefined as never
 })
 
 describe('WorkspaceRegistry lifecycle and bootstrap', () => {
+  it('allocates distinct task roots, retains existing paths after changing home, and reloads their kind', async () => {
+    const firstHome = await makeDir('first-home')
+    vi.stubEnv('HYDRA_HOME', firstHome)
+    const h = await harness()
+    const first = await h.registry.createTask()
+    const second = await h.registry.createTask()
+    expect(first.kind).toBe('task')
+    expect(second.path).not.toBe(first.path)
+    expect(first.path.startsWith(join(firstHome, 'tasks'))).toBe(true)
+    const secondHome = await makeDir('second-home')
+    vi.stubEnv('HYDRA_HOME', secondHome)
+    const third = await h.registry.createTask()
+    expect(third.path.startsWith(join(secondHome, 'tasks'))).toBe(true)
+    expect(first.path.startsWith(join(firstHome, 'tasks'))).toBe(true)
+    await h.fiber.dispose()
+    const reloaded = await harness({ pool: h.pool })
+    expect(reloaded.registry.get(first.id)?.kind).toBe('task')
+    expect(reloaded.registry.get(first.id)?.path).toBe(first.path)
+    await reloaded.fiber.dispose()
+  })
+
+  it('removes only the new empty task directory when pre-create validation refuses it', async () => {
+    const home = await makeDir('refused-home')
+    vi.stubEnv('HYDRA_HOME', home)
+    const h = await harness()
+    h.ctx.on('workspace/pre-create', async () => { throw new Error('root refused') })
+    await expect(h.registry.createTask()).rejects.toThrow()
+    expect(await readdir(join(home, 'tasks'))).toEqual([])
+    expect(h.registry.list()).toEqual([])
+    await h.fiber.dispose()
+  })
   it('stays pending without sessionPersistence and never opens or marks the domain', async () => {
     const pool = new MemoryMediaPool()
     const ctx = await storageContext(pool)

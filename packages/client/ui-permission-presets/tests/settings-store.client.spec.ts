@@ -121,6 +121,7 @@ describe('permission settings store', () => {
       ns: 'permission',
       ops: [{ op: 'set', path: ['defaultPreset'], value: 'workspace-write' }],
       expectedRevision: 4,
+      applyPermissionToOpenSessions: true,
     })
     expect(controller.store.getSnapshot()).toMatchObject({
       status: 'ready',

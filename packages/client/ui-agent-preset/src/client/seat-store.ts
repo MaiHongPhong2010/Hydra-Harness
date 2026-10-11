@@ -11,6 +11,7 @@
  */
 
 import type { IApiClient } from '@hydraharness/harness-api-remotes/client'
+import type { SettingsTarget } from '@hydraharness/harness-client-ui-settings/client'
 import {
   createSnapshotStore, type SessionId, type SnapshotStore,
 } from '@hydraharness/harness-client-runtime/client'
@@ -61,6 +62,9 @@ export class AgentPresetSeatController {
 
   /** Set while a pick is waiting for a session; cleared once applied. */
   private staged: string | undefined
+  private workspaceId: SettingsTarget['workspaceId']
+  private generation = 0
+  private workspaceRevision = 0
 
   constructor(
     private readonly api: Pick<IApiClient, 'agentPresets'>,
@@ -72,6 +76,8 @@ export class AgentPresetSeatController {
      * refresh. Optional: a harness that renders no list omits it.
      */
     private readonly onApplied?: (sessionId: string, agentPreset: string) => void,
+    /** Actual current/recent workspace, independent of the Settings document selector. */
+    private readonly workspaceTarget: () => SettingsTarget = () => ({}),
   ) {}
 
   private set(patch: Partial<AgentPresetSeatState>): void {
@@ -83,8 +89,11 @@ export class AgentPresetSeatController {
    * @returns once the snapshot reflects the host.
    */
   async load(): Promise<void> {
+    const target = this.syncWorkspace()
+    const generation = ++this.generation
     try {
-      const response = await this.api.agentPresets.list({})
+      const response = await this.api.agentPresets.list(target)
+      if (generation !== this.generation || target.workspaceId !== this.workspaceTarget().workspaceId) return
       if (!response.result.ok) {
         this.set({ error: response.result.error.message })
         return
@@ -103,6 +112,7 @@ export class AgentPresetSeatController {
         error: null,
       })
     } catch (error) {
+      if (generation !== this.generation || target.workspaceId !== this.workspaceTarget().workspaceId) return
       this.set({ error: messageOf(error) })
     }
   }
@@ -114,6 +124,7 @@ export class AgentPresetSeatController {
    * @returns once the stage settled, and the apply too when one happened.
    */
   async select(id: string): Promise<void> {
+    this.syncWorkspace()
     if (this.store.getSnapshot().busy) return
     this.stage(id)
     await this.apply()
@@ -131,6 +142,7 @@ export class AgentPresetSeatController {
    * chip should announce itself on the session it lands on.
    */
   stage(id: string, introduce = false): void {
+    this.syncWorkspace()
     this.staged = id
     this.set({ current: id, error: null, introduce })
   }
@@ -149,9 +161,11 @@ export class AgentPresetSeatController {
    * @returns once the switch settled, or immediately when there is nothing to do.
    */
   async apply(): Promise<void> {
+    this.syncWorkspace()
+    const workspaceRevision = this.workspaceRevision
     const staged = this.staged
     const session = this.currentSession()
-    if (staged === undefined || session === undefined) return
+    if (staged === undefined || session === undefined || this.store.getSnapshot().busy) return
     // A started session's history was produced under its own composition; the
     // host refuses the swap, so the stage is no longer meaningful.
     if (!session.blank || session.agentPreset === staged) {
@@ -161,6 +175,8 @@ export class AgentPresetSeatController {
     this.set({ busy: true, error: null })
     try {
       const response = await this.api.agentPresets.select({ sessionId: session.id, agentPreset: staged })
+      if (response.result.ok) this.onApplied?.(session.id, response.result.value.agentPreset)
+      if (workspaceRevision !== this.workspaceRevision || this.staged !== staged) return
       this.staged = undefined
       if (!response.result.ok) {
         this.set({ busy: false, error: response.result.error.message, current: this.fallback })
@@ -168,10 +184,23 @@ export class AgentPresetSeatController {
       }
       // Consumed: the next new session opens on the deployment default again.
       this.set({ busy: false, current: response.result.value.agentPreset })
-      this.onApplied?.(session.id, response.result.value.agentPreset)
     } catch (error) {
+      if (workspaceRevision !== this.workspaceRevision || this.staged !== staged) return
       this.staged = undefined
       this.set({ busy: false, error: messageOf(error), current: this.fallback })
     }
+  }
+
+  private syncWorkspace(): SettingsTarget {
+    const target = this.workspaceTarget()
+    if (target.workspaceId !== this.workspaceId) {
+      this.workspaceId = target.workspaceId
+      this.staged = undefined
+      this.fallback = ''
+      this.generation += 1
+      this.workspaceRevision += 1
+      this.store.set(INITIAL)
+    }
+    return target
   }
 }

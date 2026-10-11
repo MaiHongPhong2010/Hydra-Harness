@@ -8,6 +8,7 @@
     "src"
   ],
   "references": [
+    { "path": "../optional-plugins" },
     {
       "path": "../../../vendor/cordis"
     },
@@ -34,6 +35,9 @@
     },
     {
       "path": "../../settings/settings"
+    },
+    {
+      "path": "../../workspace/workspace-config"
     },
     {
       "path": "../plugin-runtime"

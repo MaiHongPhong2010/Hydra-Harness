@@ -1048,7 +1048,7 @@ describe('hand-declared providers', () => {
     await mountSection({ providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } })
     openEditor('openai')
     fireEvent.click(screen.getByText(en.customized))
-    expect(fields()).toEqual([en.imageModel, en.videoModel, en.keyInput, en.baseUrl, en.proxy])
+    expect(fields()).toEqual([en.imageModel, en.videoModel, en.decisionModel, en.keyInput, en.baseUrl, en.proxy])
     cleanup()
 
     // A hand-declared route named its own protocol at creation, so editing it
@@ -1058,7 +1058,9 @@ describe('hand-declared providers', () => {
       declaredRoutes: ['acme-gateway'],
     })
     openEditor('acme-gateway')
-    expect(fields()).toEqual([en.imageModel, en.videoModel, en.keyInput, en.customDisplayName, en.baseUrl, en.proxy, en.customApi])
+    expect(fields()).toEqual([
+      en.imageModel, en.videoModel, en.decisionModel, en.keyInput, en.customDisplayName, en.baseUrl, en.proxy, en.customApi,
+    ])
   })
 
   it('renames a declared route and falls back to its id when the name is cleared', async () => {

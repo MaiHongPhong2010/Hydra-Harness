@@ -6,7 +6,7 @@
       "application": "Discover skill files in configured local directories and load their instructions on demand."
     }
   },
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": {
     "access": "public"
   },

@@ -1,6 +1,6 @@
 {
   "name": "@hydraharness/harness-notifications",
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "description": "Live turn and question notification facts and user policy",
   "type": "module",
   "license": "MIT",

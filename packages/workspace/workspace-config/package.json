@@ -2,7 +2,7 @@
   "name": "@hydraharness/harness-workspace-config",
   "description": "Workspace-local settings, trust, and scoped runtime composition for the Hydra harness",
   "hydra": { "plugin": { "application": "Keep settings, MCP servers, hooks, and presets separate for each workspace." } },
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": { "access": "public" },
   "repository": { "type": "git", "url": "git+https://github.com/MaiHongPhong2010/Hydra-Harness.git", "directory": "packages/workspace/workspace-config" },
   "type": "module",

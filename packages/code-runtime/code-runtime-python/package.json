@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-code-runtime-python",
   "description": "CPython subprocess implementation of the Hydra harness code-execution seam",
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": {
     "access": "public"
   },

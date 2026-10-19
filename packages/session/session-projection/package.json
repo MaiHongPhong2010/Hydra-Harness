@@ -6,7 +6,7 @@
       "application": "Build current session views, such as goals and statistics, from recorded conversation events."
     }
   },
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": {
     "access": "public"
   },

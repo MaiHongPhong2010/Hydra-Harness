@@ -6,7 +6,7 @@
       "application": "Serve the local web interface and routes registered by Host plugins."
     }
   },
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": {
     "access": "public"
   },

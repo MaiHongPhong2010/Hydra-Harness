@@ -6,7 +6,7 @@
       "application": "Store and validate app records such as workspaces through the selected storage backend."
     }
   },
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": {
     "access": "public"
   },

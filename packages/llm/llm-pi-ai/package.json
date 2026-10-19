@@ -6,7 +6,7 @@
       "application": "Use the pi-ai adapter for provider model discovery and model requests."
     }
   },
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": {
     "access": "public"
   },

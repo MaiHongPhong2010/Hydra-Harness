@@ -1,6 +1,6 @@
 {
   "name": "@hydraharness/harness-toys",
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "description": "Explicit human-requested transient effects",
   "type": "module",
   "license": "MIT",

@@ -6,7 +6,7 @@
       "application": "Include a snapshot of another authorized session as context in the current conversation."
     }
   },
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": {
     "access": "public"
   },

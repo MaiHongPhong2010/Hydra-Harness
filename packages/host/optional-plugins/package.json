@@ -1,6 +1,6 @@
 {
   "name": "@hydraharness/harness-optional-plugins",
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "description": "Immediate optional-plugin invocation policy and draining lifecycle",
   "type": "module",
   "license": "MIT",

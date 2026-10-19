@@ -6,7 +6,7 @@
       "application": "Persist a session goal and its status so work can continue toward the same objective."
     }
   },
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": {
     "access": "public"
   },

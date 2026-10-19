@@ -1,7 +1,7 @@
 {
   "name": "@hydraharness/harness-session-log-export",
   "description": "Web Session-log export command and shared download dialog",
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",

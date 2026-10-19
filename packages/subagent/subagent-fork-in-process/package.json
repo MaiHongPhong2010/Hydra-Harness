@@ -6,7 +6,7 @@
       "application": "Start a child agent with a copy of the parent conversation up to the fork point."
     }
   },
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": {
     "access": "public"
   },

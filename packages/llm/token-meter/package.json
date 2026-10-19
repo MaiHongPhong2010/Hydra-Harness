@@ -6,7 +6,7 @@
       "application": "Estimate or measure model-context token usage for usage views and compaction decisions."
     }
   },
-  "version": "0.1.1-rc.9",
+  "version": "0.1.1-rc.10",
   "publishConfig": {
     "access": "public"
   },

@@ -333,8 +333,47 @@ describe('web e2e: account-backed ChatGPT and Antigravity login', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
+  it('fetches and applies a dormant provider catalog directly from Accounts', async () => {
+    await scaffold.ctx.settings.mutate(ACCOUNT_AUTH_NAMESPACE, [{ op: 'unset', path: ['providers', 'gemini-api'] }])
+    const dialog = await openModels(page)
+    await openAccounts(dialog, 'antigravity')
+    const key = credentialKey('llm-account-auth', 'antigravity')
+    const account = await scaffold.ctx.credentials.readRecord(key)
+    const before = scaffold.ctx.settings.describe().find(view => view.ns === ACCOUNT_AUTH_NAMESPACE)?.value
+    await dialog.getByRole('button', { name: 'Fetch models', exact: true }).click()
+    const picker = page.getByRole('dialog', { name: 'Choose models to add', exact: true })
+    await picker.waitFor()
+    expect(scaffold.ctx.settings.describe().find(view => view.ns === ACCOUNT_AUTH_NAMESPACE)?.value).toEqual(before)
+    await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'fetch.expected.md'),
+      await captureStableAria(page, '[role="dialog"][aria-label="Choose models to add"]', scaffold.workspaceCwd), MODE)
+    await picker.getByRole('button', { name: 'Add selected', exact: true }).click()
+    await dialog.getByRole('textbox', { name: 'Model ID 1', exact: true }).waitFor()
+    expect(scaffold.ctx.settings.describe().find(view => view.ns === ACCOUNT_AUTH_NAMESPACE)?.value).toEqual(before)
+    for (const width of [1680, 560]) {
+      await page.setViewportSize({ width, height: 1000 })
+      await dialog.getByRole('button', { name: 'Apply', exact: true }).scrollIntoViewIfNeeded()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      await page.screenshot({ path: join(SHOTS, `fetch-${width}.png`) })
+    }
+    await dialog.getByRole('button', { name: 'Apply', exact: true }).click()
+    await dialog.getByText('Saved Google Antigravity (antigravity).', { exact: true }).waitFor()
+    const settings = scaffold.ctx.settings.describe().find(view => view.ns === ACCOUNT_AUTH_NAMESPACE)?.value
+    expect(settings).toMatchObject({ providers: { antigravity: { models: [{ id: 'gemini-2.5-test', name: 'Gemini 2.5 Test' }] } } })
+    expect(await scaffold.ctx.credentials.readRecord(key)).toEqual(account)
+    await page.setViewportSize({ width: 1680, height: 1000 })
+    await page.reload()
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    const reopened = await openModels(page)
+    await openAccounts(reopened, 'antigravity')
+    expect(scaffold.ctx.settings.describe().find(view => view.ns === ACCOUNT_AUTH_NAMESPACE)?.value).toEqual(settings)
+    expect(await reopened.getByRole('button', { name: 'Fetch models', exact: true }).isEnabled()).toBe(true)
+    await reopened.getByRole('button', { name: 'Fetch models', exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({ path: join(SHOTS, 'fetch-ready.png') })
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR,
-      ['connected.expected.md', 'google.expected.md', 'add.expected.md', 'delete.expected.md', 'delete-chatgpt.expected.md', 'reconnected.expected.md'])
+      ['connected.expected.md', 'google.expected.md', 'add.expected.md', 'delete.expected.md', 'delete-chatgpt.expected.md', 'reconnected.expected.md', 'fetch.expected.md'])
   })
 })

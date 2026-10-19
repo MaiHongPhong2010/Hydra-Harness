@@ -77,6 +77,7 @@ describe('ui-settings-models apply', () => {
     expect(resolveSlotLabel(account.options.label)).toBe('Accounts')
     const accountsInjected = (account.inject as unknown as () => import('../src/client/AccountsSection.tsx').AccountsSectionInjected)()
     expect(accountsInjected.controller).toBe(injected.controller)
+    expect(accountsInjected.schema).toBe(injected.schema)
     expect(accountsInjected.hooks.snapshot).toBe(injected.controller.store)
     expect(injected.api).toBeDefined()
     expect(injected.hooks.decisions.getSnapshot()).toBe(0)

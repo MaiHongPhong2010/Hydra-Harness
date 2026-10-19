@@ -28,7 +28,7 @@ Providers with native authentication need their native credentials instead. Bedr
 
 Open **Settings → Accounts**, choose a provider, and complete its sign-in flow. Accounts are saved immediately; adding an account does not enable or configure a provider. Google groups Antigravity and Gemini API with separate sign-in methods. The Gemini API OAuth method requires a Cloud quota project; its API quota and billing are separate from a Google AI subscription.
 
-Use **Manage models** to open Models and add or edit the provider under **Account-backed models**. Models retains provider catalogs, API keys, fallback keys, and default models. **Manage accounts** returns to Accounts. Deleting a provider in Models keeps its accounts; removing accounts leaves its model configuration intact.
+In Accounts, choose **Fetch models** to load the selected provider's catalog without leaving the page. Google offers separate Antigravity and Gemini API buttons. Choose models, click **Add selected**, then **Apply** to save and enable the provider; Cancel discards the draft. **Manage models** opens Models for provider catalogs, API keys, fallback keys, and defaults. **Manage accounts** returns to Accounts. Deleting a provider in Models keeps its accounts; removing accounts leaves its model configuration intact.
 
 Accounts shows the plan, quota, reset times, and credits supplied by the provider. One account opens its details automatically; larger pools load only the expanded account. Missing data stays unavailable. Refresh requests a current report without changing your limits.
 

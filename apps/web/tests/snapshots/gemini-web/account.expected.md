@@ -32,7 +32,7 @@
     - img
     - text: Close
   - heading "Accounts" [level=2]
-  - paragraph: Connect provider accounts and view their reported usage. Accounts are saved immediately. Configure providers and models separately in Models.
+  - paragraph: Connect accounts, view usage, and fetch models. Account changes save immediately; model changes save with Apply.
   - button "Manage models"
   - text: Provider
   - combobox "Provider":
@@ -44,6 +44,7 @@
     - option "Cursor"
     - option "Kiro"
     - option "Gemini Web" [selected]
+  - button "Fetch models"
   - paragraph:
     - link "Read the full cookie-copy guide":
       - /url: https://maihongphong1902.github.io/Hydra-Harness/guide/providers#import-gemini-web-cookies

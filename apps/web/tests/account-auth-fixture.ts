@@ -41,7 +41,7 @@ export const ACCOUNT_AUTH_PROVIDERS = [
 
 const AccountAuthConfig = Schema.object({
   providers: Schema.dict(Schema.object({
-    models: Schema.array(Schema.object({ id: Schema.string() })),
+    models: Schema.array(Schema.object({ id: Schema.string(), name: Schema.string() })),
   })),
 })
 
@@ -197,5 +197,10 @@ export function apply(ctx: Context): void {
     settingsPath: ['providers', provider.provider],
   })))
   ctx.llm.registerAdapter(ACCOUNT_AUTH_PROVIDERS.map(provider => provider.provider), new AccountAuthAdapter())
+  ctx.llm.registerModelDiscovery(ACCOUNT_AUTH_NAMESPACE, async (request) => {
+    const provider = ACCOUNT_AUTH_PROVIDERS.find(candidate => candidate.provider === request.provider)
+    if (provider === undefined) throw new Error('Unknown account fixture provider')
+    return [{ id: provider.model, name: provider.modelName }]
+  })
   for (const provider of ACCOUNT_AUTH_PROVIDERS) ctx.authorization.registerFlow(flowFor(ctx, provider))
 }

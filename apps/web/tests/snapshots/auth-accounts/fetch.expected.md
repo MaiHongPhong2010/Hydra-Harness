@@ -1,0 +1,31 @@
+- dialog "Choose models to add":
+  - heading "Choose models to add" [level=2]
+  - button "Close":
+    - img
+  - paragraph: These are the models this provider has available. Choose the ones to add.
+  - paragraph: Mark Image or Video to group generation models. Leave both unchecked for ordinary models.
+  - button "Deselect all"
+  - table:
+    - rowgroup:
+      - row "Model ID Model name Image Video":
+        - columnheader "Model ID"
+        - columnheader "Model name"
+        - columnheader "Image"
+        - columnheader "Video"
+    - rowgroup "Antigravity":
+      - row "Antigravity":
+        - rowheader "Antigravity"
+      - row "gemini-2.5-test Gemini 2.5 Test Image gemini-2.5-test Video gemini-2.5-test":
+        - cell "gemini-2.5-test":
+          - checkbox "gemini-2.5-test" [checked]
+          - text: gemini-2.5-test
+        - cell "Gemini 2.5 Test":
+          - textbox "Model name gemini-2.5-test":
+            - /placeholder: ""
+            - text: Gemini 2.5 Test
+        - cell "Image gemini-2.5-test":
+          - checkbox "Image gemini-2.5-test"
+        - cell "Video gemini-2.5-test":
+          - checkbox "Video gemini-2.5-test"
+  - button "Cancel"
+  - button "Add selected"

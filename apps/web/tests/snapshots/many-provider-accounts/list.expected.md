@@ -32,12 +32,13 @@
     - img
     - text: Close
   - heading "Accounts" [level=2]
-  - paragraph: Connect provider accounts and view their reported usage. Accounts are saved immediately. Configure providers and models separately in Models.
+  - paragraph: Connect accounts, view usage, and fetch models. Account changes save immediately; model changes save with Apply.
   - button "Manage models"
   - text: Provider
   - combobox "Provider":
     - option "ChatGPT" [selected]
     - option "Google"
+  - button "Fetch models"
   - button "Add account"
   - text: Accounts 100 accounts
   - paragraph: Requests rotate between accounts. Another account is tried when a request fails or reaches its quota.

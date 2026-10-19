@@ -162,7 +162,7 @@ export function apply(ctx: ClientContext): void {
   }, ModelsSection))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'accounts', order: 11, label: () => t('accountsTitle'),
-    inject: () => ({ controller, api: connection.api, t, hooks: { snapshot: controller.store } }),
+    inject: () => ({ controller, api: connection.api, schema, t, hooks: { snapshot: controller.store } }),
   }, AccountsSection))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',

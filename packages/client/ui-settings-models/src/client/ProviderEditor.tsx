@@ -34,6 +34,8 @@ export interface ProviderEditorProps {
   displayName: string
   /** Hide the title row (the add card renders its own provider select). */
   hideTitle?: boolean
+  /** Open the account catalog and fetch its candidates when the editor mounts. */
+  fetchOnOpen?: boolean
   /**
    * Whether the adapter reports this route as hand-declared — absent from its
    * installed catalog. Such a route carries its own wire protocol, chosen when
@@ -521,10 +523,10 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         : layout === 'accounts'
           ? <>
             {props.provider === 'cursor' ? <p className={styles['advancedHint']}>{t('accountTransportUnavailable')}</p> : null}
-            <details className={styles['customized']}>
+            <details className={styles['customized']} open={props.fetchOnOpen}>
               <summary className={styles['customizedSummary']}>{t('customized')}</summary>
               {props.provider === 'chatgpt' ? <p className={styles['advancedHint']}>{t('codexImageCatalog')}</p> : null}
-              <ModelListEditor models={modelDrafts(schema.getPath(draft, ['models']) ?? inheritedModels())}
+              <ModelListEditor fetchOnOpen={props.fetchOnOpen} models={modelDrafts(schema.getPath(draft, ['models']) ?? inheritedModels())}
                 overridden={schema.hasPath(draft, ['models'])} disabled={disabled} t={t}
                 onChange={(models) => { setDraft(current => schema.setPath(current, ['models'], models)) }}
                 onReset={() => { setDraft(current => schema.deletePath(current, ['models'])) }}

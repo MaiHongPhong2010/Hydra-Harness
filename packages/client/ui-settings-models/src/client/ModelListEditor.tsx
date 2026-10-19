@@ -17,7 +17,7 @@
  * rows the user can still fill in by hand.
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { DiscoveredModelView, IApiClient } from '@hydraharness/harness-api-remotes/client'
 import { inferModelEndpoints } from '@hydraharness/harness-llm/model-endpoints'
@@ -100,6 +100,8 @@ export interface ModelListEditorProps {
   } | undefined
   /** Let a neighboring editor own shared discovery while retaining row edits. */
   hideDiscoveryActions?: boolean
+  /** Fetch and show candidates once when an account shortcut opens this editor. */
+  fetchOnOpen?: boolean | undefined
   /**
    * Copy key naming why the fetch action is unavailable, or `undefined` when
    * it is. The card owns this because the key it would send is judged there:
@@ -186,6 +188,7 @@ function adopt(candidate: DiscoveredModelView): ModelDraft {
 export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   const { models, onChange, probe, api, t, disabled } = props
   const [busy, setBusy] = useState(false)
+  const fetchedOnOpen = useRef(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [candidates, setCandidates] = useState<readonly Candidate[] | undefined>(undefined)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
@@ -326,6 +329,12 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
       setBusy(false)
     }
   }
+
+  useEffect(() => {
+    if (props.fetchOnOpen !== true || fetchedOnOpen.current) return
+    fetchedOnOpen.current = true
+    void fetchModels()
+  }, [props.fetchOnOpen, fetchModels])
 
   const closePicker = (): void => {
     setCandidates(undefined)

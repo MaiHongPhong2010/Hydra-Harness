@@ -1,5 +1,37 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`installs Windows npx Desktop persistently and reuses one shortcut on the next launch 1`] = `
+{
+  "calls": [
+    [
+      "prefix",
+      "--global",
+    ],
+    [
+      "install",
+      "--global",
+      "@hydraharness/harness@{{version}}",
+      "--no-audit",
+      "--no-fund",
+    ],
+    [
+      "prefix",
+      "--global",
+    ],
+  ],
+  "firstCode": 0,
+  "firstOutput": "Installing hydra {{version}} with npm...
+hydra is ready. Next time, run: hydra
+Desktop shortcut: {{prefix}}/Desktop/Hydra Harness.lnk
+Desktop opened",
+  "secondCode": 0,
+  "secondOutput": "hydra is ready. Next time, run: hydra
+Desktop shortcut: {{prefix}}/Desktop/Hydra Harness.lnk
+Desktop opened",
+  "stderr": "",
+}
+`;
+
 exports[`installs the running release, then reuses it and opens the ordinary menu 1`] = `
 {
   "calls": [
@@ -58,6 +90,15 @@ Arguments:
 Options:
   -h, --help  show Desktop command help",
   "stderr": "",
+}
+`;
+
+exports[`reports Windows shortcut failure before opening Desktop 1`] = `
+{
+  "code": 1,
+  "output": "Installing hydra {{version}} with npm...
+hydra is ready. Next time, run: hydra",
+  "stderr": "hydra: could not set up Desktop: Desktop is not writable",
 }
 `;
 

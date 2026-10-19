@@ -16,6 +16,7 @@
     "preload.cjs",
     "native-preferences.cjs",
     "environment-launcher.cjs",
+    "windows-identity.cjs",
     "assets",
     "tests/snapshots"
   ],

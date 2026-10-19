@@ -10,7 +10,7 @@ npx exposes its cached executable to the launched process without installing a c
 
 The [bare CLI entry](../../../../apps/cli/src/bin.ts) recognizes npm exec's npx lifecycle in an interactive terminal outside CI. Before the mode menu, [command setup](../../../../apps/cli/src/install-command.ts) invokes the same npm executable through Node to install the running release globally. npm owns prefix selection, lifecycle scripts, and platform command shims. A matching installed version and shim are reused. Setup verifies the installed version and shim before announcing success; a missing PATH entry prints the command directory, and a failed installation exits before the menu.
 
-Direct `hydra`, explicit profile commands, help, version, and non-interactive launches retain their existing execution paths. The [packaging note](../process/2026-10-05-patched-dependencies-in-npm-cli.md) owns dependency declarations and local/global artifact verification.
+The installer returns the verified global CLI entry. [Windows npx Desktop](2026-10-09-npm-desktop-launch.md) also uses it for persistent shortcut creation and launch, including with redirected input. Direct `hydra`, other explicit modes, help, version, and non-interactive bare invocations retain their existing execution paths. The [packaging note](../process/2026-10-05-patched-dependencies-in-npm-cli.md) owns dependency declarations and local/global artifact verification.
 
 ## Alternatives considered
 

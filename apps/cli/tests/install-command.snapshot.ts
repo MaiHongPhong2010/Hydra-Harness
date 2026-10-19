@@ -81,6 +81,28 @@ it('prints Desktop command help without installing globally or opening Electron'
   expect({ code: result.exitCode, output: result.stdout, stderr: result.stderr, calls: calls(root) }).toMatchSnapshot()
 })
 
+it('installs Windows npx Desktop persistently and reuses one shortcut on the next launch', async () => {
+  const root = fixture()
+  const options = { HYDRA_INSTALL_TEST_DESKTOP: '1', PATH: `${root}${delimiter}${process.env.PATH ?? process.env.Path ?? ''}` }
+  const first = await run(root, ['desktop'], options)
+  const second = await run(root, ['desktop'], options)
+  const shortcut = JSON.parse(readFileSync(join(root, 'Desktop/Hydra Harness.lnk'), 'utf8')) as { target: string; entry: string }
+  expect(shortcut.target).toBe(process.execPath)
+  expect(shortcut.entry).toBe(join(root, 'node_modules/@hydraharness/harness-desktop/main.cjs'))
+  const output = (text: string) => text.replaceAll(version, '{{version}}').replaceAll(root, '{{prefix}}').replaceAll('\\', '/')
+  expect({ firstCode: first.exitCode, firstOutput: output(first.stdout), secondCode: second.exitCode,
+    secondOutput: output(second.stdout), stderr: first.stderr + second.stderr,
+    calls: calls(root).map(args => args.map(output)),
+  }).toMatchSnapshot()
+})
+
+it('reports Windows shortcut failure before opening Desktop', async () => {
+  const root = fixture()
+  const result = await run(root, ['desktop'], { HYDRA_INSTALL_TEST_DESKTOP: '1', HYDRA_INSTALL_TEST_SHORTCUT_FAILURE: '1',
+    PATH: `${root}${delimiter}${process.env.PATH ?? process.env.Path ?? ''}` })
+  expect({ code: result.exitCode, output: result.stdout.replaceAll(version, '{{version}}'), stderr: result.stderr }).toMatchSnapshot()
+})
+
 it.each([
   { args: ['--version'], env: {} },
   { args: ['--help'], env: {} },

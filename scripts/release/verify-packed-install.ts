@@ -121,7 +121,7 @@ export function verifyDesktopPayload(bin: string): void {
   const desktop = require.resolve('@hydraharness/harness-desktop')
   const electron: unknown = require('electron')
   require.resolve('node-pty')
-  const files = ['main.cjs', 'preload.cjs', 'assets/hydra.ico', 'assets/hydra.png',
+  const files = ['main.cjs', 'preload.cjs', 'windows-identity.cjs', 'assets/hydra.ico', 'assets/hydra.png',
     'tests/snapshots/terminal-workspaces.expected.json', 'tests/snapshots/zoom-shortcuts.expected.md']
   for (const file of files) {
     if (!existsSync(join(dirname(desktop), file))) throw new Error(`installed Desktop is missing ${file}`)

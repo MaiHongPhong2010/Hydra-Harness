@@ -1,4 +1,4 @@
-/** Persistent npm command setup for an interactive, bare npx invocation. */
+/** Persistent npm command setup for bare interactive npx and Windows npx Desktop. */
 
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -12,9 +12,9 @@ const execute = promisify(execFile)
  * An existing command at the same version is reused. npm owns the prefix,
  * platform shims, and lifecycle scripts; PATH setup remains with the user.
  * @param version - Running CLI release to install.
- * @returns Completion after installation and version verification; rejects on failure.
+ * @returns The verified global CLI entry; rejects on installation or verification failure.
  */
-export async function installNpxCommand(version: string): Promise<void> {
+export async function installNpxCommand(version: string): Promise<string> {
   const npm = process.env.npm_execpath
   if (npm === undefined) throw new Error('hydra: npm_execpath is required for npx command setup')
   const { stdout } = await execute(process.execPath, [npm, 'prefix', '--global'], { windowsHide: true })
@@ -52,4 +52,5 @@ export async function installNpxCommand(version: string): Promise<void> {
   } else {
     process.stdout.write(`hydra is installed. Add ${binDirectory} to PATH, then run: hydra\n`)
   }
+  return entry
 }

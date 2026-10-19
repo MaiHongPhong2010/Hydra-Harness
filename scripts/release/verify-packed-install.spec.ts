@@ -12,14 +12,14 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
-it.each(['preload.cjs', 'electron.exe'])('rejects an installed Desktop missing %s', (missing) => {
+it.each(['preload.cjs', 'windows-identity.cjs', 'electron.exe'])('rejects an installed Desktop missing %s', (missing) => {
   const root = mkdtempSync(join(tmpdir(), 'hydra-desktop-payload-'))
   roots.push(root)
   const desktop = join(root, 'node_modules/@hydraharness/harness-desktop')
   mkdirSync(join(desktop, 'assets'), { recursive: true })
   mkdirSync(join(desktop, 'tests/snapshots'), { recursive: true })
   writeFileSync(join(desktop, 'package.json'), JSON.stringify({ main: 'main.cjs' }))
-  for (const file of ['main.cjs', 'preload.cjs', 'assets/hydra.ico', 'assets/hydra.png',
+  for (const file of ['main.cjs', 'preload.cjs', 'windows-identity.cjs', 'assets/hydra.ico', 'assets/hydra.png',
     'tests/snapshots/terminal-workspaces.expected.json', 'tests/snapshots/zoom-shortcuts.expected.md']) {
     writeFileSync(join(desktop, file), '')
   }

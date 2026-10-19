@@ -27,12 +27,27 @@ function readVersion(): string {
 
 const invocation = parseHydraArgs(process.argv.slice(2), readVersion())
 type RunnableInvocation = Exclude<HydraInvocation, { mode: 'menu' }>
+const fromNpx = process.env.npm_command === 'exec' && process.env.npm_lifecycle_event === 'npx'
+let installedEntry: string | undefined
 
 async function dispatch(invocation: RunnableInvocation): Promise<void> {
   switch (invocation.mode) {
     case 'desktop': {
+      if (fromNpx && process.platform === 'win32' && !process.env.CI) {
+        try {
+          const { installNpxCommand } = await import('./install-command.ts')
+          const { createDesktopShortcut } = await import('./desktop-shortcut.ts')
+          installedEntry ??= await installNpxCommand(readVersion())
+          const shortcut = await createDesktopShortcut(installedEntry)
+          process.stdout.write(`Desktop shortcut: ${shortcut}\n`)
+        } catch (error) {
+          process.stderr.write(`hydra: could not set up Desktop: ${error instanceof Error ? error.message : String(error)}\n`)
+          process.exitCode = 1
+          break
+        }
+      }
       const { runDesktop } = await import('./desktop.ts')
-      process.exitCode = runDesktop(invocation.args)
+      process.exitCode = runDesktop(invocation.args, installedEntry)
       break
     }
     case 'profile': {
@@ -69,11 +84,10 @@ async function dispatch(invocation: RunnableInvocation): Promise<void> {
 }
 
 if (invocation.mode === 'menu') {
-  if (process.env.npm_command === 'exec' && process.env.npm_lifecycle_event === 'npx'
-    && process.stdin.isTTY && process.stdout.isTTY && !process.env.CI) {
+  if (fromNpx && process.stdin.isTTY && process.stdout.isTTY && !process.env.CI) {
     const { installNpxCommand } = await import('./install-command.ts')
     try {
-      await installNpxCommand(readVersion())
+      installedEntry = await installNpxCommand(readVersion())
     } catch (error) {
       process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
       process.exit(1)

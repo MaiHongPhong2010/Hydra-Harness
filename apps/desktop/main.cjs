@@ -13,12 +13,12 @@ const { stripVTControlCharacters } = require('node:util')
 const { app, BrowserWindow, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, Notification, shell, utilityProcess } = require('electron')
 const { createNativePreferences } = require('./native-preferences.cjs')
 const { createEnvironmentLauncher, launchWslHost } = require('./environment-launcher.cjs')
+const { APP_ID: DESKTOP_APP_ID, windowAppDetails } = require('./windows-identity.cjs')
 const nodePty = require('node-pty')
 
 const CLI_ENTRY = process.env.HYDRA_DESKTOP_CLI_ENTRY || join(require.resolve('@hydraharness/harness/package.json'), '..', 'lib', 'bin.js')
 const BROWSER_ENTRY = join(require.resolve('@hydraharness/harness-browser-electron/package.json'), '..', 'electron-app', 'main.cjs')
 const DESKTOP_ICON = join(__dirname, 'assets', process.platform === 'win32' ? 'hydra.ico' : 'hydra.png')
-const DESKTOP_APP_ID = 'org.hydraharness.desktop'
 const SMOKE_ZOOM = process.argv.includes('--smoke-zoom')
 const SMOKE_WORKSPACE_SETTINGS = process.argv.includes('--smoke-workspace-settings')
 const SMOKE_FILES = process.argv.includes('--smoke-files')
@@ -245,12 +245,7 @@ function createWindow() {
     },
   })
   // Electron's toast registration creates an executable-icon shortcut under the process ID.
-  if (process.platform === 'win32') window.setAppDetails({
-    appId: `${DESKTOP_APP_ID}.window`,
-    appIconPath: DESKTOP_ICON,
-    relaunchCommand: `"${process.execPath}" "${app.getAppPath()}"`,
-    relaunchDisplayName: 'Hydra harness',
-  })
+  if (process.platform === 'win32') window.setAppDetails(windowAppDetails(DESKTOP_ICON, process.execPath, __filename))
   window.webContents.setWindowOpenHandler(({ url }) => {
     void routeAppUrl(url)
     return { action: 'deny' }

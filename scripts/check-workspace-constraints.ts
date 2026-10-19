@@ -57,7 +57,10 @@ const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|app
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@hydraharness/harness': ['lib/*.js', 'config'],
-  '@hydraharness/harness-desktop': ['main.cjs', 'preload.cjs', 'native-preferences.cjs', 'environment-launcher.cjs', 'assets', 'tests/snapshots'],
+  '@hydraharness/harness-desktop': [
+    'main.cjs', 'preload.cjs', 'native-preferences.cjs', 'environment-launcher.cjs',
+    'windows-identity.cjs', 'assets', 'tests/snapshots',
+  ],
   // The Web build emits sourcemaps for browser debugging; publishing them is
   // what the payload policy forbids, so the bundle ships without them.
   '@hydraharness/harness-web-frontend': ['dist', '!dist/**/*.map'],

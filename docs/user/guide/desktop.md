@@ -14,7 +14,7 @@ From your workspace directory, run:
 npx @hydraharness/harness@latest desktop
 ```
 
-You can also run bare `npx @hydraharness/harness` and choose **3) Desktop**. That interactive first run installs the persistent command; later launches use `hydra desktop`. The [installation reference](../../../apps/cli/reference/README.md#persistent-command) covers updates, PATH, and removal.
+On Windows this installs the persistent command and adds a **Hydra Harness** shortcut to your Desktop. Open that shortcut for later launches; it also retains the Hydra icon when pinned to the taskbar. Replace an existing Electron pin by unpinning it, then pinning the updated Hydra shortcut. You can also run bare `npx @hydraharness/harness` and choose **3) Desktop**, or use `hydra desktop` after installation. The [installation reference](../../../apps/cli/reference/README.md#persistent-command) covers updates, PATH, and removal.
 
 ## Build and launch
 

@@ -18,16 +18,17 @@ afterEach(() => {
 })
 
 describe('runDesktop', () => {
-  it('starts Electron with the running CLI installation and preserves user environment', () => {
+  it.each([false, true])('opens Electron with the running CLI and user environment (smoke: %s)', (smoke) => {
     vi.stubEnv('ELECTRON_RUN_AS_NODE', '1')
     vi.stubEnv('HYDRA_HOME', '/user-home')
     vi.stubEnv('HYDRA_DESKTOP_CLI_ENTRY', '/stale/cli.js')
     vi.mocked(spawnSync).mockReturnValue(result)
-    expect(runDesktop(['--smoke'])).toBe(0)
+    const forwarded = smoke ? ['--smoke'] : []
+    expect(runDesktop(forwarded)).toBe(0)
     const [binary, args, options] = vi.mocked(spawnSync).mock.calls[0]!
     expect(binary).toBe('/electron')
-    expect(args).toEqual(['/desktop/main.cjs', '--smoke'])
-    expect(options).toMatchObject({ stdio: 'inherit', windowsHide: true, env: {
+    expect(args).toEqual(['/desktop/main.cjs', ...forwarded])
+    expect(options).toMatchObject({ stdio: 'inherit', windowsHide: false, env: {
       HYDRA_HOME: '/user-home',
       HYDRA_DESKTOP_CLI_ENTRY: fileURLToPath(new URL('../lib/bin.js', import.meta.url)),
     } })
@@ -41,6 +42,12 @@ describe('runDesktop', () => {
     expect(runDesktop([])).toBe(128 + constants.signals.SIGINT)
     vi.mocked(spawnSync).mockReturnValue({ ...result, status: null })
     expect(runDesktop([])).toBe(1)
+  })
+
+  it('opens the verified global installation after npx setup', () => {
+    vi.mocked(spawnSync).mockReturnValue(result)
+    expect(runDesktop([], '/global/lib/bin.js')).toBe(0)
+    expect(vi.mocked(spawnSync).mock.calls[0]?.[2]?.env?.HYDRA_DESKTOP_CLI_ENTRY).toBe('/global/lib/bin.js')
   })
 
   it('reports a missing Electron binary with npm repair instructions', () => {

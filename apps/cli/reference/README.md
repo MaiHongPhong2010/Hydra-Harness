@@ -10,7 +10,9 @@ A bare `hydra` invocation requires TTY stdin and stdout and no non-empty `CI` va
 
 Running bare `npx @hydraharness/harness` in an interactive terminal installs that running version with npm's global installer, verifies its version and command shim, and then opens the menu. The same installed version is reused. Later runs can use `hydra` from any workspace directory. npm's configured global prefix must be writable; installation failure exits nonzero before the menu. If the global command directory is absent from PATH, the launcher prints the directory to add and reports the package as installed rather than ready.
 
-Explicit npx commands such as `npx @hydraharness/harness web`, help, version, CI, redirected input, and direct `hydra` launches do not perform this setup. To install without the interactive menu, update, or remove the command, use npm:
+On Windows, `npx @hydraharness/harness desktop` also installs the running release globally, including with redirected input, then creates or updates `Hydra Harness.lnk` on the user's Desktop and opens the installed app. The shortcut uses the installed Electron executable, Hydra icon, and the window's AppUserModelID so taskbar pins retain Hydra's identity. It starts in the user's home directory and remains usable after the npx cache is cleared. Shortcut creation failure exits before opening Desktop. Delete the shortcut after uninstalling Hydra.
+
+Other explicit npx commands, help, version, CI, non-interactive bare invocations, and direct `hydra` launches do not perform this setup. To install without the interactive menu, update, or remove the command, use npm:
 
 ```sh
 npm install -g @hydraharness/harness@latest
@@ -22,7 +24,7 @@ The [persistent-command note](../../../.agents/notes/implemented/feature/2026-10
 
 ## Desktop
 
-`hydra desktop [args...]` launches the installed Electron executable with the bundled Desktop entry and forwards its arguments. The launcher waits for Desktop to close and returns its exit status. Desktop starts the same installation's Web Host on an ephemeral loopback port, including when the CLI is installed under its GitHub Packages mirror name. Electron's optional dependency and install scripts must be enabled. `hydra desktop --help` prints command help without opening a window; profile and patch options supplied before `desktop` are rejected. See the [Desktop guide](../../../docs/user/guide/desktop.md) for setup and data locations.
+`hydra desktop [args...]` launches the installed Electron executable with the bundled Desktop entry and forwards its arguments. The Electron window is visible on Windows. The launcher waits for Desktop to close and returns its exit status. Desktop starts the same installation's Web Host on an ephemeral loopback port, including when the CLI is installed under its GitHub Packages mirror name. Electron's optional dependency and install scripts must be enabled. `hydra desktop --help` prints command help without opening a window; profile and patch options supplied before `desktop` are rejected. See the [Desktop guide](../../../docs/user/guide/desktop.md) for setup and data locations.
 
 ## Profile boot
 

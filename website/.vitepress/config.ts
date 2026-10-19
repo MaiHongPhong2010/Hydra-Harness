@@ -144,7 +144,7 @@ function escapeVueInterpolation(html: string): string {
 const base = process.env.DOCS_BASE ?? '/'
 
 /** Site identity shared by the VitePress configuration and the llms.txt index. */
-const siteUrl = 'https://maihongphong2010.github.io/Hydra-Harness/'
+const siteUrl = 'https://guide.hydra.maihongphong.engineer/'
 
 const siteIdentity = {
   title: 'Hydra harness',

@@ -4,7 +4,7 @@ Hydra harness (`hydra`) is an open-source workspace for working with AI agents t
 
 Agents can read and edit project files, run commands, use browser tools, and delegate tasks. You choose the model provider, workspace, and permission policy.
 
-Read the [documentation website](https://maihongphong2010.github.io/Hydra-Harness/) for setup, model configuration, and plugin development.
+Read the [documentation website](https://guide.hydra.maihongphong.engineer/) for setup, model configuration, and plugin development.
 
 ## Built around plugins
 

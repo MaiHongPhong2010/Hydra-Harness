@@ -6,7 +6,7 @@
       "application": "Let the agent delegate a task to a child agent."
     }
   },
-  "version": "0.1.1-rc.10",
+  "version": "0.1.1-rc.11",
   "publishConfig": {
     "access": "public"
   },

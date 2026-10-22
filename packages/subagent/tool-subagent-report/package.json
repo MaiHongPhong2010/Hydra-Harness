@@ -6,7 +6,7 @@
       "application": "Let a child agent report its progress or findings to its parent."
     }
   },
-  "version": "0.1.1-rc.10",
+  "version": "0.1.1-rc.11",
   "publishConfig": {
     "access": "public"
   },

@@ -6,7 +6,7 @@
       "application": "Run a repeated workflow with a fresh agent for each iteration."
     }
   },
-  "version": "0.1.1-rc.10",
+  "version": "0.1.1-rc.11",
   "publishConfig": {
     "access": "public"
   },
